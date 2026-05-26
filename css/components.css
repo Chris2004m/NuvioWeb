@@ -9195,7 +9195,8 @@ button:focus-visible {
 }
 
 .player-controls-overlay.pause-overlay-active .player-controls-bottom {
-  opacity: 0.24;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .player-controls-overlay.pause-overlay-active .player-meta,
@@ -9545,8 +9546,8 @@ button:focus-visible {
   left: var(--tv-safe-gutter);
   top: 50%;
   transform: translateY(-50%);
-  right: min(28vw, 460px);
-  max-width: min(48vw, 820px);
+  right: var(--tv-safe-gutter);
+  max-width: none;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -9591,14 +9592,54 @@ button:focus-visible {
 }
 
 .player-pause-description {
-  max-width: min(46vw, 760px);
+  max-width: 100%;
   font-size: clamp(20px, 1.3vw, 26px);
   line-height: 1.42;
   color: rgba(255, 255, 255, 0.8);
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 4;
   overflow: hidden;
+}
+
+.player-pause-cast-section {
+  margin-top: 20px;
+  max-width: 100%;
+}
+
+.player-pause-cast-label {
+  font-size: var(--tv-caption-text);
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.player-pause-cast-row {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 14px;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.player-pause-cast-chip {
+  min-height: 44px;
+  max-width: 240px;
+  padding: 0 18px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  font-size: var(--tv-caption-text);
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.player-pause-cast-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .player-skip-intro {

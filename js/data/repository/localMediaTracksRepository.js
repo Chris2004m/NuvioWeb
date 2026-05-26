@@ -37,13 +37,32 @@ function rememberLocalMediaServerUrl(value) {
   }
 }
 
-async function requestTracksViaLuna(mediaUrl) {
-  const result = await requestWebOsCompanionService({
-    method: "tracks",
-    parameters: {
-      url: String(mediaUrl || "").trim()
+function withTimeout(promise, timeoutMs, message) {
+  let timeoutId = 0;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(message || "Request timed out"));
+    }, Math.max(1, Number(timeoutMs || 0)));
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
     }
   });
+}
+
+async function requestTracksViaLuna(mediaUrl) {
+  const result = await withTimeout(
+    requestWebOsCompanionService({
+      method: "tracks",
+      parameters: {
+        url: String(mediaUrl || "").trim()
+      }
+    }),
+    REQUEST_TIMEOUT_MS,
+    "webOS companion track request timed out"
+  );
   const payload = result?.payload || {};
   rememberLocalMediaServerUrl(payload?.url);
 

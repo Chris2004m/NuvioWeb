@@ -2708,6 +2708,52 @@ export const PlayerScreen = {
       && !this.isNextEpisodeCardVisible();
   },
 
+  syncNativePausedStateForPauseOverlay() {
+    if (
+      this.isExternalFrameMode()
+      || this.loadingVisible
+      || this.startupAudioGateActive
+      || (typeof PlayerController.isUsingAvPlay === "function" && PlayerController.isUsingAvPlay())
+    ) {
+      return false;
+    }
+
+    const video = PlayerController.video;
+    if (!video?.paused) {
+      return false;
+    }
+
+    const readyState = typeof PlayerController.getPlaybackReadyState === "function"
+      ? Number(PlayerController.getPlaybackReadyState() || 0)
+      : Number(video.readyState || 0);
+    if (readyState < 3) {
+      return false;
+    }
+
+    const ended = typeof PlayerController.isPlaybackEnded === "function"
+      ? PlayerController.isPlaybackEnded()
+      : Boolean(video.ended);
+    if (ended) {
+      return false;
+    }
+
+    const wasPaused = Boolean(this.paused);
+    if (!wasPaused) {
+      this.clearPlaybackStallGuard();
+      this.paused = true;
+      this.updateMediaSessionPlaybackState();
+      this.setControlsVisible(true, { focus: false });
+      this.renderControlButtons();
+    }
+
+    if (this.canShowPauseOverlay() && !this.pauseOverlayVisible && !this.pauseOverlayTimer) {
+      this.schedulePauseOverlay();
+      return true;
+    }
+
+    return !wasPaused;
+  },
+
   dismissPauseOverlay({ revealControls = false, focus = false } = {}) {
     this.clearPauseOverlayTimer();
     if (!this.pauseOverlayVisible && !revealControls) {
@@ -2740,6 +2786,9 @@ export const PlayerScreen = {
   },
 
   syncPauseOverlayState() {
+    if (this.syncNativePausedStateForPauseOverlay()) {
+      return;
+    }
     if (this.pauseOverlayVisible && !this.canShowPauseOverlay()) {
       this.dismissPauseOverlay();
       return;
