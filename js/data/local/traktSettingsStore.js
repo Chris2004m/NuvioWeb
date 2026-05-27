@@ -67,6 +67,10 @@ export const TraktSettingsStore = {
     return store.getForProfile(profileId);
   },
 
+  setForProfile(profileId, partial, options = {}) {
+    return store.setForProfile(profileId, partial, options);
+  },
+
   setContinueWatchingDaysCap(days) {
     return this.set({ continueWatchingDaysCap: normalizeTraktContinueWatchingDaysCap(days) });
   },
