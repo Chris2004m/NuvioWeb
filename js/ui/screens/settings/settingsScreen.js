@@ -3277,7 +3277,7 @@ export const SettingsScreen = {
       <p class="settings-trakt-body-copy">${escapeHtml(t("trakt_awaiting_instruction", {}, "Go to trakt.tv/activate and enter this code:"))}</p>
       <div class="settings-trakt-code">${escapeHtml(userCode || "-")}</div>
       ${qrDataUrl ? `<img class="settings-trakt-qr" src="${escapeHtml(qrDataUrl)}" alt="${escapeHtml(t("cd_trakt_qr", {}, "Trakt QR code"))}" />` : ""}
-      <p class="settings-trakt-body-copy">${renderTraktCountdownText("trakt_code_expires", remainingMs, "Code expires in", "data-trakt-device-countdown")}</p>
+      <p class="settings-trakt-meta-copy">${renderTraktCountdownText("trakt_code_expires", remainingMs, "Code expires in", "data-trakt-device-countdown")}</p>
     `;
   },
 
@@ -3295,10 +3295,9 @@ export const SettingsScreen = {
 
   renderTraktConnected(auth, tokenRemainingMs, trakt) {
     return `
-      ${tokenRemainingMs ? `<p class="settings-trakt-body-copy">${renderTraktCountdownText("trakt_token_refreshes", tokenRemainingMs, "Trakt access token refreshes in", "data-trakt-token-countdown")}</p>` : ""}
+      ${tokenRemainingMs ? `<p class="settings-trakt-meta-copy">${renderTraktCountdownText("trakt_token_refreshes", tokenRemainingMs, "Trakt access token refreshes in", "data-trakt-token-countdown")}</p>` : ""}
       <button class="settings-trakt-button settings-content-focusable focusable" data-zone="content" ${this.registerAction("trakt:disconnect", this.actionMap.get("trakt:disconnect"))}>${escapeHtml(t("trakt_disconnect", {}, "Disconnect"))}</button>
       ${this.renderTraktStatsStrip(trakt.stats, trakt.isStatsLoading)}
-      ${trakt.statusMessage ? `<p class="settings-trakt-message">${escapeHtml(trakt.statusMessage)}</p>` : ""}
     `;
   },
 

@@ -19,6 +19,20 @@ function focusNode(node) {
   }
 }
 
+function captureTraktScrollState(container) {
+  const scrollArea = container?.querySelector?.(".settings-trakt-scroll-area");
+  return {
+    traktScrollTop: Number(scrollArea?.scrollTop || 0)
+  };
+}
+
+function restoreTraktScrollState(container, scrollState) {
+  const scrollArea = container?.querySelector?.(".settings-trakt-scroll-area");
+  if (scrollArea && scrollState) {
+    scrollArea.scrollTop = Number(scrollState.traktScrollTop || 0);
+  }
+}
+
 function formatCountdown(valueMs) {
   const totalSeconds = Math.max(0, Math.floor(Number(valueMs || 0) / 1000));
   const days = Math.floor(totalSeconds / 86400);
@@ -50,6 +64,7 @@ export const TraktScreen = Object.assign(Object.create(SettingsScreen), {
   },
 
   async render({ refreshModel = true } = {}) {
+    const previousScrollState = captureTraktScrollState(this.container);
     if (refreshModel || !this.model) {
       this.model = { trakt: this.collectTraktModel() };
     }
@@ -67,10 +82,13 @@ export const TraktScreen = Object.assign(Object.create(SettingsScreen), {
         <div data-trakt-dialog>${this.renderOptionDialog()}</div>
       </div>
     `;
+    restoreTraktScrollState(this.container, previousScrollState);
     ScreenUtils.indexFocusables(this.container);
     bindSettingsScrollIndicators(this.container);
     this.traktRouteEnterPending = false;
+    this.suppressNextContentFocusScroll = true;
     this.applyFocus();
+    restoreTraktScrollState(this.container, previousScrollState);
     this.updateTraktCountdowns();
   },
 
@@ -136,7 +154,11 @@ export const TraktScreen = Object.assign(Object.create(SettingsScreen), {
     }
     fallback.classList.add("focused");
     focusNode(fallback);
-    scrollSettingsContentItem(fallback);
+    if (this.suppressNextContentFocusScroll) {
+      this.suppressNextContentFocusScroll = false;
+    } else {
+      scrollSettingsContentItem(fallback);
+    }
     this.contentFocusKey = String(fallback.dataset.focusKey || "");
   },
 
