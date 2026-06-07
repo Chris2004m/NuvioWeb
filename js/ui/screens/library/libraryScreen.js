@@ -327,7 +327,7 @@ export const LibraryScreen = {
             <svg class="library-loading-spinner" viewBox="0 0 96 96" aria-hidden="true" focusable="false">
               <circle class="library-loading-spinner-track" cx="48" cy="48" r="40"></circle>
             </svg>
-            <div class="library-loading-label">${escapeHtml(t("library_syncing", {}, "Syncing library..."))}</div>
+            <div class="library-loading-label">${escapeHtml(t("library_syncing_library", {}, "Loading library"))}</div>
           </section>
         </main>
       </div>
@@ -582,7 +582,7 @@ export const LibraryScreen = {
         <button class="library-action-button focusable library-primary"
                 data-action="refreshLibrary"
                 ${state.pendingOperation || state.isSyncing ? "disabled" : ""}>
-          ${escapeHtml(state.isSyncing ? t("library_syncing_btn", {}, "Syncing…") : t("library_sync_btn", {}, "Sync"))}
+          ${escapeHtml(state.isSyncing ? t("library_syncing_btn", {}, "Syncing") : t("library_sync_btn", {}, "Sync"))}
         </button>
       </section>
     `;

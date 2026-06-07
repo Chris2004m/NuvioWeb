@@ -9729,25 +9729,31 @@ button:focus-visible {
   pointer-events: none;
 }
 
-.player-loading-overlay.seek-only .player-loading-backdrop,
-.player-loading-overlay.seek-only .player-loading-gradient,
-.player-loading-overlay.seek-only .player-loading-title,
-.player-loading-overlay.seek-only .player-loading-subtitle,
-.player-loading-overlay.logo-only .player-loading-backdrop,
-.player-loading-overlay.logo-only .player-loading-gradient,
-.player-loading-overlay.logo-only .player-loading-title,
-.player-loading-overlay.logo-only .player-loading-subtitle {
-  display: none;
+.player-loading-spinner {
+  position: absolute;
+  inset: 0;
+  z-index: 34;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 180ms ease;
 }
 
-.player-loading-overlay.seek-only .player-loading-center,
-.player-loading-overlay.logo-only .player-loading-center {
-  width: auto;
+.player-loading-spinner.hidden {
+  opacity: 0;
+  pointer-events: none;
 }
 
-.player-loading-overlay.seek-only .player-loading-logo,
-.player-loading-overlay.logo-only .player-loading-logo {
-  margin-bottom: 0;
+.player-loading-spinner-ring {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 6px solid rgba(255, 255, 255, 0.18);
+  border-top-color: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 0 22px rgba(0, 0, 0, 0.35);
+  animation: playerLoadingSpinnerRotate 900ms linear infinite;
 }
 
 .player-loading-backdrop {
@@ -9840,6 +9846,15 @@ button:focus-visible {
   }
   to {
     transform: scale(1.04);
+  }
+}
+
+@keyframes playerLoadingSpinnerRotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
   }
 }
 
@@ -14358,6 +14373,10 @@ button:focus-visible {
 
 .performance-constrained .player-loading-overlay.hidden .player-loading-identity {
   animation: none !important;
+}
+
+.performance-constrained .player-loading-spinner-ring {
+  animation: playerLoadingSpinnerRotate 900ms linear infinite !important;
 }
 
 .performance-constrained .stream-route-chip-spinner {

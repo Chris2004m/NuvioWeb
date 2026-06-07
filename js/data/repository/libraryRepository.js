@@ -324,6 +324,14 @@ async function getRemoteEntries() {
   return hydrateEntries(Array.from(entriesMap.values()));
 }
 
+async function hasRemoteLibraryEntries() {
+  const state = await readRemoteState();
+  if (Array.isArray(state.watchlist) && state.watchlist.length > 0) {
+    return true;
+  }
+  return Object.values(state.listItems || {}).some((items) => Array.isArray(items) && items.length > 0);
+}
+
 function membershipMapFromEntries(entries, listTabs) {
   const allKeys = listTabs.map((tab) => tab.key);
   return (item) => {
@@ -363,7 +371,14 @@ class LibraryRepository {
     if (selectedMode !== TraktLibrarySourceMode.TRAKT) {
       return LibrarySourceMode.LOCAL;
     }
-    return (AuthManager.isAuthenticated || TraktAuthService.isAuthenticated()) ? LibrarySourceMode.TRAKT : LibrarySourceMode.LOCAL;
+    if (!(AuthManager.isAuthenticated || TraktAuthService.isAuthenticated())) {
+      return LibrarySourceMode.LOCAL;
+    }
+    if (await hasRemoteLibraryEntries()) {
+      return LibrarySourceMode.TRAKT;
+    }
+    const localEntries = await getLocalEntries();
+    return localEntries.length ? LibrarySourceMode.LOCAL : LibrarySourceMode.TRAKT;
   }
 
   async getListTabs() {

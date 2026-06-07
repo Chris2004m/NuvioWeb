@@ -378,6 +378,10 @@ function interpolate(template, params = {}) {
     .replace(/\\"/g, "\"");
 }
 
+function decodeUnicodeEscapes(value) {
+  return String(value ?? "").replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) => String.fromCharCode(Number.parseInt(hex, 16)));
+}
+
 function parseStringsXml(source) {
   const parser = new DOMParser();
   const xml = parser.parseFromString(source, "application/xml");
@@ -390,7 +394,7 @@ function parseStringsXml(source) {
     if (!name) {
       return messages;
     }
-    messages[name] = String(node.textContent || "");
+    messages[name] = decodeUnicodeEscapes(node.textContent || "");
     return messages;
   }, {});
 }

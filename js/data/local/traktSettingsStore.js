@@ -23,7 +23,7 @@ function normalizeWatchProgressSource(value) {
 }
 
 function normalizeLibrarySourceMode(value) {
-  const normalized = String(value || TraktLibrarySourceMode.TRAKT).toLowerCase();
+  const normalized = String(value || TraktLibrarySourceMode.LOCAL).toLowerCase();
   return normalized === TraktLibrarySourceMode.LOCAL
     ? TraktLibrarySourceMode.LOCAL
     : TraktLibrarySourceMode.TRAKT;

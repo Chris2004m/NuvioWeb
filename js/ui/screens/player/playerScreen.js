@@ -2850,6 +2850,10 @@ export const PlayerScreen = {
           </div>
         </div>
 
+        <div id="playerBufferingSpinner" class="player-loading-spinner hidden" aria-hidden="true">
+          <div class="player-loading-spinner-ring"></div>
+        </div>
+
         <div id="playerParentalGuide" class="player-parental-guide hidden"></div>
         <div id="playerSkipIntro" class="player-skip-intro hidden"></div>
 
@@ -2928,6 +2932,7 @@ export const PlayerScreen = {
     this.uiRefs = uiRoot ? {
       root: uiRoot,
       loadingOverlay: uiRoot.querySelector("#playerLoadingOverlay"),
+      bufferingSpinner: uiRoot.querySelector("#playerBufferingSpinner"),
       loadingIdentity: uiRoot.querySelector(".player-loading-identity"),
       loadingLogo: uiRoot.querySelector(".player-loading-logo"),
       loadingTitle: uiRoot.querySelector(".player-loading-title"),
@@ -4682,8 +4687,16 @@ export const PlayerScreen = {
     setTimeout(run, 0);
   },
 
+  isStartupLoadingVisible() {
+    return Boolean(this.loadingVisible && !this.hasPresentedPlaybackFrame);
+  },
+
+  isBufferingSpinnerVisible() {
+    return Boolean(this.loadingVisible && this.hasPresentedPlaybackFrame);
+  },
+
   isSeekBarAvailable() {
-    return !this.loadingVisible;
+    return !this.loadingVisible || this.hasPresentedPlaybackFrame || this.seekLoading;
   },
 
   isSeekOverlaySuppressingControls() {
@@ -4796,15 +4809,18 @@ export const PlayerScreen = {
   },
 
   seekPlaybackSeconds(seconds) {
-    // Show logo-only loading state for user-initiated seeks
+    // Mark user-initiated seeks so the player can stay responsive while it settles.
     this.seekLoading = true;
-    this.loadingVisible = true;
-    this.updateLoadingVisibility();
     if (typeof PlayerController.seekToSeconds === "function") {
-      return Boolean(PlayerController.seekToSeconds(seconds));
+      const didSeek = Boolean(PlayerController.seekToSeconds(seconds));
+      if (!didSeek) {
+        this.seekLoading = false;
+      }
+      return didSeek;
     }
     const video = PlayerController.video;
     if (!video) {
+      this.seekLoading = false;
       return false;
     }
     video.currentTime = Number(seconds || 0);
@@ -4865,30 +4881,34 @@ export const PlayerScreen = {
 
   updateLoadingVisibility() {
     const overlay = this.uiRefs?.loadingOverlay;
+    const bufferingSpinner = this.uiRefs?.bufferingSpinner;
     if (!overlay) {
       if (!this.loadingVisible) {
         this.releaseStartupAudioGate();
       }
       return;
     }
+    const showStartupOverlay = this.isStartupLoadingVisible();
+    const showBufferingSpinner = this.isBufferingSpinnerVisible();
     const preserveProgressFocus = Boolean(
-      this.loadingVisible
+      showStartupOverlay
       && this.controlsVisible
       && this.stickyProgressFocus
       && this.controlFocusZone === "progress"
       && this.hasPresentedPlaybackFrame
     );
     const preserveHiddenSeekOverlay = Boolean(
-      this.loadingVisible
+      showStartupOverlay
       && !this.controlsVisible
       && this.isSeekOverlaySuppressingControls()
     );
-    overlay.classList.toggle("hidden", !this.loadingVisible);
-    overlay.classList.toggle("seek-only", Boolean(this.seekLoading));
+    overlay.classList.toggle("hidden", !showStartupOverlay);
+    overlay.classList.remove("seek-only", "logo-only");
+    bufferingSpinner?.classList.toggle("hidden", !showBufferingSpinner);
     if (!this.loadingVisible) {
       this.seekLoading = false;
     }
-    if (this.loadingVisible) {
+    if (showStartupOverlay) {
       this.dismissPauseOverlay();
       if (!preserveProgressFocus && !preserveHiddenSeekOverlay && (this.seekOverlayVisible || this.seekPreviewSeconds != null)) {
         this.cancelSeekPreview({ commit: false });
@@ -4905,7 +4925,7 @@ export const PlayerScreen = {
       if (preserveHiddenSeekOverlay) {
         this.renderSeekOverlay();
       }
-    } else {
+    } else if (!showBufferingSpinner) {
       this.releaseStartupAudioGate();
       if (this.paused) {
         this.schedulePauseOverlay();
