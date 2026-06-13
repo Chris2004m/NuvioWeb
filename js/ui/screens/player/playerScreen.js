@@ -1742,6 +1742,7 @@ export const PlayerScreen = {
     this.torrentOverlayData = null;
     this.loadingProgressRefreshInFlight = false;
     this.seekLoading = false;
+    this.seekLoadingBaselineSeconds = null;
     this.startupAudioGateActive = false;
     this.loadingCompletionTimer = null;
     this.loadingCompletionToken = 0;
@@ -5588,7 +5589,6 @@ export const PlayerScreen = {
       if (this.isStartupErrorVisible()) {
         return;
       }
-      this.seekLoading = false;
       if (isTizenAvPlayPlayback()) {
         this.lastPlaybackErrorAt = 0;
         this.sourcesError = "";
@@ -5755,7 +5755,6 @@ export const PlayerScreen = {
       if (this.isStartupErrorVisible()) {
         return;
       }
-      this.seekLoading = false;
       this.attemptPendingPlaybackRestore();
       this.startupTrackPreferenceReady = true;
       this.refreshTrackDialogs();
@@ -5779,6 +5778,7 @@ export const PlayerScreen = {
         return;
       }
       this.seekLoading = false;
+      this.seekLoadingBaselineSeconds = null;
       const now = Date.now();
       if ((now - Number(this.lastPlaybackErrorAt || 0)) < 120) {
         return;
@@ -6169,6 +6169,9 @@ export const PlayerScreen = {
   },
 
   isBufferingSpinnerVisible() {
+    if (this.seekLoading) {
+      return !this.isExternalFrameMode() && !this.isStartupErrorVisible();
+    }
     if (!this.loadingVisible || !this.hasPresentedPlaybackFrame || this.isExternalFrameMode() || this.isStartupErrorVisible()) {
       return false;
     }
@@ -6428,17 +6431,23 @@ export const PlayerScreen = {
 
   seekPlaybackSeconds(seconds) {
     // Mark user-initiated seeks so the player can stay responsive while it settles.
+    this.seekLoadingBaselineSeconds = this.getPlaybackCurrentSeconds();
     this.seekLoading = true;
+    this.updateLoadingVisibility();
     if (typeof PlayerController.seekToSeconds === "function") {
       const didSeek = Boolean(PlayerController.seekToSeconds(seconds));
       if (!didSeek) {
         this.seekLoading = false;
+        this.seekLoadingBaselineSeconds = null;
+        this.updateLoadingVisibility();
       }
       return didSeek;
     }
     const video = PlayerController.video;
     if (!video) {
       this.seekLoading = false;
+      this.seekLoadingBaselineSeconds = null;
+      this.updateLoadingVisibility();
       return false;
     }
     video.currentTime = Number(seconds || 0);
@@ -6543,8 +6552,7 @@ export const PlayerScreen = {
       this.loadingTorrentStatus = "";
       this.syncLoadingOverlayStatus();
     }
-    if (!this.loadingVisible) {
-      this.seekLoading = false;
+    if (!this.loadingVisible && !this.seekLoading) {
       this.clearBufferingSpinnerTimer();
     }
     if (showStartupOverlay) {
@@ -7344,16 +7352,30 @@ export const PlayerScreen = {
   },
 
   markPlaybackProgress() {
+    const currentSeconds = this.getPlaybackCurrentSeconds();
     if (typeof PlayerController.recordProgressSnapshot === "function") {
       PlayerController.recordProgressSnapshot(
-        Math.floor(this.getPlaybackCurrentSeconds() * 1000),
+        Math.floor(currentSeconds * 1000),
         Math.floor(this.getPlaybackDurationSeconds() * 1000),
         typeof PlayerController.createProgressContext === "function"
           ? PlayerController.createProgressContext()
           : null
       );
     }
-    this.bufferingSpinnerBaselineSeconds = this.getPlaybackCurrentSeconds();
+    if (this.seekLoading) {
+      const seekBaselineSeconds = Number(this.seekLoadingBaselineSeconds);
+      if (
+        Number.isFinite(currentSeconds)
+        && Number.isFinite(seekBaselineSeconds)
+        && currentSeconds > (seekBaselineSeconds + STARTUP_PLAYBACK_ADVANCE_EPSILON_SECONDS)
+      ) {
+        this.seekLoading = false;
+        this.seekLoadingBaselineSeconds = null;
+        this.clearBufferingSpinnerTimer();
+        this.updateLoadingVisibility();
+      }
+    }
+    this.bufferingSpinnerBaselineSeconds = currentSeconds;
     this.lastPlaybackProgressAt = Date.now();
     this.engineFsStallExtensions = 0;
     this.lastEngineFsStallStats = null;
