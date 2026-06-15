@@ -23,17 +23,21 @@ function writeAll(next) {
   LocalStore.set(KEY, next && typeof next === "object" ? next : {});
 }
 
-function readForProfile(profileId = activeProfileId()) {
-  const pid = String(profileId || "1");
+// Entries are stored as an explicit newest-first array so ordering never relies
+// on JavaScript object key iteration: a numeric-looking content id used as an
+// object key would otherwise be reordered ahead of string keys and corrupt the
+// cap eviction.
+function readEntries(profileId = activeProfileId()) {
   const all = readAll();
-  const prefs = all[pid];
-  return prefs && typeof prefs === "object" ? prefs : {};
+  const list = all[String(profileId || "1")];
+  return Array.isArray(list)
+    ? list.filter((entry) => entry && typeof entry === "object" && entry.key)
+    : [];
 }
 
-function writeForProfile(profileId, prefs) {
-  const pid = String(profileId || "1");
+function writeEntries(profileId, entries) {
   const all = readAll();
-  all[pid] = prefs;
+  all[String(profileId || "1")] = entries;
   writeAll(all);
 }
 
@@ -44,7 +48,8 @@ export const StreamPreferencesStore = {
     if (!key) {
       return null;
     }
-    return String(readForProfile(profileId)[key] || "") || null;
+    const entry = readEntries(profileId).find((item) => item.key === key);
+    return entry ? (String(entry.streamId || "") || null) : null;
   },
 
   set(contentId, videoId, streamId, profileId = activeProfileId()) {
@@ -53,21 +58,13 @@ export const StreamPreferencesStore = {
     if (!key || !sid) {
       return;
     }
-    const prefs = readForProfile(profileId);
-    // Remove this key if already present so the rebuild moves it to the front.
-    delete prefs[key];
-    // Enforce the cap by evicting the oldest entries. Existing keys are stored
-    // newest-first, so the oldest entries live at the end of the list.
-    const keys = Object.keys(prefs);
-    while (keys.length >= MAX_ENTRIES) {
-      delete prefs[keys.pop()];
+    const entries = readEntries(profileId).filter((item) => item.key !== key);
+    // Newest first; drop the oldest entries once the cap is exceeded.
+    entries.unshift({ key, streamId: sid });
+    if (entries.length > MAX_ENTRIES) {
+      entries.length = MAX_ENTRIES;
     }
-    // Rebuild with the just-used key first (most recently used).
-    const next = { [key]: sid };
-    for (const k of keys) {
-      next[k] = prefs[k];
-    }
-    writeForProfile(profileId, next);
+    writeEntries(profileId, entries);
   }
 
 };
