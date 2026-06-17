@@ -27,6 +27,7 @@ class StreamRepository {
     const onAddon = typeof options?.onAddon === "function" ? options.onAddon : null;
 
     const onChunk = typeof options?.onChunk === "function" ? options.onChunk : null;
+
     const notifyChunk = (group) => {
       if (!onChunk || !group?.streams?.length) {
         return;
@@ -44,6 +45,17 @@ class StreamRepository {
     const supportsStreamType = (addon) =>
       (addon?.resources || []).some((resource) => {
         if (resource.name !== "stream") {
+          return false;
+        }
+        if (!resource.types || resource.types.length === 0) {
+          return true;
+        }
+        return resource.types.some((resourceType) => resourceType === type);
+      });
+
+    const supportsMetaType = (addon) =>
+      (addon?.resources || []).some((resource) => {
+        if (resource.name !== "meta") {
           return false;
         }
         if (!resource.types || resource.types.length === 0) {
@@ -77,18 +89,26 @@ class StreamRepository {
 
     const addonTasks = installedAddons.map(async (addon) => {
       try {
-        if (!supportsStreamType(addon)) {
+        const canStream = supportsStreamType(addon);
+        const canMeta = supportsMetaType(addon);
+        if (!canStream && !canMeta) {
           return null;
         }
         const orderIndex = Number(addon.orderIndex ?? Number.MAX_SAFE_INTEGER);
         notifyAddon(addon, orderIndex);
-        const streamsResult = await this.getStreamsFromAddon(addon.baseUrl, type, videoId);
-        if (streamsResult.status !== "success") {
-          return null;
+        let addonStreams = [];
+        if (canStream) {
+          const streamsResult = await this.getStreamsFromAddon(addon.baseUrl, type, videoId);
+          if (streamsResult.status === "success" && streamsResult.data.length) {
+            addonStreams = streamsResult.data;
+          }
         }
-        const addonStreams = streamsResult.data.length
-          ? streamsResult.data
-          : await this.fetchInlineStreamsFromMeta(addon, type, videoId);
+        // Some addons (e.g. debrid cloud catalogs) deliver the playable stream
+        // inline in the meta's videos[].streams[] and only expose a meta resource
+        // for the content type, not a stream resource. Fall back to that here.
+        if (addonStreams.length === 0 && canMeta) {
+          addonStreams = await this.fetchInlineStreamsFromMeta(addon, type, videoId);
+        }
         if (addonStreams.length === 0) {
           return null;
         }
@@ -250,23 +270,56 @@ class StreamRepository {
       return [];
     }
 
-    const metaId = this.buildContentLevelMetaId(rawVideoId);
-    const url = this.buildMetaUrl(addon.baseUrl, type, metaId);
-    const result = await safeApiCall(() => MetaApi.getMeta(url));
-    if (result.status !== "success") {
-      return [];
+    // Try the content-level id (handles series episode ids like tt123:1:2)
+    // and the raw id (handles content whose clicked id is the meta id itself,
+    // e.g. debrid cloud "other" items keyed dmm:<torrentId>).
+    const contentLevelId = this.buildContentLevelMetaId(rawVideoId);
+    const candidateMetaIds = [];
+    if (contentLevelId) {
+      candidateMetaIds.push(contentLevelId);
+    }
+    if (rawVideoId && rawVideoId !== contentLevelId) {
+      candidateMetaIds.push(rawVideoId);
     }
 
-    const meta = result.data?.meta || null;
-    const videos = Array.isArray(meta?.videos) ? meta.videos : [];
-    const matchingVideo = videos.find((video) => String(video?.id || "") === rawVideoId);
-    const streams = Array.isArray(matchingVideo?.streams) ? matchingVideo.streams : [];
-    return streams
-      .map((stream) => this.mapStream(stream))
-      .filter(
-        (stream) =>
-          stream.url || stream.externalUrl || stream.ytId || stream.clientResolve || stream.infoHash
-      );
+    for (const metaId of candidateMetaIds) {
+      const url = this.buildMetaUrl(addon.baseUrl, type, metaId);
+      const result = await safeApiCall(() => MetaApi.getMeta(url));
+
+      if (result.status !== "success") {
+        continue;
+      }
+
+      const meta = result.data?.meta || null;
+      const videos = Array.isArray(meta?.videos) ? meta.videos : [];
+
+      if (!videos.length) {
+        continue;
+      }
+
+      const matchingVideo =
+        videos.find((video) => String(video?.id || "") === rawVideoId) ||
+        (type !== "series" && videos.length === 1 ? videos[0] : null);
+
+      const streams = Array.isArray(matchingVideo?.streams) ? matchingVideo.streams : [];
+
+      const mapped = streams
+        .map((stream) => this.mapStream(stream))
+        .filter(
+          (stream) =>
+            stream.url ||
+            stream.externalUrl ||
+            stream.ytId ||
+            stream.clientResolve ||
+            stream.infoHash
+        );
+
+      if (mapped.length) {
+        return mapped;
+      }
+    }
+
+    return [];
   }
 
   buildContentLevelMetaId(videoId) {
