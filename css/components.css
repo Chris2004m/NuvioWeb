@@ -4834,7 +4834,6 @@ button:focus-visible {
 
 .home-screen-shell .home-poster-expanded-gradient,
 .home-screen-shell .home-poster-expanded-brand,
-.home-screen-shell .home-poster-expanded-copy,
 .home-screen-shell .home-poster-trailer-layer {
   display: none;
 }
@@ -4907,30 +4906,6 @@ button:focus-visible {
   line-height: 1.2;
   font-weight: 600;
   text-shadow: 0 2px 18px rgba(0, 0, 0, 0.6);
-}
-
-.home-screen-shell .home-poster-expanded-copy {
-  padding-top: 8px;
-}
-
-.home-screen-shell .home-poster-expanded-meta {
-  color: rgba(255, 255, 255, 0.72);
-  font-size: 12px;
-  line-height: 1.35;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: clip;
-}
-
-.home-screen-shell .home-poster-expanded-description {
-  margin-top: 4px;
-  color: #fff;
-  font-size: 14px;
-  line-height: 1.45;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
 }
 
 .home-inline-trailer-frame,
@@ -6335,8 +6310,7 @@ button:focus-visible {
 }
 
 .home-screen-shell.home-layout-modern .home-poster-card.is-expanded .home-poster-expanded-gradient,
-.home-screen-shell.home-layout-modern .home-poster-card.is-expanded .home-poster-expanded-brand,
-.home-screen-shell.home-layout-modern .home-poster-card.is-expanded .home-poster-expanded-copy {
+.home-screen-shell.home-layout-modern .home-poster-card.is-expanded .home-poster-expanded-brand {
   display: block;
 }
 
@@ -6427,8 +6401,7 @@ button:focus-visible {
   transform: none;
 }
 
-.home-screen-shell.home-layout-modern .home-poster-copy,
-.home-screen-shell.home-layout-modern .home-poster-expanded-copy {
+.home-screen-shell.home-layout-modern .home-poster-copy {
   box-sizing: border-box;
   min-height: var(--home-poster-copy-height);
   height: var(--home-poster-copy-height);
@@ -15396,8 +15369,7 @@ button:focus-visible {
 }
 
 .performance-constrained .home-screen-shell .home-poster-title,
-.performance-constrained .home-screen-shell .home-poster-subtitle,
-.performance-constrained .home-screen-shell .home-poster-expanded-meta {
+.performance-constrained .home-screen-shell .home-poster-subtitle {
   text-overflow: ellipsis;
 }
 
