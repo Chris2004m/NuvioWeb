@@ -16203,6 +16203,69 @@ button:focus-visible {
   transform: none !important;
 }
 
+/* webOS 6 and older report as legacy but were missing the fixed stream-screen
+   layout that legacy Tizen already has. Without it the panel relies on flexbox
+   min-height:0 / vh sizing, which these older engines do not bound reliably, so
+   the stream list never gets a scrollable height (only the first few results are
+   reachable) and the cards scale inconsistently. Mirror the legacy Tizen sizing
+   (both render at 1920x1080) so the list scrolls and the layout is consistent. */
+.legacy-webos .stream-route-shell {
+  width: 1920px;
+  height: 1080px;
+}
+
+.legacy-webos .stream-route-content {
+  display: -webkit-box;
+  display: flex;
+  padding: 56px 64px;
+}
+
+.legacy-webos .stream-route-left {
+  width: 560px;
+  flex: 0 0 560px;
+  padding-right: 44px;
+}
+
+.legacy-webos .stream-route-left-inner {
+  width: 420px;
+  max-width: 420px;
+}
+
+.legacy-webos .stream-route-logo {
+  width: 420px;
+  max-width: 420px;
+  max-height: 150px;
+}
+
+.legacy-webos .stream-route-right {
+  width: 1232px;
+  flex: 0 0 1232px;
+  max-width: 1232px;
+  height: 968px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.legacy-webos .stream-route-chip-wrap {
+  height: 78px;
+  margin-bottom: 20px;
+}
+
+.legacy-webos .stream-route-panel-shell {
+  border-radius: 18px;
+  height: 870px;
+  min-height: 0;
+  overflow: hidden;
+  -webkit-box-flex: 1;
+}
+
+.legacy-webos .stream-route-list {
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .legacy-tizen .stream-route-shell {
   width: 1920px;
   height: 1080px;
