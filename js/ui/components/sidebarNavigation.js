@@ -79,6 +79,25 @@ function itemLabel(item) {
   return t(item?.labelKey, {}, String(item?.label || item?.route || ""));
 }
 
+function syncSidebarStateClasses(container) {
+  const root = container?.closest?.(".home-shell, .settings-shell, .library-shell") || container;
+  if (!root?.classList) {
+    return;
+  }
+
+  const legacySidebar = root.querySelector?.(".root-sidebar-legacy");
+  const modernSidebar = root.querySelector?.(".modern-sidebar-shell");
+  root.classList.toggle("has-modern-sidebar", Boolean(modernSidebar));
+  root.classList.toggle(
+    "has-collapsible-sidebar",
+    Boolean(legacySidebar?.getAttribute("data-collapsible") === "true")
+  );
+  root.classList.toggle(
+    "has-expanded-sidebar",
+    Boolean(legacySidebar?.classList?.contains("expanded") || modernSidebar?.classList?.contains("expanded"))
+  );
+}
+
 function getSidebarTextFitTargets(container) {
   return Array.from(
     container?.querySelectorAll(
@@ -464,6 +483,7 @@ export function bindRootSidebarEvents(
     });
 
   scheduleRootSidebarTextFit(container);
+  syncSidebarStateClasses(container);
 }
 
 export function setLegacySidebarExpanded(container, expanded) {
@@ -479,14 +499,17 @@ export function setLegacySidebarExpanded(container, expanded) {
   if (shouldExpand) {
     sidebar.classList.add("opening");
     sidebar.classList.add("content-expanded");
+    syncSidebarStateClasses(container);
     void sidebar.offsetWidth;
     requestAnimationFrame(() => {
       sidebar.classList.add("expanded");
+      syncSidebarStateClasses(container);
     });
     sidebar._legacyOpenTimer = setTimeout(() => {
       sidebar.classList.remove("opening");
       sidebar._legacyOpenTimer = null;
       scheduleRootSidebarTextFit(container);
+      syncSidebarStateClasses(container);
     }, 350);
     scheduleRootSidebarTextFit(container);
     return;
@@ -494,10 +517,12 @@ export function setLegacySidebarExpanded(container, expanded) {
 
   sidebar.classList.remove("opening");
   sidebar.classList.remove("content-expanded");
+  syncSidebarStateClasses(container);
   void sidebar.offsetWidth;
   requestAnimationFrame(() => {
     sidebar.classList.remove("expanded");
     scheduleRootSidebarTextFit(container);
+    syncSidebarStateClasses(container);
   });
   scheduleRootSidebarTextFit(container);
 }
@@ -617,6 +642,7 @@ export function setModernSidebarExpanded(container, expanded) {
   if (expanded) {
     shell.classList.add("panel-visible", "opening");
     shell.classList.remove("collapsing");
+    syncSidebarStateClasses(container);
     if (panel) {
       panel.setAttribute("aria-hidden", "false");
     }
@@ -625,11 +651,13 @@ export function setModernSidebarExpanded(container, expanded) {
     }
     requestAnimationFrame(() => {
       shell.classList.add("expanded");
+      syncSidebarStateClasses(container);
     });
     shell._modernOpenTimer = setTimeout(() => {
       shell.classList.remove("opening");
       shell._modernOpenTimer = null;
       scheduleRootSidebarTextFit(container);
+      syncSidebarStateClasses(container);
     }, 365);
     scheduleRootSidebarTextFit(container);
     return true;
@@ -637,12 +665,14 @@ export function setModernSidebarExpanded(container, expanded) {
 
   shell.classList.add("collapsing");
   shell.classList.remove("opening");
+  syncSidebarStateClasses(container);
   if (pill) {
     pill.setAttribute("aria-expanded", "false");
   }
   shell._modernCloseStartTimer = setTimeout(() => {
     shell.classList.remove("expanded");
     shell._modernCloseStartTimer = null;
+    syncSidebarStateClasses(container);
   }, 70);
   shell._modernCloseEndTimer = setTimeout(() => {
     shell.classList.remove("panel-visible", "collapsing");
@@ -651,6 +681,7 @@ export function setModernSidebarExpanded(container, expanded) {
     }
     shell._modernCloseEndTimer = null;
     scheduleRootSidebarTextFit(container);
+    syncSidebarStateClasses(container);
   }, 430);
   scheduleRootSidebarTextFit(container);
   return true;
