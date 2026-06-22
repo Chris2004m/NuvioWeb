@@ -6606,26 +6606,42 @@ button:focus-visible {
 
 .settings-nav-leading {
   min-width: 0;
+  flex: 1 1 auto;
   display: flex;
   align-items: center;
   gap: 20px;
 }
 
 .settings-nav-label {
+  display: inline-block;
+  max-width: 100%;
   font-size: clamp(26px, 1.7vw, 32px);
   font-weight: 400;
   line-height: 1;
   white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
+  will-change: transform;
+}
+
+.settings-nav-label.is-marquee-active {
+  overflow: visible;
   text-overflow: clip;
+}
+
+.settings-nav-label.is-marquee-active::after {
+  content: attr(data-marquee-text);
+  padding-left: var(--settings-marquee-gap, 32px);
 }
 
 .settings-nav-label-wrap {
   min-width: 0;
+  flex: 1 1 auto;
   display: inline-flex;
   align-items: center;
   gap: 12px;
   flex-wrap: nowrap;
+  overflow: hidden;
 }
 
 .settings-nav-badge {
@@ -7903,9 +7919,24 @@ button:focus-visible {
 
 .settings-row-copy {
   min-width: 0;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.settings-row-leading-icon {
+  flex: 0 0 auto;
+  width: 48px; /* ATV 24dp -> 48px */
+  height: 48px; /* ATV 24dp -> 48px */
+  color: #fff;
+  font-family: "Material Icons";
+  font-size: 48px; /* ATV 24dp -> 48px */
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-font-smoothing: antialiased;
 }
 
 .settings-row-title {
@@ -9279,6 +9310,50 @@ button:focus-visible {
   --addons-error: #cf6679;
   background: var(--addons-bg);
   color: var(--addons-text);
+}
+
+.addons-route-shell,
+.plugins-route-shell {
+  width: 100vw;
+  height: 100vh;
+  padding: min(2.92vw, 56px) min(5vw, 96px); /* ATV 28dp/48dp -> 56px/96px */
+  background: var(--bg-color);
+  color: var(--text-color);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.addons-route-shell *,
+.plugins-route-shell * {
+  box-sizing: border-box;
+}
+
+.addons-route-content,
+.plugins-route-content {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.addons-route-content {
+  --nuvio-route-slide-distance: 8.333vw;
+}
+
+.addons-route-shell .addons-main {
+  width: 100%;
+  height: 100%;
+  margin-left: 0;
+  padding: 0;
+}
+
+.plugins-route-content {
+  --nuvio-route-slide-distance: 8.333vw;
+}
+
+.plugins-route-content {
+  display: flex;
+  flex-direction: column;
+  gap: min(1.25vw, 24px); /* ATV 12dp -> 24px */
 }
 
 .addons-shell .home-sidebar {
@@ -15744,6 +15819,13 @@ button:focus-visible {
 .performance-constrained .settings-route-enter,
 .performance-constrained .settings-slide-panel {
   animation: none !important;
+}
+
+.performance-constrained .addons-route-content.nuvio-route-slide-enter,
+.performance-constrained .plugins-route-content.nuvio-route-slide-enter {
+  --nuvio-route-slide-distance: 8.333vw;
+  animation: nuvioRouteSlideEnter 350ms cubic-bezier(0.4, 0, 0.2, 1) both !important;
+  will-change: opacity, transform;
 }
 
 .performance-constrained .home-content-card,

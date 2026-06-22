@@ -13,6 +13,7 @@ import { SettingsScreen } from "../screens/settings/settingsScreen.js";
 import { TraktScreen } from "../screens/trakt/traktScreen.js";
 import { SupportersContributorsScreen } from "../screens/supporters/supportersContributorsScreen.js";
 import { PluginScreen } from "../screens/plugin/pluginScreen.js";
+import { PluginsScreen } from "../screens/plugin/pluginsScreen.js";
 import { CatalogOrderScreen } from "../screens/plugin/catalogOrderScreen.js";
 import { StreamScreen } from "../screens/stream/streamScreen.js";
 import { CastDetailScreen } from "../screens/cast/castDetailScreen.js";
@@ -73,6 +74,7 @@ export const Router = {
     trakt: TraktScreen,
     supportersContributors: SupportersContributorsScreen,
     plugin: PluginScreen,
+    plugins: PluginsScreen,
     catalogOrder: CatalogOrderScreen,
     stream: StreamScreen,
     castDetail: CastDetailScreen,

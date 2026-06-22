@@ -15,6 +15,7 @@ const APP_SHELL = `
     <div id="trakt" class="screen"></div>
     <div id="supportersContributors" class="screen"></div>
     <div id="plugin" class="screen"></div>
+    <div id="plugins" class="screen"></div>
     <div id="catalogOrder" class="screen"></div>
     <div id="player" class="screen">
       <object id="avPlayerObject" class="tizen-avplay-object" type="application/avplayer"></object>

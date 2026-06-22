@@ -62,6 +62,7 @@ const SETTINGS_UI_STATE_KEY = "settingsScreenUiState";
 const SETTINGS_RAIL_SCROLL_TARGET_RATIO = 0.42;
 const SETTINGS_RAIL_SCROLL_STIFFNESS = 180;
 const SETTINGS_RAIL_SCROLL_DAMPING_RATIO = 0.95;
+const SETTINGS_MARQUEE_VELOCITY_PX_PER_SECOND = 90; // ATV 45dp/s -> 90px/s
 const SETTINGS_VERSION_LABEL = formatSettingsVersionLabel(
   typeof __NUVIO_APP_VERSION__ !== "undefined" ? __NUVIO_APP_VERSION__ : "0.0.0"
 );
@@ -521,9 +522,17 @@ const SECTION_META = [
     subtitleKey: "settings.sections.layout.subtitle"
   },
   {
+    id: "contentDiscovery",
+    labelKey: "settings.sections.contentDiscovery.label",
+    label: "Content & Discovery",
+    subtitleKey: "settings.sections.contentDiscovery.subtitle",
+    subtitle: "Add-ons, plugins, catalogs, and discovery sources"
+  },
+  {
     id: "plugins",
     labelKey: "settings.sections.plugins.label",
-    subtitleKey: "settings.sections.plugins.subtitle"
+    subtitleKey: "settings.sections.plugins.subtitle",
+    hideFromNav: true
   },
   {
     id: "integration",
@@ -557,6 +566,7 @@ const SECTION_ICONS = {
   profiles: "people",
   appearance: "palette",
   layout: "grid_view",
+  contentDiscovery: "explore",
   plugins: "build",
   integration: "link",
   streams: "style",
@@ -1303,10 +1313,65 @@ async function fetchAccountSyncOverview() {
 function getVisibleSections(model) {
   const isPrimaryProfileActive = String(model?.activeProfileId || "1") === "1";
   return SECTION_META.filter((section) => {
+    if (section.hideFromNav) {
+      return false;
+    }
     if (section.id === "account" || section.id === "profiles" || section.id === "trakt") {
       return isPrimaryProfileActive;
     }
     return true;
+  });
+}
+
+function getSettingsSectionById(sectionId) {
+  return SECTION_META.find((section) => section.id === sectionId) || null;
+}
+
+function canOpenSettingsSection(sectionId) {
+  return Boolean(getSettingsSectionById(sectionId));
+}
+
+function updateSettingsMarqueeTargets(root) {
+  root?.querySelectorAll?.(".settings-nav-label").forEach((label) => {
+    label._settingsMarqueeAnimation?.cancel?.();
+    label._settingsMarqueeAnimation = null;
+    label.classList.remove("is-marquee-active");
+    label.style.transform = "";
+    label.style.removeProperty("--settings-marquee-gap");
+    const originalText = label.dataset.marqueeText || String(label.textContent || "");
+    label.dataset.marqueeText = originalText;
+    label.textContent = originalText;
+
+    const item = label.closest(".settings-nav-item");
+    if (!item?.classList.contains("focused")) {
+      return;
+    }
+
+    const textWidth = Number(label.scrollWidth || 0);
+    const viewportWidth = Number(label.clientWidth || 0);
+    if (textWidth <= viewportWidth + 1) {
+      return;
+    }
+
+    const spacing = Math.max(24, viewportWidth / 3);
+    const distance = textWidth + spacing;
+    const travelMs = (distance / SETTINGS_MARQUEE_VELOCITY_PX_PER_SECOND) * 1000;
+
+    label.style.setProperty("--settings-marquee-gap", `${spacing}px`);
+    label.classList.add("is-marquee-active");
+    if (typeof label.animate === "function") {
+      label._settingsMarqueeAnimation = label.animate(
+        [
+          { transform: "translateX(0)" },
+          { transform: `translateX(-${distance}px)` }
+        ],
+        {
+          duration: travelMs,
+          iterations: Infinity,
+          easing: "linear"
+        }
+      );
+    }
   });
 }
 
@@ -1792,6 +1857,7 @@ export const SettingsScreen = {
     subtitle = "",
     value = "",
     icon = "chevron",
+    leadingIcon = "",
     external = false,
     classes = "",
     disabled = false,
@@ -1813,6 +1879,7 @@ export const SettingsScreen = {
               data-zone="content"
               ${this.registerAction(focusKey, inert ? () => {} : this.actionMap.get(focusKey))}
               data-role="action">
+        ${leadingIcon ? `<span class="settings-row-leading-icon material-icons" aria-hidden="true">${escapeHtml(leadingIcon)}</span>` : ""}
         <span class="settings-row-copy">
           <span class="settings-row-title">${escapeHtml(title)}</span>
           ${subtitle ? `<span class="settings-row-subtitle">${escapeHtml(subtitle)}</span>` : ""}
@@ -2981,12 +3048,49 @@ export const SettingsScreen = {
     `;
   },
 
-  renderPluginsSection(model) {
+  renderPluginsSection() {
     return `
       ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "plugins"))}
       <div class="settings-group-card settings-group-card-fill">
         <div class="settings-empty-state settings-empty-state-plugins">
           <p class="settings-plugin-soon-text">Plugin support is coming soon.</p>
+        </div>
+      </div>
+    `;
+  },
+
+  renderContentDiscoverySection() {
+    this.actionMap.set("contentDiscovery:addons", async () => {
+      await Router.navigate("plugin");
+    });
+    this.actionMap.set("contentDiscovery:plugins", async () => {
+      await Router.navigate("plugins");
+    });
+
+    return `
+      ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "contentDiscovery"))}
+      <div class="settings-group-card">
+        <div class="settings-stack">
+          ${this.renderActionRow({
+            focusKey: "contentDiscovery:addons",
+            title: t("addon_title", {}, "Addons"),
+            subtitle: t(
+              "settings.contentDiscovery.addonsSubtitle",
+              {},
+              "Manage add-ons, catalog order, and collections"
+            ),
+            leadingIcon: "grid_view"
+          })}
+          ${this.renderActionRow({
+            focusKey: "contentDiscovery:plugins",
+            title: t("plugin_title", {}, "Plugins"),
+            subtitle: t(
+              "settings.contentDiscovery.pluginsSubtitle",
+              {},
+              "Manage repositories and stream providers"
+            ),
+            leadingIcon: "build"
+          })}
         </div>
       </div>
     `;
@@ -4772,7 +4876,8 @@ export const SettingsScreen = {
     if (section.id === "profiles") return this.renderProfilesSection(model);
     if (section.id === "appearance") return this.renderAppearanceSection(model);
     if (section.id === "layout") return this.renderLayoutSection(model);
-    if (section.id === "plugins") return this.renderPluginsSection(model);
+    if (section.id === "contentDiscovery") return this.renderContentDiscoverySection();
+    if (section.id === "plugins") return this.renderPluginsSection();
     if (section.id === "integration") return this.renderIntegrationSection(model);
     if (section.id === "streams") return this.renderStreamsSection(model);
     if (section.id === "playback") return this.renderPlaybackSection(model);
@@ -4793,7 +4898,7 @@ export const SettingsScreen = {
         SECTION_META.find((item) => item.id === "appearance") || SECTION_META[0]
       ];
     }
-    if (!this.visibleSections.some((item) => item.id === this.activeSection)) {
+    if (!canOpenSettingsSection(this.activeSection)) {
       this.setActiveSection(this.visibleSections[0]?.id || "appearance");
     }
     this.navIndex = clamp(
@@ -4804,6 +4909,7 @@ export const SettingsScreen = {
       this.visibleSections.length - 1
     );
     const section =
+      getSettingsSectionById(this.activeSection) ||
       this.visibleSections.find((item) => item.id === this.activeSection) ||
       this.visibleSections[0];
     this.ensureExpandedState(section.id);
@@ -4890,6 +4996,7 @@ export const SettingsScreen = {
     this.container
       .querySelectorAll(".focusable.focused")
       .forEach((node) => node.classList.remove("focused"));
+    updateSettingsMarqueeTargets(this.container);
     const selectedNode = this.container.querySelector(".settings-nav-item.selected");
     if (selectedNode && this.focusZone !== "nav") {
       scrollSettingsRailItem(selectedNode);
@@ -4979,6 +5086,7 @@ export const SettingsScreen = {
       navNode.classList.add("focused");
       focusSettingsNode(navNode);
       scrollSettingsRailItem(navNode);
+      updateSettingsMarqueeTargets(this.container);
     }
   },
 
@@ -5486,7 +5594,6 @@ export const SettingsScreen = {
 
   cleanup() {
     this.stopTraktPolling?.();
-    LocalStore.remove(SETTINGS_UI_STATE_KEY);
     if (this.container && this.handleWheelBound) {
       this.container.removeEventListener("wheel", this.handleWheelBound);
     }
