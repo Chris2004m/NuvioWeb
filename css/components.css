@@ -8655,13 +8655,9 @@ button:focus-visible {
   height: 224px;
   --settings-layout-modern-side: 5%;
   --settings-layout-modern-top: 6%;
-  --settings-layout-modern-gap: 3%;
+  --settings-layout-modern-gap: 8px;
   --settings-layout-modern-card-width: 78px;
-  --settings-layout-modern-cycle-width: calc(
-    var(--settings-layout-modern-card-width) + var(--settings-layout-modern-gap) +
-      var(--settings-layout-modern-card-width) + var(--settings-layout-modern-gap) +
-      var(--settings-layout-modern-card-width) + var(--settings-layout-modern-gap)
-  );
+  --settings-layout-modern-cycle-width: 258px;
 }
 
 .settings-layout-preview-modern-hero {
@@ -8682,7 +8678,7 @@ button:focus-visible {
   height: 24%;
   display: flex;
   align-items: stretch;
-  gap: var(--settings-layout-modern-gap);
+  gap: 0;
   width: max-content;
   animation: settingsLayoutModernPreviewScroll 5.7s linear infinite;
   will-change: transform;
@@ -8692,6 +8688,7 @@ button:focus-visible {
   flex: 0 0 var(--settings-layout-modern-card-width);
   width: var(--settings-layout-modern-card-width);
   height: 100%;
+  margin-right: var(--settings-layout-modern-gap);
   aspect-ratio: 1.45 / 1;
   background: rgba(255, 255, 255, 0.28);
   background: rgb(255 255 255 / 0.28);
@@ -8707,14 +8704,11 @@ button:focus-visible {
   display: block;
   width: 100%;
   height: 224px;
-  --settings-layout-grid-gap: 2.5%;
-  --settings-layout-grid-card-width: calc((100% - (var(--settings-layout-grid-gap) * 4)) / 5);
-  --settings-layout-grid-card-height: calc(var(--settings-layout-grid-card-width) * 1.4);
-  --settings-layout-grid-cycle-height: calc(
-    var(--settings-layout-grid-card-height) + var(--settings-layout-grid-gap) +
-      var(--settings-layout-grid-card-height) + var(--settings-layout-grid-gap) +
-      var(--settings-layout-grid-card-height) + var(--settings-layout-grid-gap)
-  );
+  --settings-layout-grid-gap: 8px;
+  --settings-layout-grid-card-width: 44px;
+  --settings-layout-grid-card-height: 62px;
+  --settings-layout-grid-canvas-height: 482px;
+  --settings-layout-grid-cycle-height: 210px;
 }
 
 .settings-layout-preview-grid-canvas {
@@ -8722,9 +8716,7 @@ button:focus-visible {
   top: var(--settings-layout-grid-gap);
   left: var(--settings-layout-grid-gap);
   width: calc(100% - (var(--settings-layout-grid-gap) * 2));
-  height: calc(
-    (var(--settings-layout-grid-card-height) * 7) + (var(--settings-layout-grid-gap) * 6)
-  );
+  height: var(--settings-layout-grid-canvas-height);
   display: grid;
   grid-template-columns: repeat(5, var(--settings-layout-grid-card-width));
   grid-auto-rows: var(--settings-layout-grid-card-height);
@@ -8751,21 +8743,20 @@ button:focus-visible {
   width: 100%;
   height: 224px;
   --settings-layout-classic-side: 4.5%;
-  --settings-layout-classic-gap: 2.5%;
-  --settings-layout-classic-card-width: 18.2%;
-  --settings-layout-classic-cycle-width: calc(
-    var(--settings-layout-classic-card-width) + var(--settings-layout-classic-gap) +
-      var(--settings-layout-classic-card-width) + var(--settings-layout-classic-gap)
-  );
+  --settings-layout-classic-gap: 8px;
+  --settings-layout-classic-row-spacing: 9px;
+  --settings-layout-classic-row-height: 63px;
+  --settings-layout-classic-card-width: 47px;
+  --settings-layout-classic-cycle-width: 110px;
 }
 
 .settings-layout-preview-classic-row {
   position: absolute;
   left: var(--settings-layout-classic-side);
-  height: 29.333%;
+  height: var(--settings-layout-classic-row-height);
   display: flex;
   align-items: center;
-  gap: var(--settings-layout-classic-gap);
+  gap: 0;
   width: max-content;
 }
 
@@ -8773,6 +8764,7 @@ button:focus-visible {
   flex: 0 0 var(--settings-layout-classic-card-width);
   width: var(--settings-layout-classic-card-width);
   height: 85%;
+  margin-right: var(--settings-layout-classic-gap);
   aspect-ratio: 2.1 / 1;
   background: rgba(255, 255, 255, 0.3);
   background: rgb(255 255 255 / 0.3);
@@ -8789,17 +8781,17 @@ button:focus-visible {
 }
 
 .settings-layout-preview-classic-row.is-top {
-  top: 4%;
+  top: var(--settings-layout-classic-row-spacing);
 }
 
 .settings-layout-preview-classic-row.is-featured {
-  top: 35.333%;
+  top: calc(var(--settings-layout-classic-row-spacing) * 2 + var(--settings-layout-classic-row-height));
   animation: settingsLayoutClassicPreviewScroll 4s linear infinite;
   will-change: transform;
 }
 
 .settings-layout-preview-classic-row.is-bottom {
-  top: 66.666%;
+  top: calc(var(--settings-layout-classic-row-spacing) * 3 + var(--settings-layout-classic-row-height) * 2);
 }
 
 .settings-layout-card.focused .settings-layout-preview,
@@ -17068,13 +17060,13 @@ html.no-css-grid .cast-detail-meta {
 }
 
 .no-aspect-ratio .settings-layout-preview-modern-card {
-  flex-basis: 78px;
-  width: 78px;
+  flex-basis: var(--settings-layout-modern-card-width);
+  width: var(--settings-layout-modern-card-width);
 }
 
 .no-aspect-ratio .settings-layout-preview-classic-card {
-  flex-basis: 118px;
-  width: 118px;
+  flex-basis: var(--settings-layout-classic-card-width);
+  width: var(--settings-layout-classic-card-width);
 }
 
 .no-css-math .settings-layout-preview-modern-hero {
@@ -17087,43 +17079,43 @@ html.no-css-grid .cast-detail-meta {
 .no-css-math .settings-layout-preview-modern-row {
   top: 73%;
   left: 5%;
-  width: 1776px;
+  width: max-content;
   height: 24%;
   gap: 0;
   animation-name: settingsLayoutModernPreviewScrollLegacy;
 }
 
 .no-css-math .settings-layout-preview-modern-card {
-  flex: 0 0 134px;
-  width: 134px;
+  flex: 0 0 var(--settings-layout-modern-card-width);
+  width: var(--settings-layout-modern-card-width);
   height: 100%;
-  margin-right: 14px;
+  margin-right: var(--settings-layout-modern-gap);
 }
 
 .no-css-math .settings-layout-preview-grid-canvas {
   display: grid;
-  top: 2.5%;
-  left: 2.5%;
-  width: 95%;
-  height: 822px;
-  grid-template-columns: repeat(5, 18%);
-  grid-auto-rows: 108px;
+  top: var(--settings-layout-grid-gap);
+  left: var(--settings-layout-grid-gap);
+  width: calc(100% - (var(--settings-layout-grid-gap) * 2));
+  height: var(--settings-layout-grid-canvas-height);
+  grid-template-columns: repeat(5, var(--settings-layout-grid-card-width));
+  grid-auto-rows: var(--settings-layout-grid-card-height);
   justify-content: space-between;
   align-content: flex-start;
   gap: 0;
-  row-gap: 11px;
-  column-gap: 0;
+  row-gap: var(--settings-layout-grid-gap);
+  column-gap: var(--settings-layout-grid-gap);
   animation-name: settingsLayoutGridPreviewScrollLegacy;
 }
 
 .no-css-math .settings-layout-preview-grid-cell {
   width: 100%;
-  height: 108px;
+  height: var(--settings-layout-grid-card-height);
 }
 
 .no-css-math .settings-layout-preview-classic-row {
   left: 4.5%;
-  width: 1883px;
+  width: max-content;
   gap: 0;
 }
 
@@ -17132,10 +17124,10 @@ html.no-css-grid .cast-detail-meta {
 }
 
 .no-css-math .settings-layout-preview-classic-card {
-  flex: 0 0 258px;
-  width: 258px;
+  flex: 0 0 var(--settings-layout-classic-card-width);
+  width: var(--settings-layout-classic-card-width);
   height: 85%;
-  margin-right: 11px;
+  margin-right: var(--settings-layout-classic-gap);
 }
 
 .no-css-grid .settings-layout-preview-grid-canvas {
@@ -17146,20 +17138,20 @@ html.no-css-grid .cast-detail-meta {
   gap: 0;
   row-gap: 12px;
   column-gap: 0;
-  height: 822px;
+  height: var(--settings-layout-grid-canvas-height);
 }
 
 .no-css-grid .settings-layout-preview-grid-cell {
-  flex: 0 0 18%;
-  width: 18%;
-  height: 108px;
-  margin-bottom: 11px;
+  flex: 0 0 var(--settings-layout-grid-card-width);
+  width: var(--settings-layout-grid-card-width);
+  height: var(--settings-layout-grid-card-height);
+  margin-bottom: var(--settings-layout-grid-gap);
   margin-right: 0;
 }
 
 .no-css-math.no-css-grid .settings-layout-preview-grid-cell {
-  flex: 0 0 18%;
-  width: 18%;
+  flex: 0 0 var(--settings-layout-grid-card-width);
+  width: var(--settings-layout-grid-card-width);
 }
 
 .no-css-math .settings-layout-preview {
@@ -17486,7 +17478,7 @@ html.no-css-grid .cast-detail-meta {
     transform: translateX(0);
   }
   to {
-    transform: translateX(-444px);
+    transform: translateX(calc(0px - var(--settings-layout-modern-cycle-width)));
   }
 }
 
@@ -17495,7 +17487,7 @@ html.no-css-grid .cast-detail-meta {
     transform: translateY(0);
   }
   to {
-    transform: translateY(-357px);
+    transform: translateY(calc(0px - var(--settings-layout-grid-cycle-height)));
   }
 }
 
@@ -17504,7 +17496,7 @@ html.no-css-grid .cast-detail-meta {
     transform: translateX(0);
   }
   to {
-    transform: translateX(-538px);
+    transform: translateX(calc(0px - var(--settings-layout-classic-cycle-width)));
   }
 }
 
