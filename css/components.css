@@ -722,6 +722,10 @@ button:focus-visible {
 .profile-editor-backdrop,
 .profile-dialog-backdrop {
   position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   inset: 0;
   background: rgba(0, 0, 0, 0.85);
   display: flex;
@@ -732,6 +736,10 @@ button:focus-visible {
 
 .profile-pin-layer {
   position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   inset: 0;
   display: flex;
   align-items: center;
@@ -1396,6 +1404,10 @@ button:focus-visible {
 /* Backdrop / scrim — ATV dialogs dim the app heavily behind the focused panel. */
 .nuvio-dialog-backdrop {
   position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   inset: 0;
   background: rgba(0, 0, 0, 0.84);
   display: flex;
@@ -1861,6 +1873,10 @@ button:focus-visible {
   opacity: 1;
 }
 
+.home-shell.has-expanded-sidebar::before {
+  opacity: 1;
+}
+
 .root-sidebar-icon {
   width: 100%;
   height: 100%;
@@ -2137,6 +2153,10 @@ button:focus-visible {
   margin-left: 0;
 }
 
+.home-shell.has-collapsible-sidebar .home-main {
+  margin-left: 0;
+}
+
 .home-shell.home-modern-sidebar-enabled .home-main {
   margin-left: 0;
 }
@@ -2157,6 +2177,10 @@ button:focus-visible {
 
 .modern-sidebar-shell {
   position: absolute;
+  top: 0;
+  right: auto;
+  bottom: 0;
+  left: 0;
   inset: 0 auto 0 0;
   width: var(--modern-sidebar-collapsed-width);
   z-index: 18;
@@ -6427,6 +6451,7 @@ button:focus-visible {
 }
 
 .settings-root-sidebar-slot {
+  display: block;
   display: contents;
 }
 
@@ -6459,7 +6484,18 @@ button:focus-visible {
   margin-left: 64px;
 }
 
+.settings-shell.has-collapsible-sidebar .settings-workspace {
+  width: calc(100vw - 128px);
+  margin-left: 64px;
+}
+
 .settings-shell:has(.modern-sidebar-shell) .settings-workspace {
+  width: calc(100vw - 128px);
+  margin: 68px 64px 24px;
+  height: calc(100vh - 92px);
+}
+
+.settings-shell.has-modern-sidebar .settings-workspace {
   width: calc(100vw - 128px);
   margin: 68px 64px 24px;
   height: calc(100vh - 92px);
@@ -8481,6 +8517,7 @@ button:focus-visible {
   text-align: left;
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   gap: 12px;
   position: relative;
   overflow: hidden;
@@ -8494,6 +8531,7 @@ button:focus-visible {
   padding: 6px 12px;
   border-radius: 999px;
   border: 1px solid var(--border-color);
+  background: rgba(26, 26, 26, 0.94);
   background: rgb(var(--bg-elevated-rgb) / 0.94);
   color: var(--text-secondary);
   font-size: 12px;
@@ -8504,19 +8542,85 @@ button:focus-visible {
 }
 
 .settings-layout-preview {
+  width: 100%;
   height: 224px;
   border-radius: 24px;
   background: var(--bg-color);
   position: relative;
   overflow: hidden;
   display: block;
+  align-self: stretch;
+  box-sizing: border-box;
   isolation: isolate;
+}
+
+.settings-layout-preview-placeholder {
+  width: 100%;
+  height: 224px;
+  border-radius: 24px;
+  background: var(--bg-elevated);
+  box-sizing: border-box;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
+  gap: 16px;
+}
+
+.settings-layout-placeholder-line,
+.settings-layout-placeholder-panel {
+  display: block;
+  background: var(--border-color);
+}
+
+.settings-layout-placeholder-line {
+  height: 20px;
+  border-radius: 999px;
+}
+
+.settings-layout-placeholder-line.is-short {
+  width: 70%;
+}
+
+.settings-layout-placeholder-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  border-radius: 20px;
+  background: var(--bg-color);
+}
+
+.settings-layout-placeholder-bars {
+  display: flex;
+  gap: 12px;
+}
+
+.settings-layout-placeholder-bars .settings-layout-placeholder-line {
+  flex: 1 1 0;
+}
+
+.settings-layout-card.focused .settings-layout-preview-placeholder,
+.settings-layout-card.is-selected .settings-layout-preview-placeholder {
+  display: none;
+}
+
+.settings-layout-card .settings-layout-preview {
+  display: none;
+}
+
+.settings-layout-card.focused .settings-layout-preview,
+.settings-layout-card.is-selected .settings-layout-preview {
+  display: block;
 }
 
 .settings-layout-preview::after {
   content: "";
   position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   inset: 0;
+  border: 1px solid rgba(255, 255, 255, 0.05);
   border: 1px solid rgb(255 255 255 / 0.05);
   border-radius: inherit;
   pointer-events: none;
@@ -8548,11 +8652,12 @@ button:focus-visible {
   position: relative;
   display: block;
   width: 100%;
-  height: 100%;
+  height: 224px;
   --settings-layout-modern-side: 5%;
   --settings-layout-modern-top: 6%;
-  --settings-layout-modern-gap: 3%;
-  --settings-layout-modern-card-width: 18.5%;
+  --settings-layout-modern-gap: 8px;
+  --settings-layout-modern-card-width: 78px;
+  --settings-layout-modern-cycle-width: 258px;
 }
 
 .settings-layout-preview-modern-hero {
@@ -8562,6 +8667,7 @@ button:focus-visible {
   width: calc(100% - (var(--settings-layout-modern-side) * 2));
   height: 62%;
   border-radius: 6px;
+  background: rgba(255, 255, 255, 0.38);
   background: rgb(255 255 255 / 0.38);
 }
 
@@ -8572,20 +8678,24 @@ button:focus-visible {
   height: 24%;
   display: flex;
   align-items: stretch;
-  gap: var(--settings-layout-modern-gap);
+  gap: 0;
   width: max-content;
-  animation: settingsLayoutModernPreviewScroll 4.2s linear infinite;
-  will-change: left;
+  animation: settingsLayoutModernPreviewScroll 5.7s linear infinite;
+  will-change: transform;
 }
 
 .settings-layout-preview-modern-card {
-  flex: 0 0 auto;
+  flex: 0 0 var(--settings-layout-modern-card-width);
+  width: var(--settings-layout-modern-card-width);
   height: 100%;
+  margin-right: var(--settings-layout-modern-gap);
   aspect-ratio: 1.45 / 1;
+  background: rgba(255, 255, 255, 0.28);
   background: rgb(255 255 255 / 0.28);
 }
 
 .settings-layout-preview-modern-card.is-strong {
+  background: rgba(255, 255, 255, 0.46);
   background: rgb(255 255 255 / 0.46);
 }
 
@@ -8593,10 +8703,12 @@ button:focus-visible {
   position: relative;
   display: block;
   width: 100%;
-  height: 100%;
-  --settings-layout-grid-gap: 2.5%;
-  --settings-layout-grid-card-width: calc((100% - (var(--settings-layout-grid-gap) * 4)) / 5);
-  --settings-layout-grid-card-height: calc(var(--settings-layout-grid-card-width) * 1.4);
+  height: 224px;
+  --settings-layout-grid-gap: 8px;
+  --settings-layout-grid-card-width: 44px;
+  --settings-layout-grid-card-height: 62px;
+  --settings-layout-grid-canvas-height: 482px;
+  --settings-layout-grid-cycle-height: 210px;
 }
 
 .settings-layout-preview-grid-canvas {
@@ -8604,24 +8716,24 @@ button:focus-visible {
   top: var(--settings-layout-grid-gap);
   left: var(--settings-layout-grid-gap);
   width: calc(100% - (var(--settings-layout-grid-gap) * 2));
-  height: calc(
-    (var(--settings-layout-grid-card-height) * 7) + (var(--settings-layout-grid-gap) * 6)
-  );
+  height: var(--settings-layout-grid-canvas-height);
   display: grid;
   grid-template-columns: repeat(5, var(--settings-layout-grid-card-width));
   grid-auto-rows: var(--settings-layout-grid-card-height);
   gap: var(--settings-layout-grid-gap);
-  animation: settingsLayoutGridPreviewScroll 4s linear infinite;
-  will-change: top;
+  animation: settingsLayoutGridPreviewScroll 8.8s linear infinite;
+  will-change: transform;
 }
 
 .settings-layout-preview-grid-cell {
   width: 100%;
   height: 100%;
+  background: rgba(255, 255, 255, 0.5);
   background: rgb(255 255 255 / 0.5);
 }
 
 .settings-layout-preview-grid-cell.is-dim {
+  background: rgba(255, 255, 255, 0.3);
   background: rgb(255 255 255 / 0.3);
 }
 
@@ -8629,30 +8741,37 @@ button:focus-visible {
   position: relative;
   display: block;
   width: 100%;
-  height: 100%;
+  height: 224px;
   --settings-layout-classic-side: 4.5%;
-  --settings-layout-classic-gap: 2.5%;
-  --settings-layout-classic-card-width: 18.2%;
+  --settings-layout-classic-gap: 8px;
+  --settings-layout-classic-row-spacing: 9px;
+  --settings-layout-classic-row-height: 63px;
+  --settings-layout-classic-card-width: 47px;
+  --settings-layout-classic-cycle-width: 110px;
 }
 
 .settings-layout-preview-classic-row {
   position: absolute;
   left: var(--settings-layout-classic-side);
-  height: 29.333%;
+  height: var(--settings-layout-classic-row-height);
   display: flex;
   align-items: center;
-  gap: var(--settings-layout-classic-gap);
+  gap: 0;
   width: max-content;
 }
 
 .settings-layout-preview-classic-card {
-  flex: 0 0 auto;
+  flex: 0 0 var(--settings-layout-classic-card-width);
+  width: var(--settings-layout-classic-card-width);
   height: 85%;
+  margin-right: var(--settings-layout-classic-gap);
   aspect-ratio: 2.1 / 1;
+  background: rgba(255, 255, 255, 0.3);
   background: rgb(255 255 255 / 0.3);
 }
 
 .settings-layout-preview-classic-card.is-strong {
+  background: rgba(255, 255, 255, 0.6);
   background: rgb(255 255 255 / 0.6);
 }
 
@@ -8662,17 +8781,17 @@ button:focus-visible {
 }
 
 .settings-layout-preview-classic-row.is-top {
-  top: 4%;
+  top: var(--settings-layout-classic-row-spacing);
 }
 
 .settings-layout-preview-classic-row.is-featured {
-  top: 35.333%;
+  top: calc(var(--settings-layout-classic-row-spacing) * 2 + var(--settings-layout-classic-row-height));
   animation: settingsLayoutClassicPreviewScroll 4s linear infinite;
-  will-change: left;
+  will-change: transform;
 }
 
 .settings-layout-preview-classic-row.is-bottom {
-  top: 66.666%;
+  top: calc(var(--settings-layout-classic-row-spacing) * 3 + var(--settings-layout-classic-row-height) * 2);
 }
 
 .settings-layout-card.focused .settings-layout-preview,
@@ -8682,34 +8801,28 @@ button:focus-visible {
 
 @keyframes settingsLayoutClassicPreviewScroll {
   from {
-    left: var(--settings-layout-classic-side);
+    transform: translateX(0);
   }
   to {
-    left: calc(
-      var(--settings-layout-classic-side) -
-        ((var(--settings-layout-classic-card-width) + var(--settings-layout-classic-gap)) * 2)
-    );
+    transform: translateX(calc(0px - var(--settings-layout-classic-cycle-width)));
   }
 }
 
 @keyframes settingsLayoutGridPreviewScroll {
   from {
-    top: var(--settings-layout-grid-gap);
+    transform: translateY(0);
   }
   to {
-    top: calc(var(--settings-layout-grid-gap) - (var(--settings-layout-grid-card-height) * 1.5));
+    transform: translateY(calc(0px - var(--settings-layout-grid-cycle-height)));
   }
 }
 
 @keyframes settingsLayoutModernPreviewScroll {
   from {
-    left: var(--settings-layout-modern-side);
+    transform: translateX(0);
   }
   to {
-    left: calc(
-      var(--settings-layout-modern-side) -
-        ((var(--settings-layout-modern-card-width) + var(--settings-layout-modern-gap)) * 2.2)
-    );
+    transform: translateX(calc(0px - var(--settings-layout-modern-cycle-width)));
   }
 }
 
@@ -15811,6 +15924,30 @@ button:focus-visible {
   animation: streamRouteSpin 700ms linear infinite !important;
 }
 
+.performance-constrained .settings-layout-preview-modern-row {
+  animation: settingsLayoutModernPreviewScroll 5.7s linear infinite !important;
+}
+
+.performance-constrained .settings-layout-preview-grid-canvas {
+  animation: settingsLayoutGridPreviewScroll 8.8s linear infinite !important;
+}
+
+.performance-constrained .settings-layout-preview-classic-row.is-featured {
+  animation: settingsLayoutClassicPreviewScroll 4s linear infinite !important;
+}
+
+.performance-constrained.no-css-math .settings-layout-preview-modern-row {
+  animation: settingsLayoutModernPreviewScrollLegacy 5.7s linear infinite !important;
+}
+
+.performance-constrained.no-css-math .settings-layout-preview-grid-canvas {
+  animation: settingsLayoutGridPreviewScrollLegacy 8.8s linear infinite !important;
+}
+
+.performance-constrained.no-css-math .settings-layout-preview-classic-row.is-featured {
+  animation: settingsLayoutClassicPreviewScrollLegacy 4s linear infinite !important;
+}
+
 .performance-constrained .nuvio-route-slide-enter,
 .performance-constrained .home-route-content-enter,
 .performance-constrained .addons-route-enter,
@@ -16414,6 +16551,1007 @@ button:focus-visible {
 
 .no-aspect-ratio .cast-credit-poster {
   height: 360px;
+}
+
+.no-backdrop-filter .modern-sidebar-panel,
+.no-backdrop-filter .modern-sidebar-pill-chip,
+.no-backdrop-filter .player-pause-overlay,
+.no-backdrop-filter .detail-trailer-control-bar,
+.no-backdrop-filter .series-episode-card,
+.no-backdrop-filter .series-stream-panel,
+.no-backdrop-filter .stream-route-panel-shell,
+.no-backdrop-filter .settings-trakt-card,
+.no-backdrop-filter .settings-layout-badge {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.no-backdrop-filter .modern-sidebar-shell.blur-enabled .modern-sidebar-panel {
+  background:
+    linear-gradient(180deg, rgba(22, 24, 28, 0.96), rgba(22, 24, 28, 0.96)),
+    linear-gradient(180deg, #4a4f59, #3f454f, #40474f);
+}
+
+.no-backdrop-filter .modern-sidebar-shell.blur-enabled .modern-sidebar-pill-chip {
+  background:
+    linear-gradient(180deg, rgba(22, 24, 28, 0.92), rgba(22, 24, 28, 0.92)),
+    linear-gradient(180deg, #424851, #3b4149);
+}
+
+html.no-css-grid .qr-layout,
+html.no-css-grid .settings-workspace,
+html.no-css-grid .settings-trakt-panel,
+html.no-css-grid .cast-detail-hero-content,
+html.no-css-grid .stream-route-content,
+html.no-css-grid .addon-list-header,
+html.no-css-grid .parental-overlay-row {
+  display: flex;
+  flex-wrap: nowrap;
+}
+
+html.no-css-grid .qr-left-panel {
+  flex: 0 0 45%;
+  width: 45%;
+  margin-right: 36px;
+}
+
+html.no-css-grid .qr-card-panel {
+  flex: 1 1 0;
+  width: auto;
+}
+
+html.no-css-grid .settings-workspace {
+  align-items: stretch;
+}
+
+html.no-css-grid .settings-sidebar-frame {
+  flex: 0 0 440px;
+  width: 440px;
+  margin-right: 32px;
+}
+
+html.no-css-grid .settings-content-frame {
+  flex: 1 1 0;
+  width: auto;
+}
+
+html.no-css-grid .settings-trakt-hero {
+  flex: 0 0 45%;
+  width: 45%;
+  margin-right: 36px;
+}
+
+html.no-css-grid .settings-trakt-card {
+  flex: 1 1 0;
+  width: auto;
+}
+
+html.no-css-grid .settings-layout-grid,
+html.no-css-grid .settings-trakt-stats-row,
+html.no-css-grid .settings-trakt-grid-dialog .settings-dialog-list,
+html.no-css-grid .discover-grid,
+html.no-css-grid .library-grid,
+html.no-css-grid .seeall-grid,
+html.no-css-grid .series-episode-ratings-grid {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+html.no-css-grid .settings-layout-grid > *,
+html.no-css-grid .settings-trakt-stats-row > *,
+html.no-css-grid .settings-trakt-grid-dialog .settings-dialog-list > *,
+html.no-css-grid .discover-grid > *,
+html.no-css-grid .library-grid > *,
+html.no-css-grid .seeall-grid > *,
+html.no-css-grid .series-episode-ratings-grid > * {
+  margin-right: 24px;
+  margin-bottom: 24px;
+}
+
+html.no-css-grid .settings-layout-card {
+  flex: 0 0 calc((100% - 48px) / 3);
+  width: calc((100% - 48px) / 3);
+}
+
+html.no-css-grid .settings-trakt-stat {
+  flex: 0 0 25%;
+  width: 25%;
+}
+
+html.no-css-grid .discover-card,
+html.no-css-grid .discover-action-card,
+html.no-css-grid .seeall-card {
+  flex: 0 0 248px;
+  width: 248px;
+}
+
+html.no-css-grid .library-grid-card {
+  flex: 0 0 var(--library-poster-width, 252px);
+  width: var(--library-poster-width, 252px);
+}
+
+html.no-css-grid .cast-detail-avatar {
+  flex: 0 0 220px;
+  margin-right: 20px;
+}
+
+html.no-css-grid .cast-detail-meta {
+  flex: 1 1 0;
+}
+
+.no-css-vars {
+  background: #0d0d0d;
+  color: #fff;
+  font-family: "Inter", "Segoe UI", Arial, sans-serif;
+}
+
+.no-css-vars body,
+.no-css-vars #app,
+.no-css-vars .screen,
+.no-css-vars .settings-shell,
+.no-css-vars .library-shell,
+.no-css-vars .home-main,
+.no-css-vars .seeall-shell {
+  background: #0d0d0d;
+  color: #fff;
+}
+
+.no-css-vars .home-shell {
+  background:
+    radial-gradient(120% 90% at 75% 8%, rgba(190, 40, 18, 0.26), transparent 45%), #06090e;
+  color: #f8fbff;
+}
+
+.no-css-vars .home-sidebar {
+  width: 144px;
+  padding: 24px;
+  background: #0d0d0d;
+}
+
+.no-css-vars .home-sidebar.expanded {
+  width: 392px;
+  flex-basis: 392px;
+}
+
+.no-css-vars .home-sidebar[data-collapsible="true"]:not(.expanded) {
+  width: 0;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.no-css-vars .home-main {
+  margin-left: 144px;
+}
+
+.no-css-vars .home-nav-list {
+  gap: 20px;
+}
+
+.no-css-vars .home-nav-item {
+  width: 96px;
+  height: 104px;
+  border-radius: 64px;
+  color: #808080;
+  font-family: "Inter", "Segoe UI", Arial, sans-serif;
+}
+
+.no-css-vars .home-sidebar.content-expanded .home-nav-item {
+  width: 312px;
+  padding: 0 28px 0 26px;
+  color: #b3b3b3;
+}
+
+.no-css-vars .home-nav-item.selected,
+.no-css-vars .home-sidebar.content-expanded .home-nav-item.selected {
+  background: #f5f5f5;
+  color: #111;
+}
+
+.no-css-vars .home-nav-item.focused,
+.no-css-vars .home-sidebar.content-expanded .home-nav-item.selected.focused {
+  background: #303030;
+  color: #fff;
+}
+
+.no-css-vars .home-sidebar.content-expanded .home-nav-item.focused {
+  transform: scale(1.1);
+}
+
+.no-css-vars .home-nav-icon-wrap,
+.no-css-vars .home-nav-icon {
+  width: 44px;
+  height: 44px;
+}
+
+.no-css-vars .home-nav-label {
+  font-size: 32px;
+}
+
+.no-css-vars .home-sidebar.content-expanded .home-nav-label {
+  width: 176px;
+}
+
+.no-css-vars .modern-sidebar-shell {
+  width: 368px;
+}
+
+.no-css-vars .modern-sidebar-shell.expanded:not(.opening):not(.collapsing) {
+  width: 524px;
+}
+
+.no-css-vars .modern-sidebar-panel {
+  top: 32px;
+  left: 28px;
+  width: 480px;
+  min-height: calc(100vh - 56px);
+  padding: 28px 24px;
+}
+
+.no-css-vars .modern-sidebar-nav-list {
+  gap: 12px;
+}
+
+.no-css-vars .modern-sidebar-profile,
+.no-css-vars .modern-sidebar-nav-item {
+  min-height: 108px;
+  width: 92%;
+  border-radius: 999px;
+  gap: 28px;
+}
+
+.no-css-vars .modern-sidebar-nav-label,
+.no-css-vars .modern-sidebar-pill-label {
+  font-size: 40px;
+}
+
+.no-css-vars .modern-sidebar-pill {
+  top: 32px;
+  left: 28px;
+}
+
+.no-css-vars .modern-sidebar-pill-chip {
+  min-height: 88px;
+  padding: 0 24px 0 10px;
+  gap: 18px;
+}
+
+.no-css-vars .settings-workspace {
+  width: calc(100vw - 208px);
+  height: calc(100vh - 96px);
+  margin: 48px 64px 48px 144px;
+  background: #1a1a1a;
+  border-color: #333;
+}
+
+.no-css-vars .settings-shell.has-collapsible-sidebar .settings-workspace,
+.no-css-vars .settings-shell.has-modern-sidebar .settings-workspace {
+  width: calc(100vw - 128px);
+  margin-left: 64px;
+}
+
+.no-css-vars .settings-nav-item,
+.no-css-vars .settings-action-row,
+.no-css-vars .settings-theme-card,
+.no-css-vars .settings-layout-card,
+.no-css-vars .library-action-button,
+.no-css-vars .qr-status,
+.no-css-vars .qr-action-btn,
+.no-css-vars .seeall-card-poster,
+.no-css-vars .discover-card-poster,
+.no-css-vars .library-grid-poster,
+.no-css-vars .stream-route-card {
+  background: #222;
+  color: #fff;
+  border-color: #333;
+}
+
+.no-css-vars .settings-nav-item.selected,
+.no-css-vars .settings-nav-item.focused,
+.no-css-vars .settings-action-row.focused,
+.no-css-vars .library-action-button.focused,
+.no-css-vars .qr-action-btn.focused {
+  background: #303030;
+  color: #fff;
+  border-color: #fff !important;
+}
+
+.no-css-vars .settings-layout-preview-placeholder {
+  background: #242424;
+}
+
+.no-css-vars .settings-layout-placeholder-line {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.no-css-vars .settings-layout-placeholder-panel {
+  background: #121212;
+}
+
+.no-css-vars .series-detail-shell {
+  color: #fff;
+  background: #0d0d0d;
+}
+
+.no-css-math .home-nav-label {
+  font-size: 32px;
+}
+
+.no-css-math .modern-sidebar-nav-label,
+.no-css-math .modern-sidebar-pill-label {
+  font-size: 40px;
+}
+
+.no-css-math .settings-nav-label {
+  font-size: 32px;
+}
+
+.no-css-math .library-picker-groups {
+  gap: 20px;
+  margin-bottom: 32px;
+}
+
+.no-css-math .library-picker-row {
+  gap: 24px;
+}
+
+.no-css-math .library-picker-anchor {
+  min-height: 100px;
+  padding: 18px 28px;
+  border-radius: 36px;
+  gap: 24px;
+}
+
+.no-css-math .library-grid-title {
+  font-size: 32px;
+}
+
+.no-css-math .library-picker-title {
+  font-size: 19px;
+  line-height: 24px;
+}
+
+.no-css-math .library-picker-value {
+  font-size: 30px;
+  line-height: 40px;
+}
+
+.no-css-math .library-picker-icon {
+  width: 40px;
+  height: 40px;
+}
+
+.no-css-math .library-picker-chevron {
+  width: 32px;
+  height: 32px;
+}
+
+.no-css-math .library-picker-menu {
+  max-height: 640px;
+  padding: 4px 10px;
+  border-radius: 36px;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.38);
+}
+
+.no-css-math .library-picker-option {
+  min-height: 84px;
+  padding: 0 20px;
+  border-radius: 24px;
+  font-size: 26px;
+}
+
+.no-css-math .profile-editor-panel {
+  padding: 64px;
+  border-radius: 40px;
+}
+
+.no-css-math .profile-editor-header {
+  gap: 56px;
+  padding-left: 48px;
+}
+
+.no-css-math .profile-editor-heading-title {
+  font-size: 50px;
+}
+
+.no-css-math .profile-editor-heading-stack {
+  gap: 4px;
+}
+
+.no-css-math .profile-editor-heading-kicker {
+  font-size: 32px;
+}
+
+.no-css-math .profile-editor-heading-name {
+  font-size: 60px;
+}
+
+.no-css-math .profile-editor-body {
+  margin-top: 48px;
+  min-height: 720px;
+}
+
+.no-css-math .profile-editor-preview {
+  width: 560px;
+  padding: 104px 48px 48px;
+  gap: 36px;
+}
+
+.no-css-math .profile-editor-preview-avatar {
+  width: 210px;
+  height: 210px;
+  font-size: 80px;
+}
+
+.no-css-math .profile-editor-preview-name {
+  font-size: 42px;
+}
+
+.no-css-math .profile-editor-field-shell {
+  padding: 28px;
+  border-radius: 26px;
+}
+
+.no-css-math .profile-editor-name-input {
+  font-size: 30px;
+}
+
+.no-css-math .profile-editor-divider {
+  min-height: 640px;
+  margin-top: 68px;
+  margin-left: 36px;
+  margin-right: 36px;
+}
+
+.no-css-math .profile-editor-avatar-pane {
+  gap: 24px;
+}
+
+.no-css-math .profile-editor-avatar-title {
+  font-size: 26px;
+}
+
+.no-css-math .profile-editor-category-row {
+  gap: 16px;
+  row-gap: 16px;
+  padding-bottom: 8px;
+}
+
+.no-css-math .profile-editor-avatar-grid {
+  gap: 24px;
+  max-height: 420px;
+  padding: 8px 16px;
+}
+
+.no-css-math .profile-avatar-tile {
+  width: 160px;
+  height: 160px;
+}
+
+.no-css-math .profile-avatar-tile.is-selected,
+.no-css-math .profile-avatar-tile.focused {
+  box-shadow: inset 0 0 0 6px var(--focus-color);
+}
+
+.no-css-math .profile-editor-avatar-hint {
+  min-height: 48px;
+  margin-top: 8px;
+  font-size: 34px;
+}
+
+.no-css-math .profile-overlay-button {
+  padding: 24px 56px;
+  border-radius: 24px;
+  font-size: 30px;
+}
+
+.no-css-math .profile-editor-header .profile-overlay-button {
+  padding: 18px 44px;
+  border-radius: 22px;
+  font-size: 27px;
+}
+
+.no-css-math .poster-list-picker-dialog-panel {
+  max-height: 900px;
+}
+
+.no-css-math .profile-dialog {
+  width: 500px;
+  max-width: 92vw;
+}
+
+.no-aspect-ratio .settings-layout-preview-modern-card {
+  flex-basis: var(--settings-layout-modern-card-width);
+  width: var(--settings-layout-modern-card-width);
+}
+
+.no-aspect-ratio .settings-layout-preview-classic-card {
+  flex-basis: var(--settings-layout-classic-card-width);
+  width: var(--settings-layout-classic-card-width);
+}
+
+.no-css-math .settings-layout-preview-modern-hero {
+  top: 6%;
+  left: 5%;
+  width: 90%;
+  height: 62%;
+}
+
+.no-css-math .settings-layout-preview-modern-row {
+  top: 73%;
+  left: 5%;
+  width: max-content;
+  height: 24%;
+  gap: 0;
+  animation-name: settingsLayoutModernPreviewScrollLegacy;
+}
+
+.no-css-math .settings-layout-preview-modern-card {
+  flex: 0 0 var(--settings-layout-modern-card-width);
+  width: var(--settings-layout-modern-card-width);
+  height: 100%;
+  margin-right: var(--settings-layout-modern-gap);
+}
+
+.no-css-math .settings-layout-preview-grid-canvas {
+  display: grid;
+  top: var(--settings-layout-grid-gap);
+  left: var(--settings-layout-grid-gap);
+  width: calc(100% - (var(--settings-layout-grid-gap) * 2));
+  height: var(--settings-layout-grid-canvas-height);
+  grid-template-columns: repeat(5, var(--settings-layout-grid-card-width));
+  grid-auto-rows: var(--settings-layout-grid-card-height);
+  justify-content: space-between;
+  align-content: flex-start;
+  gap: 0;
+  row-gap: var(--settings-layout-grid-gap);
+  column-gap: var(--settings-layout-grid-gap);
+  animation-name: settingsLayoutGridPreviewScrollLegacy;
+}
+
+.no-css-math .settings-layout-preview-grid-cell {
+  width: 100%;
+  height: var(--settings-layout-grid-card-height);
+}
+
+.no-css-math .settings-layout-preview-classic-row {
+  left: 4.5%;
+  width: max-content;
+  gap: 0;
+}
+
+.no-css-math .settings-layout-preview-classic-row.is-featured {
+  animation-name: settingsLayoutClassicPreviewScrollLegacy;
+}
+
+.no-css-math .settings-layout-preview-classic-card {
+  flex: 0 0 var(--settings-layout-classic-card-width);
+  width: var(--settings-layout-classic-card-width);
+  height: 85%;
+  margin-right: var(--settings-layout-classic-gap);
+}
+
+.no-css-grid .settings-layout-preview-grid-canvas {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  justify-content: space-between;
+  gap: 0;
+  row-gap: 12px;
+  column-gap: 0;
+  height: var(--settings-layout-grid-canvas-height);
+}
+
+.no-css-grid .settings-layout-preview-grid-cell {
+  flex: 0 0 var(--settings-layout-grid-card-width);
+  width: var(--settings-layout-grid-card-width);
+  height: var(--settings-layout-grid-card-height);
+  margin-bottom: var(--settings-layout-grid-gap);
+  margin-right: 0;
+}
+
+.no-css-math.no-css-grid .settings-layout-preview-grid-cell {
+  flex: 0 0 var(--settings-layout-grid-card-width);
+  width: var(--settings-layout-grid-card-width);
+}
+
+.no-css-math .settings-layout-preview {
+  background-color: #0d0d0d;
+}
+
+.no-css-math .settings-layout-preview-modern,
+.no-css-math .settings-layout-preview-grid,
+.no-css-math .settings-layout-preview-classic {
+  overflow: hidden;
+}
+
+.no-css-grid .profile-editor-avatar-grid {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+}
+
+.no-css-grid .profile-avatar-tile {
+  flex: 0 0 160px;
+  width: 160px;
+  height: 160px;
+  margin: 0 24px 24px 0;
+}
+
+.no-css-grid .profile-avatar-tile:nth-child(4n) {
+  margin-right: 0;
+}
+
+/* Chromium 68 and older ignore flex gap. Keep these source-level fallbacks
+   scoped to legacy feature classes so modern Chromium keeps the authored UI. */
+.no-flex-gap .profile-grid > * {
+  margin-right: 56px;
+  margin-bottom: 56px;
+}
+
+.no-flex-gap .home-nav-list > * + * {
+  margin-top: var(--legacy-sidebar-item-gap);
+}
+
+.no-flex-gap .home-sidebar.content-expanded .home-nav-item > * + * {
+  margin-left: 16px;
+}
+
+.no-flex-gap .home-profile-pill > * + * {
+  margin-left: 10px;
+}
+
+.no-flex-gap .modern-sidebar-nav-list > * + * {
+  margin-top: var(--modern-sidebar-list-gap);
+}
+
+.no-flex-gap .modern-sidebar-profile > * + * {
+  margin-left: 36px;
+}
+
+.no-flex-gap .modern-sidebar-nav-item > * + * {
+  margin-left: var(--modern-sidebar-button-gap);
+}
+
+.no-flex-gap .modern-sidebar-pill > * + * {
+  margin-left: 1px;
+}
+
+.no-flex-gap .modern-sidebar-pill-chip > * + * {
+  margin-left: var(--modern-sidebar-pill-chip-gap);
+}
+
+.no-css-vars.no-flex-gap .home-nav-list > * + * {
+  margin-top: 20px;
+}
+
+.no-css-vars.no-flex-gap .modern-sidebar-nav-list > * + * {
+  margin-top: 12px;
+}
+
+.no-css-vars.no-flex-gap .modern-sidebar-nav-item > * + * {
+  margin-left: 28px;
+}
+
+.no-flex-gap .search-sidebar > * + *,
+.no-flex-gap .settings-sidebar > * + * {
+  margin-top: 28px;
+}
+
+.no-flex-gap .search-sidebar > * + * {
+  margin-top: 16px;
+}
+
+.no-flex-gap .library-actions-row > * + *,
+.no-flex-gap .library-picker-row > .library-picker + .library-picker {
+  margin-left: 24px;
+}
+
+.no-flex-gap .search-results-track > * + * {
+  margin-left: 16px;
+}
+
+.no-flex-gap .settings-theme-row > * + * {
+  margin-left: 20px;
+}
+
+.no-flex-gap .search-seeall-inner > * + * {
+  margin-top: 14px;
+}
+
+.no-flex-gap .discover-content > * + *,
+.no-flex-gap .settings-account-list > * + *,
+.no-flex-gap .settings-trakt-header-row + *,
+.no-flex-gap .settings-trakt-footer-row + * {
+  margin-top: 12px;
+}
+
+.no-flex-gap .discover-hero > * + *,
+.no-flex-gap .settings-action-row > * + *,
+.no-flex-gap .settings-collapsible-trigger > * + *,
+.no-flex-gap .settings-subsection-card .settings-action-row > * + * {
+  margin-left: 24px;
+}
+
+.no-flex-gap .discover-hero-copy > * + *,
+.no-flex-gap .discover-loading-state > * + *,
+.no-flex-gap .discover-empty-state > * + *,
+.no-flex-gap .settings-collapsible > * + *,
+.no-flex-gap .settings-trakt-scroll-area > * + *,
+.no-flex-gap .settings-trakt-options-stack > * + *,
+.no-flex-gap .settings-stream-badge-preview-section > * + * {
+  margin-top: 8px;
+}
+
+.no-flex-gap .discover-meta-line > *,
+.no-flex-gap .settings-profile-summary > * {
+  margin-right: 8px;
+  margin-bottom: 8px;
+}
+
+.no-flex-gap .settings-profile-summary > * {
+  margin-right: 12px;
+  margin-bottom: 12px;
+}
+
+.no-flex-gap .discover-results-head > * + *,
+.no-flex-gap .settings-account-signout-button > * + *,
+.no-flex-gap .settings-row-tail > * + *,
+.no-flex-gap .settings-collapsible-trigger .settings-row-tail > * + *,
+.no-flex-gap .settings-subsection-card .settings-row-tail > * + *,
+.no-flex-gap .settings-plugin-repo-card > * + * {
+  margin-left: 20px;
+}
+
+.no-flex-gap .library-picker-groups > .library-picker-row + .library-picker-row,
+.no-flex-gap .settings-stack > * + *,
+.no-flex-gap .settings-subsection-card .settings-stack > * + *,
+.no-flex-gap .settings-appearance-group-card > * + * {
+  margin-top: 20px;
+}
+
+.no-flex-gap .library-picker-anchor > .library-picker-icon,
+.no-flex-gap .settings-account-action-button > * + * {
+  margin-left: 24px;
+}
+
+.no-flex-gap .library-picker-copy > * + *,
+.no-flex-gap .settings-row-copy > * + *,
+.no-flex-gap .settings-collapsible-trigger .settings-row-copy > * + *,
+.no-flex-gap .settings-subsection-card .settings-row-copy > * + * {
+  margin-top: 4px;
+}
+
+.no-flex-gap .library-dialog-field > * + *,
+.no-flex-gap .settings-account-status-card > * + *,
+.no-flex-gap .settings-language-option-meta > * + * {
+  margin-top: 16px;
+}
+
+.no-flex-gap .settings-account-status-card > * + *,
+.no-flex-gap .settings-language-option-meta > * + * {
+  margin-top: 0;
+}
+
+.no-flex-gap .settings-account-status-card > * + * {
+  margin-left: 16px;
+}
+
+.no-flex-gap .settings-language-option-meta > * + * {
+  margin-left: 12px;
+}
+
+.no-flex-gap .library-grid-card > * + * {
+  margin-top: 16px;
+}
+
+.no-flex-gap .settings-layout-card > * + *,
+.no-flex-gap .settings-dialog-list > * + * {
+  margin-top: 12px;
+}
+
+.no-flex-gap .library-empty-state > * + * {
+  margin-top: 18px;
+}
+
+.no-flex-gap .library-loading-state > * + *,
+.no-flex-gap .library-manage-stack > * + *,
+.no-flex-gap .library-dialog-title + *,
+.no-flex-gap .settings-dialog > * + * {
+  margin-top: 28px;
+}
+
+.no-flex-gap .library-delete-dialog > * + * {
+  margin-top: 32px;
+}
+
+.no-flex-gap .library-manage-list > * + *,
+.no-flex-gap .library-manage-actions-row > * + *,
+.no-flex-gap .library-dialog-actions > * + *,
+.no-flex-gap .library-privacy-row > * + * {
+  margin-left: 20px;
+}
+
+.no-flex-gap .library-manage-list > * + *,
+.no-flex-gap .library-dialog-actions.stacked > * + *,
+.no-flex-gap .library-dialog-field > * + *,
+.no-flex-gap .settings-content > * + * {
+  margin-left: 0;
+  margin-top: 20px;
+}
+
+.no-flex-gap .settings-plugin-repo-list > * + * {
+  margin-top: 14px;
+}
+
+.no-flex-gap .settings-content > * + * {
+  margin-top: 24px;
+}
+
+.no-flex-gap .settings-content-header > * + * {
+  margin-top: 12px;
+}
+
+.no-flex-gap .settings-group-heading > * + *,
+.no-flex-gap .settings-plugin-repo-copy > * + * {
+  margin-top: 6px;
+}
+
+.no-flex-gap .settings-nav-leading > * + *,
+.no-flex-gap .settings-nav-label-wrap > * + * {
+  margin-left: 20px;
+}
+
+.no-flex-gap .settings-nav-label-wrap > * + * {
+  margin-left: 12px;
+}
+
+.no-flex-gap .settings-account-button-copy > * + *,
+.no-flex-gap .settings-account-stat > * + *,
+.no-flex-gap .settings-trakt-stat > * + * {
+  margin-top: 2px;
+}
+
+.no-flex-gap .settings-account-sync-overview > * + * {
+  margin-top: 12px;
+}
+
+.no-flex-gap .settings-theme-card > * + * {
+  margin-top: 16px;
+}
+
+.no-flex-gap .settings-layout-preview-placeholder > * + * {
+  margin-top: 16px;
+}
+
+.no-flex-gap .settings-layout-placeholder-bars > * + * {
+  margin-left: 12px;
+}
+
+.no-flex-gap .profile-editor-header > * + * {
+  margin-left: 56px;
+}
+
+.no-flex-gap .profile-editor-heading-stack > * + * {
+  margin-top: 4px;
+}
+
+.no-flex-gap .profile-editor-preview > * + * {
+  margin-top: 36px;
+}
+
+.no-flex-gap .profile-editor-avatar-pane > * + * {
+  margin-top: 24px;
+}
+
+.no-flex-gap .profile-editor-category-row > * {
+  margin-right: 16px;
+  margin-bottom: 16px;
+}
+
+.no-flex-gap .nuvio-dialog-panel > * + *,
+.no-flex-gap .nuvio-dialog-actions > * + * {
+  margin-top: 32px;
+}
+
+.no-flex-gap .poster-list-picker-actions > * + * {
+  margin-top: 20px;
+}
+
+.no-flex-gap .nuvio-dialog-button.poster-list-picker-list-button > * + * {
+  margin-left: 14px;
+}
+
+.no-flex-gap .settings-profile-pill > * + *,
+.no-flex-gap .settings-plugin-repo-actions > * + * {
+  margin-left: 10px;
+}
+
+@media (max-height: 820px), (max-width: 1280px) {
+  .no-flex-gap .profile-grid > * {
+    margin-right: 44px;
+    margin-bottom: 44px;
+  }
+}
+
+@keyframes settingsLayoutModernPreviewScrollLegacy {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(calc(0px - var(--settings-layout-modern-cycle-width)));
+  }
+}
+
+@keyframes settingsLayoutGridPreviewScrollLegacy {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(calc(0px - var(--settings-layout-grid-cycle-height)));
+  }
+}
+
+@keyframes settingsLayoutClassicPreviewScrollLegacy {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(calc(0px - var(--settings-layout-classic-cycle-width)));
+  }
+}
+
+.no-flex-gap .settings-plugin-builder > * + *,
+.no-flex-gap .settings-plugin-provider-heading {
+  margin-top: 18px;
+}
+
+.no-flex-gap .settings-plugin-add > * + * {
+  margin-left: 14px;
+}
+
+.no-flex-gap .settings-dialog > * + * {
+  margin-top: 32px;
+}
+
+.no-css-grid .search-header {
+  display: flex;
+  align-items: center;
+}
+
+.no-css-grid .search-header > * + * {
+  margin-left: 24px;
+}
+
+.no-css-grid .search-input-field {
+  flex: 1 1 auto;
+}
+
+.no-css-grid .discover-filters,
+.no-css-grid .settings-plugin-builder-row,
+.no-css-grid .settings-text-dialog-actions {
+  display: flex;
+}
+
+.no-css-grid .discover-filters > *,
+.no-css-grid .settings-text-dialog-actions > * {
+  flex: 1 1 0;
+}
+
+.no-css-grid .discover-filters > * + *,
+.no-css-grid .settings-text-dialog-actions > * + * {
+  margin-left: 16px;
+}
+
+.no-css-grid .settings-plugin-input {
+  flex: 1 1 auto;
+}
+
+.no-css-grid .settings-plugin-add {
+  flex: 0 0 180px;
+}
+
+.no-css-grid .settings-plugin-builder-row > * + * {
+  margin-left: 18px;
 }
 
 @supports not (font-size: clamp(1px, 2px, 3px)) {

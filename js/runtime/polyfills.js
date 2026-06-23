@@ -528,3 +528,41 @@ function installElementScrollToPolyfill(target) {
 
 installElementScrollToPolyfill(globalThis.Element && globalThis.Element.prototype);
 installElementScrollToPolyfill(globalThis.HTMLElement && globalThis.HTMLElement.prototype);
+
+if (globalThis.Element && !Element.prototype.remove) {
+  Object.defineProperty(Element.prototype, "remove", {
+    value: function removePolyfill() {
+      if (this.parentNode) {
+        this.parentNode.removeChild(this);
+      }
+    },
+    configurable: true,
+    writable: true
+  });
+}
+
+if (globalThis.Node && !("isConnected" in Node.prototype)) {
+  Object.defineProperty(Node.prototype, "isConnected", {
+    get: function isConnectedPolyfill() {
+      var root = globalThis.document && globalThis.document.documentElement;
+      return Boolean(root && root.contains(this));
+    },
+    configurable: true
+  });
+}
+
+if (globalThis.Element && Element.prototype.scrollIntoView) {
+  (function installScrollIntoViewOptionsFallback() {
+    var nativeScrollIntoView = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function scrollIntoViewPolyfill(arg) {
+      try {
+        return nativeScrollIntoView.call(this, arg);
+      } catch (error) {
+        if (arg && typeof arg === "object") {
+          return nativeScrollIntoView.call(this, false);
+        }
+        throw error;
+      }
+    };
+  })();
+}

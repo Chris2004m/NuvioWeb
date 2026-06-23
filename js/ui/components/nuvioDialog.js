@@ -75,6 +75,14 @@ export class NuvioDialog {
     this._keyUpHandler = this._onKeyUp.bind(this);
   }
 
+  _scheduleFrame(callback) {
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(callback);
+      return;
+    }
+    setTimeout(callback, 0);
+  }
+
   _eventKey(e) {
     const key = String(e?.key || "");
     const keyName = String(e?.keyName || e?.detail?.keyName || "");
@@ -172,10 +180,10 @@ export class NuvioDialog {
     window.addEventListener("keyup", this._keyUpHandler, { capture: true });
 
     // Focus first button after 2 frames (matches ATV LaunchedEffect repeat(2) { withFrameNanos })
-    requestAnimationFrame(() => requestAnimationFrame(() => this._focusIndex(0)));
+    this._scheduleFrame(() => this._scheduleFrame(() => this._focusIndex(0)));
 
     // Trigger enter animation
-    requestAnimationFrame(() => {
+    this._scheduleFrame(() => {
       backdrop.classList.add("nuvio-dialog-backdrop-enter");
       panel.classList.add("nuvio-dialog-panel-enter");
     });
@@ -202,11 +210,25 @@ export class NuvioDialog {
 
   _setButtonSelected(el, selected) {
     el.classList.toggle("selected", selected);
-    const existing = el.querySelector(":scope > .nuvio-dialog-button-check");
+    let existing = null;
+    for (let index = 0; index < el.children.length; index += 1) {
+      const child = el.children[index];
+      if (child && child.classList && child.classList.contains("nuvio-dialog-button-check")) {
+        existing = child;
+        break;
+      }
+    }
     if (selected && !existing) {
-      el.prepend(this._createCheckElement());
+      const check = this._createCheckElement();
+      if (el.firstChild) {
+        el.insertBefore(check, el.firstChild);
+      } else {
+        el.appendChild(check);
+      }
     } else if (!selected && existing) {
-      existing.remove();
+      if (existing.parentNode) {
+        existing.parentNode.removeChild(existing);
+      }
     }
   }
 

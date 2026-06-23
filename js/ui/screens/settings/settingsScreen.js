@@ -629,7 +629,7 @@ function renderLayoutPreviewMarkup(layoutId) {
       <span class="settings-layout-preview-modern-stage">
         <span class="settings-layout-preview-modern-hero"></span>
         <span class="settings-layout-preview-modern-row">
-          ${Array.from({ length: 9 }, (_, index) => `<span class="settings-layout-preview-modern-card${index % 3 === 1 ? " is-strong" : ""}"></span>`).join("")}
+          ${Array.from({ length: 12 }, (_, index) => `<span class="settings-layout-preview-modern-card${index % 3 === 1 ? " is-strong" : ""}"></span>`).join("")}
         </span>
       </span>
     `;
@@ -661,6 +661,91 @@ function renderLayoutPreviewMarkup(layoutId) {
       </span>
     </span>
   `;
+}
+
+function renderLayoutPreviewPlaceholderMarkup() {
+  return `
+    <span class="settings-layout-preview-placeholder" aria-hidden="true">
+      <span class="settings-layout-placeholder-line is-short"></span>
+      <span class="settings-layout-placeholder-panel"></span>
+      <span class="settings-layout-placeholder-bars">
+        <span class="settings-layout-placeholder-line"></span>
+        <span class="settings-layout-placeholder-line"></span>
+        <span class="settings-layout-placeholder-line"></span>
+      </span>
+    </span>
+  `;
+}
+
+function setLayoutPreviewMetric(node, name, value) {
+  if (!node?.style || !Number.isFinite(value)) return;
+  node.style.setProperty(name, `${Math.round(value * 100) / 100}px`);
+}
+
+function syncLayoutPreviewMetrics(root) {
+  const previews = Array.from(root?.querySelectorAll?.(".settings-layout-preview") || []);
+  previews.forEach((preview) => {
+    const card = preview.closest?.(".settings-layout-card");
+    const cardRect = card?.getBoundingClientRect?.();
+    if (!card || !cardRect) return;
+
+    const cardStyle = getComputedStyle(card);
+    const previewStyle = getComputedStyle(preview);
+    const paddingX =
+      (parseFloat(cardStyle.paddingLeft) || 0) + (parseFloat(cardStyle.paddingRight) || 0);
+    const borderX =
+      (parseFloat(cardStyle.borderLeftWidth) || 0) + (parseFloat(cardStyle.borderRightWidth) || 0);
+    const previewRect = preview.getBoundingClientRect?.();
+    const width = Math.max(
+      0,
+      previewRect?.width || cardRect.width - paddingX - borderX
+    );
+    const height = Math.max(0, parseFloat(previewStyle.height) || previewRect?.height || 224);
+    if (!width || !height) return;
+
+    if (preview.classList.contains("settings-layout-preview-modern")) {
+      const cardHeight = height * 0.24;
+      const cardWidth = cardHeight * 1.45;
+      const gap = width * 0.03;
+      setLayoutPreviewMetric(preview, "--settings-layout-modern-card-width", cardWidth);
+      setLayoutPreviewMetric(preview, "--settings-layout-modern-gap", gap);
+      setLayoutPreviewMetric(preview, "--settings-layout-modern-cycle-width", (cardWidth + gap) * 3);
+      return;
+    }
+
+    if (preview.classList.contains("settings-layout-preview-grid")) {
+      const gap = width * 0.025;
+      const cardWidth = (width - gap * 6) / 5;
+      const cardHeight = cardWidth * 1.4;
+      setLayoutPreviewMetric(preview, "--settings-layout-grid-gap", gap);
+      setLayoutPreviewMetric(preview, "--settings-layout-grid-card-width", cardWidth);
+      setLayoutPreviewMetric(preview, "--settings-layout-grid-card-height", cardHeight);
+      setLayoutPreviewMetric(preview, "--settings-layout-grid-canvas-height", cardHeight * 7 + gap * 6);
+      setLayoutPreviewMetric(preview, "--settings-layout-grid-cycle-height", (cardHeight + gap) * 3);
+      return;
+    }
+
+    if (preview.classList.contains("settings-layout-preview-classic")) {
+      const rowSpacing = height * 0.04;
+      const rowHeight = (height - rowSpacing * 4) / 3;
+      const cardWidth = width / 5.5;
+      const gap = width / 40;
+      setLayoutPreviewMetric(preview, "--settings-layout-classic-row-spacing", rowSpacing);
+      setLayoutPreviewMetric(preview, "--settings-layout-classic-row-height", rowHeight);
+      setLayoutPreviewMetric(preview, "--settings-layout-classic-card-width", cardWidth);
+      setLayoutPreviewMetric(preview, "--settings-layout-classic-gap", gap);
+      setLayoutPreviewMetric(preview, "--settings-layout-classic-cycle-width", (cardWidth + gap) * 2);
+    }
+  });
+}
+
+function syncLayoutPreviewMetricsSoon(root) {
+  if (!root) return;
+  if (typeof requestAnimationFrame === "function") {
+    requestAnimationFrame(() => syncLayoutPreviewMetrics(root));
+    return;
+  }
+  syncLayoutPreviewMetrics(root);
 }
 
 function iconSvg(path, className = "settings-inline-icon", viewBox = "0 0 24 24") {
@@ -1940,6 +2025,7 @@ export const SettingsScreen = {
               data-zone="content"
               ${this.registerAction(focusKey, this.actionMap.get(focusKey))}>
         <span class="settings-layout-badge">${escapeHtml(t("common.beta", {}, "Beta"))}</span>
+        ${renderLayoutPreviewPlaceholderMarkup()}
         <span class="settings-layout-preview settings-layout-preview-${escapeHtml(option.id)}">${renderLayoutPreviewMarkup(option.id)}</span>
         <span class="settings-layout-name">${escapeHtml(translateOptionLabel(option))}</span>
       </button>
@@ -4992,6 +5078,7 @@ export const SettingsScreen = {
     bindSettingsScrollIndicators(this.container);
     this.settingsRouteEnterPending = false;
     this.applyFocus();
+    syncLayoutPreviewMetricsSoon(this.container);
     updateSettingsRailIndicatorsSoon(navSlot);
     updateSettingsScrollIndicatorsSoon(contentSlot);
   },

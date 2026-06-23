@@ -1,3 +1,5 @@
+import "core-js/stable/url";
+import "core-js/stable/url-search-params";
 import "./runtime/polyfills.js";
 import "intersection-observer";
 import "whatwg-fetch";
@@ -101,23 +103,73 @@ function supportsAspectRatio() {
   return css.supports("aspect-ratio", "1 / 1");
 }
 
+function supportsCssGrid() {
+  const css = globalThis.CSS;
+  if (!css || typeof css.supports !== "function") {
+    return false;
+  }
+  return css.supports("display", "grid");
+}
+
+function supportsCssVars() {
+  const css = globalThis.CSS;
+  if (!css || typeof css.supports !== "function") {
+    return false;
+  }
+  return css.supports("--nuvio-probe", "0");
+}
+
+function supportsCssMath() {
+  const css = globalThis.CSS;
+  if (!css || typeof css.supports !== "function") {
+    return false;
+  }
+  return css.supports("font-size", "clamp(1px, 2px, 3px)");
+}
+
+function supportsBackdropFilter() {
+  const css = globalThis.CSS;
+  if (!css || typeof css.supports !== "function") {
+    return false;
+  }
+  return (
+    css.supports("backdrop-filter", "blur(1px)") ||
+    css.supports("-webkit-backdrop-filter", "blur(1px)")
+  );
+}
+
 function applyPerformanceMode() {
   const constrained = Platform.isWebOS() || Platform.isTizen() || isLowEndDevice();
   const webOsMajorVersion = Platform.isWebOS() ? Number(Platform.getWebOsMajorVersion() || 0) : 0;
   const legacyWebOs = webOsMajorVersion > 0 && webOsMajorVersion <= 6;
+  const legacyWebOs38 = webOsMajorVersion > 0 && webOsMajorVersion <= 3;
   const legacyTizen = Platform.isTizen();
   const flexGapUnsupported = !supportsFlexGap();
   const aspectRatioUnsupported = !supportsAspectRatio();
+  const cssGridUnsupported = !supportsCssGrid();
+  const cssVarsUnsupported = !supportsCssVars();
+  const cssMathUnsupported = !supportsCssMath();
+  const backdropFilterUnsupported = !supportsBackdropFilter();
   document.documentElement.classList.toggle("performance-constrained", constrained);
   document.body.classList.toggle("performance-constrained", constrained);
   document.documentElement.classList.toggle("legacy-webos", legacyWebOs);
   document.body.classList.toggle("legacy-webos", legacyWebOs);
+  document.documentElement.classList.toggle("legacy-webos38", legacyWebOs38);
+  document.body.classList.toggle("legacy-webos38", legacyWebOs38);
   document.documentElement.classList.toggle("legacy-tizen", legacyTizen);
   document.body.classList.toggle("legacy-tizen", legacyTizen);
   document.documentElement.classList.toggle("no-flex-gap", flexGapUnsupported);
   document.body.classList.toggle("no-flex-gap", flexGapUnsupported);
   document.documentElement.classList.toggle("no-aspect-ratio", aspectRatioUnsupported);
   document.body.classList.toggle("no-aspect-ratio", aspectRatioUnsupported);
+  document.documentElement.classList.toggle("no-css-grid", cssGridUnsupported);
+  document.body.classList.toggle("no-css-grid", cssGridUnsupported);
+  document.documentElement.classList.toggle("no-css-vars", cssVarsUnsupported);
+  document.body.classList.toggle("no-css-vars", cssVarsUnsupported);
+  document.documentElement.classList.toggle("no-css-math", cssMathUnsupported);
+  document.body.classList.toggle("no-css-math", cssMathUnsupported);
+  document.documentElement.classList.toggle("no-backdrop-filter", backdropFilterUnsupported);
+  document.body.classList.toggle("no-backdrop-filter", backdropFilterUnsupported);
 }
 
 function isAddonRemoteMode() {
