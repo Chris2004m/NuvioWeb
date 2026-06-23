@@ -2145,7 +2145,7 @@ export const HomeScreen = {
   },
 
   captureRouteState() {
-    return this.captureCurrentFocusState();
+    return this.captureCurrentContentFocusState() || this.captureCurrentFocusState();
   },
 
   captureCurrentFocusState() {
@@ -2210,6 +2210,17 @@ export const HomeScreen = {
       focusKind,
       trackStates
     };
+  },
+
+  captureCurrentContentFocusState() {
+    const focused =
+      this.container?.querySelector(".home-main .focusable.focused") ||
+      this.lastMainFocus ||
+      null;
+    if (!focused || !focused.isConnected || !this.isMainNode(focused)) {
+      return null;
+    }
+    return this.captureFocusStateForNode(focused);
   },
 
   persistCurrentFocusState() {
@@ -7060,13 +7071,13 @@ export const HomeScreen = {
     const backFocusState = this.isRestoringFocusFromBack
       ? (this.pendingBackFocusState || this.readStoredReturnFocusState() || null)
       : null;
+    const liveFocusState = this.captureCurrentFocusState();
+    const savedFocusState = this.savedFocusStates?.[this.layoutMode] || null;
     const rawRetainedFocusState = backFocusState
-      || this.captureCurrentFocusState()
-      || this.savedFocusStates?.[this.layoutMode]
+      || (!this.isRestoringFocusFromBack && liveFocusState?.focusKind === "sidebar" ? null : liveFocusState)
+      || (!this.isRestoringFocusFromBack && savedFocusState?.focusKind === "sidebar" ? null : savedFocusState)
       || null;
-    const retainedFocusState = !this.isRestoringFocusFromBack && rawRetainedFocusState?.focusKind === "sidebar"
-      ? null
-      : rawRetainedFocusState;
+    const retainedFocusState = rawRetainedFocusState;
     this.cancelFocusedPosterFlow();
     this.expandedPosterNode = null;
     const backFocusHero = backFocusState ? this.getHeroSourceFromFocusState(backFocusState) : null;
