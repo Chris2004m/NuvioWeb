@@ -19684,9 +19684,14 @@ html.no-css-grid .cast-detail-meta {
 
 .series-season-btn {
   min-height: 80px;
+  height: auto;
+  flex: 0 0 auto;
+  width: auto;
+  max-width: none;
   padding: 20px 40px;
   border-radius: 40px;
   font-size: 32px;
+  box-sizing: border-box;
 }
 
 .series-episode-track {
