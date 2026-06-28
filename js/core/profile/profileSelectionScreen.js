@@ -18,6 +18,7 @@ const PROFILE_HOLD_DELAY_MS = 650;
 const PROFILE_PIN_LENGTH = 4;
 const PROFILE_PIN_OPEN_MS = 320;
 const PROFILE_PIN_CLOSE_MS = 240;
+const PROFILE_BACKGROUND_ANIMATION_MS = 520;
 const PROFILE_PIN_TEXT = {
   set: "Set PIN",
   change: "Change PIN",
@@ -199,6 +200,34 @@ function colorToRgba(color, alpha = 1) {
   return `rgba(${clampChannel(color.r)}, ${clampChannel(color.g)}, ${clampChannel(color.b)}, ${normalizedAlpha})`;
 }
 
+function colorsEqual(left, right) {
+  return (
+    Boolean(left) &&
+    Boolean(right) &&
+    clampChannel(left.r) === clampChannel(right.r) &&
+    clampChannel(left.g) === clampChannel(right.g) &&
+    clampChannel(left.b) === clampChannel(right.b)
+  );
+}
+
+// ATV tween() default easing is FastOutSlowIn = cubic-bezier(0.4, 0.0, 0.2, 1.0).
+function fastOutSlowIn(t) {
+  const cx = 1.2;
+  const bx = -0.6;
+  const ax = 0.4;
+  const cy = 0;
+  const by = 3;
+  const ay = -2;
+  let s = t;
+  for (let i = 0; i < 6; i += 1) {
+    const x = ((ax * s + bx) * s + cx) * s - t;
+    const dx = (3 * ax * s + 2 * bx) * s + cx;
+    if (Math.abs(dx) < 1e-6) break;
+    s -= x / dx;
+  }
+  return ((ay * s + by) * s + cy) * s;
+}
+
 function categoryLabel(category) {
   switch (String(category || "").toLowerCase()) {
     case "all":
@@ -305,6 +334,7 @@ export const ProfileSelectionScreen = {
     this.isManagementMode = this.screenMode === "management";
     this.activeProfileId = String(ProfileManager.getActiveProfileId() || "1");
     this.focusKey = "";
+    this.focusedNode = null;
     this.pendingFocusKey = "";
     this.lastProfileFocusKey = "profile:1";
     this.optionsProfileId = null;
@@ -331,6 +361,9 @@ export const ProfileSelectionScreen = {
     this.suppressHoldMenuEnterUntilKeyUp = false;
     this.isActivatingProfile = false;
     this.activatingProfileId = "";
+    this._bgScreen = null;
+    this._bgThemeColors = null;
+    this._bgTargetColor = null;
 
     await ProfileSyncService.pull();
     this.profiles = await ProfileManager.getProfiles();
@@ -825,16 +858,22 @@ export const ProfileSelectionScreen = {
   },
 
   handleFocusableFocus(node) {
-    Array.from(
-      this.container.querySelectorAll(
-        ".profile-focusable.focused, .profile-overlay-focusable.focused, .profile-pin-overlay.focused, .profile-pin-key.focused"
-      )
-    ).forEach((entry) => {
-      if (entry !== node) {
-        entry.classList.remove("focused");
-      }
-    });
+    const previousFocused = this.focusedNode;
+    if (previousFocused && previousFocused !== node && previousFocused.isConnected) {
+      previousFocused.classList.remove("focused");
+    } else if (!previousFocused || previousFocused !== node) {
+      Array.from(
+        this.container.querySelectorAll(
+          ".profile-focusable.focused, .profile-overlay-focusable.focused, .profile-pin-overlay.focused, .profile-pin-key.focused"
+        )
+      ).forEach((entry) => {
+        if (entry !== node) {
+          entry.classList.remove("focused");
+        }
+      });
+    }
     node.classList.add("focused");
+    this.focusedNode = node;
     this.focusKey = String(node.dataset.focusKey || "");
 
     const profileId = node.dataset.profileId;
@@ -1129,57 +1168,98 @@ export const ProfileSelectionScreen = {
     return true;
   },
 
+  moveProfileFocus(event) {
+    const code = Number(event?.keyCode || 0);
+    const direction =
+      code === 37
+        ? "left"
+        : code === 39
+          ? "right"
+          : code === 38
+            ? "up"
+            : code === 40
+              ? "down"
+              : null;
+    if (!direction) {
+      return false;
+    }
+    if (direction === "up" || direction === "down") {
+      return false;
+    }
+
+    const cards = Array.from(this.container?.querySelectorAll(".profile-card") || []);
+    if (!cards.length) {
+      return false;
+    }
+
+    const current =
+      this.container?.querySelector(".profile-card.focused") ||
+      (document.activeElement?.matches?.(".profile-card") ? document.activeElement : null) ||
+      cards[0];
+    const currentIndex = cards.indexOf(current);
+    if (currentIndex === -1) {
+      return false;
+    }
+
+    const nextIndex = direction === "left" ? currentIndex - 1 : currentIndex + 1;
+    if (nextIndex < 0 || nextIndex >= cards.length) {
+      event?.preventDefault?.();
+      return true;
+    }
+
+    event?.preventDefault?.();
+    try {
+      cards[nextIndex].focus({ preventScroll: true });
+    } catch (_) {
+      cards[nextIndex].focus();
+    }
+    return true;
+  },
+
   updateBackground(colorHex) {
     const screen = this.container?.querySelector(".profile-screen");
     if (!screen) return;
 
+    const screenChanged = this._bgScreen !== screen;
+    this._bgScreen = screen;
     const targetColor = parseHexColor(colorHex, parseHexColor(getDefaultProfileColor()));
+    if (!screenChanged && colorsEqual(this._bgTargetColor, targetColor)) {
+      return;
+    }
+    if (!this._bgAnimRaf && colorsEqual(this._bgCurrentColor, targetColor)) {
+      this._bgTargetColor = targetColor;
+      if (screenChanged) {
+        screen.style.background = this.buildBackgroundStyleFromColor(
+          targetColor,
+          this.getBackgroundThemeColors()
+        );
+      }
+      return;
+    }
+    this._bgTargetColor = targetColor;
+    const themeColors = this.getBackgroundThemeColors();
 
-    // Cancel any in-progress animation
     if (this._bgAnimRaf) {
       cancelAnimationFrame(this._bgAnimRaf);
       this._bgAnimRaf = null;
     }
 
-    // Start from whatever color is currently displayed
     const fromColor = this._bgCurrentColor || targetColor;
     this._bgCurrentColor = fromColor;
 
-    const DURATION = 520; // matches ATV animateColorAsState tween(520)
-    // ATV tween() default easing is FastOutSlowIn = cubic-bezier(0.4, 0.0, 0.2, 1.0)
-    const fastOutSlowIn = (t) => {
-      // cubic-bezier(0.4, 0, 0.2, 1) approximated via the standard formula
-      // Using a closed-form cubic bezier evaluator
-      const cx = 3 * 0.4,
-        bx = 3 * (0.2 - 0.4) - 0,
-        ax = 1 - cx - bx;
-      const cy = 3 * 0.0,
-        by = 3 * (1.0 - 0.0) - 0,
-        ay = 1 - cy - by;
-      // Solve for x(t)=input using Newton-Raphson
-      let s = t;
-      for (let i = 0; i < 6; i++) {
-        const x = ((ax * s + bx) * s + cx) * s - t;
-        const dx = (3 * ax * s + 2 * bx) * s + cx;
-        if (Math.abs(dx) < 1e-6) break;
-        s -= x / dx;
-      }
-      return ((ay * s + by) * s + cy) * s;
-    };
     const startTime = performance.now();
 
     const tick = (now) => {
       const elapsed = now - startTime;
-      const t = Math.min(elapsed / DURATION, 1);
+      const t = Math.min(elapsed / PROFILE_BACKGROUND_ANIMATION_MS, 1);
       const eased = fastOutSlowIn(t);
-      // Linear interpolation (ATV uses linear tween for color)
       const animatedColor = {
         r: Math.round(fromColor.r + (targetColor.r - fromColor.r) * eased),
         g: Math.round(fromColor.g + (targetColor.g - fromColor.g) * eased),
         b: Math.round(fromColor.b + (targetColor.b - fromColor.b) * eased)
       };
       this._bgCurrentColor = animatedColor;
-      screen.style.background = this.buildBackgroundStyleFromColor(animatedColor);
+      screen.style.background = this.buildBackgroundStyleFromColor(animatedColor, themeColors);
       if (t < 1) {
         this._bgAnimRaf = requestAnimationFrame(tick);
       } else {
@@ -1192,21 +1272,31 @@ export const ProfileSelectionScreen = {
 
   buildBackgroundStyle(colorHex) {
     const accent = parseHexColor(colorHex, parseHexColor(getDefaultProfileColor()));
-    return this.buildBackgroundStyleFromColor(accent);
+    return this.buildBackgroundStyleFromColor(accent, this.getBackgroundThemeColors());
   },
 
-  buildBackgroundStyleFromColor(accent) {
+  getBackgroundThemeColors() {
+    if (this._bgThemeColors) {
+      return this._bgThemeColors;
+    }
     const rootStyles = getComputedStyle(document.documentElement);
-    const background = parseHexColor(rootStyles.getPropertyValue("--bg-color"), {
-      r: 13,
-      g: 13,
-      b: 13
-    });
-    const elevated = parseHexColor(rootStyles.getPropertyValue("--bg-elevated"), {
-      r: 26,
-      g: 26,
-      b: 26
-    });
+    this._bgThemeColors = {
+      background: parseHexColor(rootStyles.getPropertyValue("--bg-color"), {
+        r: 13,
+        g: 13,
+        b: 13
+      }),
+      elevated: parseHexColor(rootStyles.getPropertyValue("--bg-elevated"), {
+        r: 26,
+        g: 26,
+        b: 26
+      })
+    };
+    return this._bgThemeColors;
+  },
+
+  buildBackgroundStyleFromColor(accent, themeColors = null) {
+    const { background, elevated } = themeColors || this.getBackgroundThemeColors();
     const gradientTop = mixColors(elevated, accent, 0.3);
     const gradientMid = mixColors(background, accent, 0.14);
     return `
@@ -2080,7 +2170,10 @@ export const ProfileSelectionScreen = {
       return;
     }
 
-    if (ScreenUtils.handleDpadNavigation(event, this.container, ".profile-card")) {
+    if (
+      this.moveProfileFocus(event) ||
+      ScreenUtils.handleDpadNavigation(event, this.container, ".profile-card")
+    ) {
       return;
     }
 
@@ -2159,11 +2252,15 @@ export const ProfileSelectionScreen = {
     this._destroyDialogs();
     this.cancelPendingProfileHold();
     this.suppressHoldMenuEnterUntilKeyUp = false;
+    this.focusedNode = null;
     if (this._bgAnimRaf) {
       cancelAnimationFrame(this._bgAnimRaf);
       this._bgAnimRaf = null;
     }
     this._bgCurrentColor = null;
+    this._bgScreen = null;
+    this._bgTargetColor = null;
+    this._bgThemeColors = null;
     if (this.pinActionMessageTimer) {
       clearTimeout(this.pinActionMessageTimer);
       this.pinActionMessageTimer = null;
