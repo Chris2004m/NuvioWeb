@@ -32,7 +32,7 @@ The project is optimized for a TV-first experience, with remote-control navigati
 
 ### Nuvio WebTV Installer
 
-Download the latest Windows or macOS `Nuvio WebTV Installer` build from [GitHub Releases](https://github.com/NuvioMedia/NuvioWeb/releases/latest).
+Download the latest Windows, macOS, or Linux `Nuvio WebTV Installer` build from [GitHub Releases](https://github.com/NuvioMedia/NuvioWeb/releases/latest).
 
 The installer can connect to supported Samsung Tizen and LG webOS TVs and install the latest `.wgt` and `.ipk` packages automatically.
 
@@ -47,6 +47,15 @@ open "/Applications/Nuvio WebTV Installer.app"
 ```
 
 This workaround should only be temporary. Once signed macOS builds are available, this manual step will no longer be needed.
+
+#### Linux note
+
+Current Linux builds are distributed as an AppImage. Make it executable before opening it:
+
+```bash
+chmod +x Nuvio-WebTV-Installer-Linux-*.AppImage
+./Nuvio-WebTV-Installer-Linux-*.AppImage
+```
 
 ### Samsung Tizen
 

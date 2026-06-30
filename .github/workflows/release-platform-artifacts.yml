@@ -317,3 +317,53 @@ jobs:
           INSTALLER_NAME: ${{ steps.installer.outputs.installer_name }}
           SOURCE_REPO: ${{ github.repository }}
         run: gh release upload "$TAG_NAME" "$INSTALLER_NAME" --repo "$SOURCE_REPO" --clobber
+
+  build-linux-installer-release:
+    runs-on: ubuntu-latest
+    needs:
+      - resolve-release-payload
+      - build-webos-release
+      - build-tizen-release
+    permissions:
+      contents: write
+    steps:
+      - name: Check out installer repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.INSTALLER_REPO || 'NuvioMedia/NuvioWebTVInstaller' }}
+          token: ${{ secrets.REPO_DISPATCH_TOKEN || github.token }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install installer dependencies
+        run: npm ci
+
+      - name: Build Linux installer
+        run: npm run dist:linux
+
+      - name: Normalize installer artifact
+        id: installer
+        env:
+          TAG_NAME: ${{ needs.resolve-release-payload.outputs.tag }}
+        run: |
+          APPIMAGE_PATH="$(find dist -type f -name '*.AppImage' -print | head -n 1)"
+          if [ -z "$APPIMAGE_PATH" ]; then
+            echo "Expected Linux AppImage was not created" >&2
+            exit 1
+          fi
+          TARGET_FILE="Nuvio-WebTV-Installer-Linux-${TAG_NAME}.AppImage"
+          mv "$APPIMAGE_PATH" "$TARGET_FILE"
+          chmod +x "$TARGET_FILE"
+          echo "installer_name=$TARGET_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Linux installer to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ needs.resolve-release-payload.outputs.tag }}
+          INSTALLER_NAME: ${{ steps.installer.outputs.installer_name }}
+          SOURCE_REPO: ${{ github.repository }}
+        run: gh release upload "$TAG_NAME" "$INSTALLER_NAME" --repo "$SOURCE_REPO" --clobber
