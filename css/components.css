@@ -12695,30 +12695,6 @@ button:focus-visible {
   overflow: hidden;
 }
 
-.player-source-tags {
-  margin-top: 7px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.player-source-tags.muted {
-  margin-top: 6px;
-  opacity: 0.72;
-}
-
-.player-source-tag {
-  height: 24px;
-  padding: 0 10px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.14);
-  color: var(--player-text-primary);
-  font-size: 13px;
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-}
-
 .player-source-side {
   display: flex;
   flex-direction: column;
@@ -12828,6 +12804,13 @@ button:focus-visible {
   --player-background-elevated: #1a1a1a; /* ATV default BackgroundElevated */
   --player-background-card: #242424; /* ATV default BackgroundCard */
   --player-surface-variant: #2d2d2d; /* ATV SurfaceVariant */
+  --player-overlay-title-font: min(2.92vw, 56px); /* ATV headlineSmall/Medium */
+  --player-overlay-body-font: min(1.67vw, 32px); /* ATV titleMedium/bodyLarge */
+  --player-overlay-label-font: min(1.46vw, 28px); /* ATV bodyMedium/labelLarge */
+  --player-overlay-small-font: min(1.35vw, 26px); /* ATV bodySmall */
+  --player-overlay-step-width: min(5.83vw, 112px); /* ATV audio StepCard 56dp */
+  --player-overlay-step-height: min(4.17vw, 80px); /* ATV subtitle StepperButton 40dp */
+  --player-overlay-step-font: min(2.5vw, 48px); /* ATV 24dp icon/text */
 }
 
 .player-controls-top {
@@ -12906,7 +12889,7 @@ button:focus-visible {
 .player-dialog-title,
 .player-sources-title,
 .player-episode-panel-title {
-  font-size: min(2.92vw, 56px); /* headlineSmall/Medium visual match */
+  font-size: var(--player-overlay-title-font);
   line-height: 1.18;
   color: var(--player-atv-text-primary);
 }
@@ -12915,7 +12898,7 @@ button:focus-visible {
 .player-time-label,
 .player-source-current-meta,
 .player-episode-panel-hint {
-  font-size: min(1.67vw, 32px); /* ATV bodyLarge -> 32px */
+  font-size: var(--player-overlay-body-font);
   line-height: 1.35;
   color: rgba(255, 255, 255, 0.9);
 }
@@ -12925,7 +12908,7 @@ button:focus-visible {
 .player-source-desc,
 .player-episode-item-subtitle,
 .player-episode-date {
-  font-size: min(1.35vw, 26px); /* ATV bodySmall -> 26px */
+  font-size: var(--player-overlay-small-font);
   line-height: 1.3;
   color: var(--player-atv-text-secondary);
 }
@@ -13104,7 +13087,7 @@ button:focus-visible {
 .player-source-title,
 .player-episode-item-title,
 .player-audio-control-value {
-  font-size: min(1.67vw, 32px); /* ATV titleMedium/bodyLarge -> 32px */
+  font-size: var(--player-overlay-body-font);
   line-height: 1.2;
 }
 
@@ -13113,23 +13096,25 @@ button:focus-visible {
 }
 
 .player-dialog-step {
-  width: min(5.83vw, 112px); /* ATV 56dp -> 112px */
-  min-width: min(5.83vw, 112px);
-  height: min(4.17vw, 80px); /* ATV subtitle step 40dp -> 80px */
+  width: var(--player-overlay-step-width);
+  min-width: var(--player-overlay-step-width);
+  height: var(--player-overlay-step-height);
   border-radius: min(1.25vw, 24px);
   border: min(0.21vw, 4px) solid rgba(255, 255, 255, 0.18);
-  font-size: min(2.92vw, 56px);
+  font-size: var(--player-overlay-step-font);
+  line-height: 1;
   background: rgba(255, 255, 255, 0.08);
 }
 
 .player-subtitle-modal .player-dialog-style-item {
-  grid-template-columns: min(5.83vw, 112px) minmax(0, 1fr) min(5.83vw, 112px);
+  grid-template-columns: var(--player-overlay-step-width) minmax(0, 1fr) var(--player-overlay-step-width);
 }
 
 .player-audio-modal .player-dialog-step {
-  width: min(5.83vw, 112px); /* ATV audio StepCard 56dp -> 112px */
-  height: auto;
-  padding: min(0.625vw, 12px) 0; /* ATV 6dp -> 12px */
+  width: var(--player-overlay-step-width);
+  min-width: var(--player-overlay-step-width);
+  height: var(--player-overlay-step-height);
+  padding: 0;
   background: transparent;
 }
 
@@ -13214,7 +13199,8 @@ button:focus-visible {
 }
 
 .player-audio-control-title {
-  font-size: min(1.46vw, 28px);
+  font-size: var(--player-overlay-label-font);
+  line-height: 1.2;
   color: rgba(255, 255, 255, 0.92);
 }
 
@@ -13334,19 +13320,6 @@ button:focus-visible {
   border-color: var(--player-focus-ring);
   background: var(--player-background-elevated);
   transform: scale(1.04); /* ATV focusedScale 1.04 */
-}
-
-.player-source-tags {
-  gap: min(0.83vw, 16px);
-}
-
-.player-source-tag {
-  height: min(2.5vw, 48px);
-  padding: 0 min(1.04vw, 20px);
-  border-radius: min(0.83vw, 16px);
-  background: rgba(255, 255, 255, 0.14);
-  color: var(--player-atv-text-primary);
-  font-size: min(1.35vw, 26px);
 }
 
 .player-source-addon {
@@ -16331,6 +16304,10 @@ button:focus-visible {
   animation: streamRouteSpin 700ms linear infinite !important;
 }
 
+.performance-constrained .stream-route-skeleton-line {
+  animation: streamRouteSkeletonShimmer 2.2s ease-in-out infinite !important;
+}
+
 .performance-constrained .settings-layout-preview-modern-row {
   animation: settingsLayoutModernPreviewScroll 5.7s linear infinite !important;
 }
@@ -19278,7 +19255,7 @@ html.no-css-grid .cast-detail-meta {
     rgba(56, 56, 56, 0.5)
   );
   background-size: 220% 100%;
-  animation: detailLoadingShimmer 2.2s ease-in-out infinite;
+  animation: streamRouteSkeletonShimmer 2.2s ease-in-out infinite;
   margin-bottom: 14px;
 }
 
@@ -19305,6 +19282,20 @@ html.no-css-grid .cast-detail-meta {
   to {
     opacity: 1;
     transform: translateX(0);
+  }
+}
+
+@keyframes streamRouteSkeletonShimmer {
+  0% {
+    opacity: 0.55;
+    background-position: 120% 0;
+  }
+  50% {
+    opacity: 0.95;
+  }
+  100% {
+    opacity: 0.55;
+    background-position: -120% 0;
   }
 }
 

@@ -4,6 +4,13 @@ import {
   normalizeImageUrl,
   onWebOsImageProxyReady
 } from "../../../core/media/imageProxy.js";
+import {
+  getCachedAddonLogoDisplayUrl,
+  hasFailedAddonLogo,
+  normalizeAddonLogoUrl,
+  preloadAddonLogoImages,
+  requestAddonLogo
+} from "../../../core/media/addonLogoCache.js";
 import { localMediaTracksRepository } from "../../../data/repository/localMediaTracksRepository.js";
 import { subtitleRepository } from "../../../data/repository/subtitleRepository.js";
 import { streamRepository } from "../../../data/repository/streamRepository.js";
@@ -401,6 +408,15 @@ function cleanDisplayText(value) {
     .trim();
 }
 
+function capitalizeDisplayLabel(value) {
+  const text = cleanDisplayText(value);
+  if (!text) {
+    return "";
+  }
+  const locale = typeof I18n.getLocale === "function" ? I18n.getLocale() : undefined;
+  return `${text.charAt(0).toLocaleUpperCase(locale)}${text.slice(1)}`;
+}
+
 function extractReleaseYear(value) {
   return String(value ?? "").match(/\b(19|20)\d{2}\b/)?.[0] || "";
 }
@@ -720,6 +736,36 @@ function isTruthyTrackFlag(value) {
   return text === "1" || text === "true" || text === "yes" || text === "y";
 }
 
+function getTrackFlagCandidates(track = {}, keys = []) {
+  const values = [];
+  const pushFrom = (source) => {
+    if (!source || typeof source !== "object") {
+      return;
+    }
+    keys.forEach((key) => {
+      if (Object.prototype.hasOwnProperty.call(source, key)) {
+        values.push(source[key]);
+      }
+    });
+  };
+
+  pushFrom(track);
+  pushFrom(track?.extraInfo);
+  pushFrom(track?.attrs);
+  pushFrom(track?.tags);
+  pushFrom(track?.disposition);
+  pushFrom(track?.raw);
+  pushFrom(track?.raw?.extraInfo);
+  pushFrom(track?.raw?.attrs);
+  pushFrom(track?.raw?.tags);
+  pushFrom(track?.raw?.disposition);
+  return values;
+}
+
+function hasTruthyTrackFlag(track = {}, keys = []) {
+  return getTrackFlagCandidates(track, keys).some((value) => isTruthyTrackFlag(value));
+}
+
 function isSdhSubtitleTrack(track = {}) {
   if (isTruthyTrackFlag(track?.sdh)
     || isTruthyTrackFlag(track?.isSdh)
@@ -820,7 +866,7 @@ function getTrackDescriptorLabels(track = {}) {
     pushUniqueText(descriptors, "MP3");
   }
 
-  if (/\bforced\b/.test(searchText) || isTruthyTrackFlag(track?.forced) || isTruthyTrackFlag(track?.isForced)) {
+  if (isForcedSubtitleTrack(track)) {
     pushUniqueText(descriptors, t("sub_forced_lang", {}, "Forced"));
   }
   if (isSdhSubtitleTrack(track)) {
@@ -840,7 +886,19 @@ function getTrackDescriptorLabels(track = {}) {
 }
 
 function isForcedSubtitleTrack(track = {}) {
-  if (isTruthyTrackFlag(track?.forced) || isTruthyTrackFlag(track?.isForced)) {
+  if (hasTruthyTrackFlag(track, [
+    "forced",
+    "isForced",
+    "is_forced",
+    "forcedSubtitle",
+    "forced_subtitle",
+    "flagForced",
+    "flag_forced",
+    "defaultForced",
+    "default_forced",
+    "trackForced",
+    "track_forced"
+  ])) {
     return true;
   }
   const searchText = getTrackMetadataStrings(track).join(" ").toLowerCase();
@@ -926,7 +984,8 @@ function formatAudioChannelLayout(value) {
 function formatAudioTrackDisplay(track = {}, index = 0) {
   const rawLabel = getMeaningfulTrackLabel(track);
   const rawLanguage = cleanDisplayText(getTrackLanguageValue(track));
-  const languageLabel = getTrackLanguageLabel(track);
+  const languageLabel = capitalizeDisplayLabel(getTrackLanguageLabel(track));
+  const rawLanguageLabel = capitalizeDisplayLabel(rawLanguage);
   const codecName = formatAudioCodecName(
     track?.sampleMimeType
     || track?.codec
@@ -938,7 +997,7 @@ function formatAudioTrackDisplay(track = {}, index = 0) {
   );
   const channelLayout = formatAudioChannelLayout(track?.channelCount || track?.channels);
   const sampleRate = Number(track?.sampleRate || track?.audioSampleRate || 0);
-  const baseName = rawLabel || languageLabel || rawLanguage || audioLabel(index);
+  const baseName = rawLabel || languageLabel || rawLanguageLabel || audioLabel(index);
   const suffix = [codecName, channelLayout].filter(Boolean).join(" ");
   const label = suffix ? `${baseName} (${suffix})` : baseName;
   const secondaryParts = [];
@@ -1179,15 +1238,6 @@ function episodeThumbnailUrl(episode = {}) {
   );
 }
 
-function qualityLabelFromText(value) {
-  const text = String(value || "").toLowerCase();
-  if (text.includes("2160") || text.includes("4k")) return "2160p";
-  if (text.includes("1080")) return "1080p";
-  if (text.includes("720")) return "720p";
-  if (text.includes("480")) return "480p";
-  return "Auto";
-}
-
 function formatBytes(value) {
   const bytes = Number(value || 0);
   if (!Number.isFinite(bytes) || bytes <= 0) {
@@ -1259,6 +1309,22 @@ function renderPlayerImageBadgeChip(badge = {}) {
       <img src="${escapeAttribute(imageUrl)}" alt="${escapeAttribute(badge.name || "")}" loading="lazy" decoding="async" />
     </span>
   `;
+}
+
+function getPlayerSourceLogoDisplayUrl(value = "", onSettled = null) {
+  const logoUrl = normalizeAddonLogoUrl(value);
+  if (!logoUrl || hasFailedAddonLogo(logoUrl)) {
+    return "";
+  }
+  const cachedLogoUrl = getCachedAddonLogoDisplayUrl(logoUrl);
+  if (cachedLogoUrl) {
+    return cachedLogoUrl;
+  }
+  void requestAddonLogo(logoUrl, onSettled);
+  if (Environment.isWebOS()) {
+    return "";
+  }
+  return logoUrl;
 }
 
 function renderPlayerSourceBadges(stream = {}, badgeSettings = StreamBadgeSettingsStore.snapshot()) {
@@ -1780,6 +1846,8 @@ export const PlayerScreen = {
     if (Environment.isWebOS()) {
       this.releaseImageProxyReadyListener = onWebOsImageProxyReady(() => {
         this.renderControlButtons();
+        void this.preloadPlayerSourceLogos();
+        this.scheduleSourceLogoRender();
       });
       void ensureWebOsImageProxyReady();
     }
@@ -3380,7 +3448,7 @@ export const PlayerScreen = {
           id: `embedded-subtitle-${index}`,
           embeddedTrackIndex: index,
           sourceTrackId: Number.isFinite(sourceTrackId) ? sourceTrackId : -1,
-          nativeTrackIndex: Number.isFinite(sourceTrackId) ? Math.max(0, sourceTrackId - 1) : -1,
+          nativeTrackIndex: index,
           label: getMeaningfulTrackLabel(track) || fallbackLabel,
           language: normalizedLanguage || String(rawLanguage || "").trim().toLowerCase(),
           secondary: descriptors.length ? descriptors.join(" · ") : String(normalizedLanguage || rawLanguage || "").trim().toUpperCase(),
@@ -9570,7 +9638,7 @@ export const PlayerScreen = {
       ...track,
       label: cleanDisplayText(embeddedTrack.label) || track?.label || subtitleLabel(index),
       language: embeddedTrack.language || track?.language || "",
-      forced: Boolean(track?.forced) || Boolean(embeddedTrack.forced),
+      forced: isForcedSubtitleTrack(track) || isForcedSubtitleTrack(embeddedTrack),
       secondary: embeddedTrack.secondary || String(embeddedTrack.language || track?.language || "").toUpperCase()
     };
   },
@@ -11904,8 +11972,6 @@ export const PlayerScreen = {
         const option = options[this.subtitleOptionRailIndex];
         if (option?.entry) {
           this.applySubtitleEntry(option.entry);
-          this.subtitleFocusedRail = "style";
-          this.subtitleStyleControlSide = "minus";
         }
         return true;
       }
@@ -12769,6 +12835,7 @@ export const PlayerScreen = {
     this.renderSpeedDialog();
     this.renderSourcesPanel();
     this.updateModalBackdrop();
+    void this.preloadPlayerSourceLogos();
 
     if (forceReload || !this.streamCandidates.length) {
       this.reloadSources();
@@ -12814,6 +12881,7 @@ export const PlayerScreen = {
         }
         this.streamCandidates = mergeStreamItems(this.streamCandidates, chunkItems);
         this.renderSourcesPanel();
+        void this.preloadPlayerSourceLogos(chunkItems);
       }
     };
 
@@ -12842,8 +12910,37 @@ export const PlayerScreen = {
       if (token === this.sourceLoadToken) {
         this.sourcesLoading = false;
         this.renderSourcesPanel();
+        void this.preloadPlayerSourceLogos();
       }
     }
+  },
+
+  async preloadPlayerSourceLogos(streams = this.getFilteredSources()) {
+    if (!Environment.isWebOS()) {
+      return;
+    }
+    try {
+      await ensureWebOsImageProxyReady();
+      await preloadAddonLogoImages(streams || []);
+      this.scheduleSourceLogoRender();
+    } catch (_) {
+      // Logo cache warmup is best-effort; stream cards still render without logos.
+    }
+  },
+
+  scheduleSourceLogoRender() {
+    if (this.sourceLogoRenderTimer) {
+      return;
+    }
+    this.sourceLogoRenderTimer = setTimeout(() => {
+      this.sourceLogoRenderTimer = null;
+      if (this.sourcesPanelVisible) {
+        this.renderSourcesPanel();
+      }
+      if (this.episodePanelVisible) {
+        this.renderEpisodePanel();
+      }
+    }, 120);
   },
 
   renderSourcesPanel() {
@@ -12902,7 +12999,7 @@ export const PlayerScreen = {
             const badges = renderPlayerSourceBadges(stream, badgeSettings);
             const topBadges = badgePlacement === "TOP" ? badges : "";
             const bottomBadges = badgePlacement === "BOTTOM" ? badges : "";
-            const addonLogoUrl = normalizeImageUrl(stream.addonLogo);
+            const addonLogoUrl = getPlayerSourceLogoDisplayUrl(stream.addonLogo, () => this.scheduleSourceLogoRender());
             return `
               <article class="player-source-card focusable${focused ? " focused" : ""}${isCurrent ? " selected" : ""}" data-sources-zone="list" data-sources-index="${index}">
                 <div class="player-source-main">
@@ -12910,13 +13007,9 @@ export const PlayerScreen = {
                   <div class="player-source-title">${escapeHtml(stream.label || "Stream")}</div>
                   <div class="player-source-desc">${escapeHtml(stream.description || stream.addonName || "")}</div>
                   ${bottomBadges}
-                  <div class="player-source-tags${badges ? " muted" : ""}">
-                    <span class="player-source-tag">${escapeHtml(qualityLabelFromText(`${stream.label} ${stream.description}`))}</span>
-                    <span class="player-source-tag">${escapeHtml(String(stream.sourceType || "stream") || "stream")}</span>
-                  </div>
                 </div>
                 <div class="player-source-side">
-                  ${addonLogoUrl ? `<img class="player-source-logo" src="${escapeAttribute(addonLogoUrl)}" alt="" decoding="async" loading="lazy" />` : ""}
+                  ${addonLogoUrl ? `<img class="player-source-logo" src="${escapeAttribute(addonLogoUrl)}" alt="" decoding="async" loading="lazy" referrerpolicy="no-referrer" />` : ""}
                   <div class="player-source-addon">${escapeHtml(stream.addonName || t("nav_addons", {}, "Addon"))}</div>
                   ${isCurrent ? `<div class="player-source-playing">${escapeHtml(t("sources_playing", {}, "Playing"))}</div>` : ""}
                 </div>
@@ -13857,7 +13950,7 @@ export const PlayerScreen = {
                   const badges = renderPlayerSourceBadges(stream, badgeSettings);
                   const topBadges = badgePlacement === "TOP" ? badges : "";
                   const bottomBadges = badgePlacement === "BOTTOM" ? badges : "";
-                  const addonLogoUrl = normalizeImageUrl(stream.addonLogo);
+                  const addonLogoUrl = getPlayerSourceLogoDisplayUrl(stream.addonLogo, () => this.scheduleSourceLogoRender());
                   return `
                     <article class="player-source-card player-episode-stream-card focusable${focused ? " focused" : ""}"
                              data-episode-stream-index="${index}">
@@ -13868,7 +13961,7 @@ export const PlayerScreen = {
                         ${bottomBadges}
                       </div>
                       <div class="player-source-side">
-                        ${addonLogoUrl ? `<img class="player-source-logo" src="${escapeAttribute(addonLogoUrl)}" alt="" decoding="async" loading="lazy" />` : ""}
+                        ${addonLogoUrl ? `<img class="player-source-logo" src="${escapeAttribute(addonLogoUrl)}" alt="" decoding="async" loading="lazy" referrerpolicy="no-referrer" />` : ""}
                         <div class="player-source-addon">${escapeHtml(stream.addonName || t("nav_addons", {}, "Addon"))}</div>
                       </div>
                     </article>
@@ -14568,6 +14661,23 @@ export const PlayerScreen = {
     });
   },
 
+  hasBackDismissableOverlay() {
+    return Boolean(
+      this.stillWatchingPromptVisible
+      || this.seekOverlayVisible
+      || this.seekPreviewSeconds != null
+      || (!this.controlsVisible && this.isNextEpisodeCardVisible())
+      || this.sourcesPanelVisible
+      || this.subtitleDialogVisible
+      || this.audioDialogVisible
+      || this.speedDialogVisible
+      || this.episodePanelVisible
+      || this.moreActionsVisible
+      || this.pauseOverlayVisible
+      || this.pauseOverlayTimer
+    );
+  },
+
   consumeBackRequest() {
     if (this.isStartupErrorVisible()) {
       if (this.navigateBackToStreamScreen()) {
@@ -14577,16 +14687,8 @@ export const PlayerScreen = {
       return true;
     }
 
-    if (this.loadingVisible && !this.hasPresentedPlaybackFrame) {
-      return this.navigateBackToStreamScreen();
-    }
-
     if (this.stillWatchingPromptVisible) {
       return this.onDismissStillWatchingPrompt();
-    }
-
-    if (this.pauseOverlayVisible || this.pauseOverlayTimer) {
-      this.dismissPauseOverlay({ revealControls: false, focus: false });
     }
 
     if (this.seekOverlayVisible || this.seekPreviewSeconds != null) {
@@ -14633,6 +14735,14 @@ export const PlayerScreen = {
       this.renderControlButtons();
       this.focusFirstControl();
       return true;
+    }
+
+    if (this.pauseOverlayVisible || this.pauseOverlayTimer) {
+      this.dismissPauseOverlay({ revealControls: false, focus: false });
+    }
+
+    if (this.loadingVisible && !this.hasPresentedPlaybackFrame) {
+      return this.navigateBackToStreamScreen();
     }
 
     this.nextEpisodeBackExitArmed = false;
@@ -15127,6 +15237,10 @@ export const PlayerScreen = {
     if (this.releaseImageProxyReadyListener) {
       this.releaseImageProxyReadyListener();
       this.releaseImageProxyReadyListener = null;
+    }
+    if (this.sourceLogoRenderTimer) {
+      clearTimeout(this.sourceLogoRenderTimer);
+      this.sourceLogoRenderTimer = null;
     }
     this.clearTrackDiscoveryTimer();
     this.stopLoadingLogoFillAnimation();

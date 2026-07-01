@@ -157,7 +157,9 @@ export const Router = {
       this.skipConsumeNextPopstate = false;
       const state = event?.state || null;
       const currentScreen = this.getCurrentScreen();
-      const shouldLetPlayerReturnToStream = this.current === "player" && state?.route === "stream";
+      const shouldLetPlayerReturnToStream = this.current === "player"
+        && state?.route === "stream"
+        && !currentScreen?.hasBackDismissableOverlay?.();
       const consumeResult = !shouldSkipConsume && !shouldLetPlayerReturnToStream
         ? currentScreen?.consumeBackRequest?.()
         : false;

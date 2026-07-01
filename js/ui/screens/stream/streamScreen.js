@@ -14,13 +14,22 @@ import { WebOsEngineFsResolver } from "../../../core/p2p/webosEngineFsResolver.j
 import { TizenStreamingServerResolver } from "../../../core/p2p/tizenStreamingServerResolver.js";
 import { DebridSettingsStore } from "../../../data/local/debridSettingsStore.js";
 import { StreamBadgeSettingsStore } from "../../../data/local/streamBadgeSettingsStore.js";
-import { LocalStore } from "../../../core/storage/localStore.js";
 import {
   ensureWebOsImageProxyReady,
-  isWebOsImageProxyUrl,
-  normalizeImageUrl,
   onWebOsImageProxyReady
 } from "../../../core/media/imageProxy.js";
+import {
+  clearFailedAddonLogos,
+  getCachedAddonLogoDisplayUrl,
+  hasFailedAddonLogo,
+  normalizeAddonLogoLookup,
+  normalizeAddonLogoUrl,
+  preloadAddonLogoImages,
+  rememberAddonLogoLookup,
+  rememberFailedAddonLogo,
+  requestAddonLogo,
+  resolveAddonLogo
+} from "../../../core/media/addonLogoCache.js";
 import { Environment } from "../../../platform/environment.js";
 import { WebOsLunaService } from "../../../platform/webos/webosLunaService.js";
 import { I18n } from "../../../i18n/index.js";
@@ -30,11 +39,6 @@ import {
   normalizeStreamBadgeRules
 } from "../../../core/streams/streamBadgeRules.js";
 
-const failedAddonLogoUrls = new Set();
-const addonLogoCache = new Map();
-const ADDON_LOGO_CACHE_KEY = "nuvio.stream.addonLogoCache.v1";
-const ADDON_LOGO_CACHE_LIMIT = 36;
-const ADDON_LOGO_CACHE_MAX_LENGTH = 140000;
 const STREAM_BADGE_LIMIT = 9;
 const WEBOS_NATIVE_PLAYER_APP_IDS = [
   "com.webos.app.mediadiscovery",
@@ -43,9 +47,6 @@ const WEBOS_NATIVE_PLAYER_APP_IDS = [
 ];
 const WEBOS_DLNA_PROTOCOL_SUFFIX =
   "DLNA.ORG_OP=01;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000000000000000000000000000";
-let addonLogoCacheHydrated = false;
-let addonLogoCachePersistTimer = null;
-
 function t(key, params = {}, fallback = key) {
   return I18n.t(key, params, { fallback });
 }
@@ -400,10 +401,6 @@ function getAddonBadgeLabel(name = "") {
   return letters || cleaned.charAt(0).toUpperCase();
 }
 
-function normalizeAddonLogoUrl(value = "") {
-  return normalizeImageUrl(value);
-}
-
 async function ensureAddonLogoImageProxyReady() {
   if (!Environment.isWebOS()) {
     return false;
@@ -413,104 +410,6 @@ async function ensureAddonLogoImageProxyReady() {
   } catch (_) {
     return false;
   }
-}
-
-async function warmAddonLogoPreview(url = "") {
-  const normalized = normalizeAddonLogoUrl(url);
-  if (!normalized || failedAddonLogoUrls.has(normalized)) {
-    return false;
-  }
-  hydrateAddonLogoCache();
-  const cached = addonLogoCache.get(normalized);
-  if (cached?.status === "ready" || cached?.status === "direct") {
-    return true;
-  }
-  if (cached?.status === "loading") {
-    return cached.promise || Promise.resolve(false);
-  }
-
-  const loadingEntry = { status: "loading", updatedAt: Date.now(), promise: null };
-  addonLogoCache.set(normalized, loadingEntry);
-  const promise = new Promise((resolve) => {
-    const settle = (ok) => resolve(ok);
-    const fail = () => {
-      failedAddonLogoUrls.add(normalized);
-      addonLogoCache.set(normalized, { status: "failed", updatedAt: Date.now() });
-      settle(false);
-    };
-    const finishDirect = () => {
-      addonLogoCache.set(normalized, {
-        status: "direct",
-        displayUrl: normalized,
-        updatedAt: Date.now()
-      });
-      settle(true);
-    };
-    const loadDirect = () => {
-      const directImage = new Image();
-      directImage.decoding = "async";
-      try {
-        directImage.referrerPolicy = "no-referrer";
-      } catch (_) {}
-      directImage.onload = () => {
-        (async () => {
-          await awaitImageDecoded(directImage);
-          finishDirect();
-        })();
-      };
-      directImage.onerror = fail;
-      directImage.src = normalized;
-    };
-    const finish = (image = null) => {
-      if (image && typeof imageToDataUrl === "function") {
-        (async () => {
-          try {
-            if (!(await awaitImageDecoded(image))) {
-              throw new Error("decode-failed");
-            }
-            const dataUrl = imageToDataUrl(image);
-            if (dataUrl) {
-              addonLogoCache.set(normalized, {
-                status: "ready",
-                displayUrl: dataUrl,
-                updatedAt: Date.now()
-              });
-              scheduleAddonLogoCachePersist();
-              settle(true);
-              return;
-            }
-          } catch (_) {}
-          finishDirect();
-        })();
-        return;
-      }
-      finishDirect();
-    };
-    const image = new Image();
-    image.decoding = "async";
-    try {
-      image.crossOrigin = "anonymous";
-    } catch (_) {}
-    try {
-      image.referrerPolicy = "no-referrer";
-    } catch (_) {}
-    image.onload = () => finish(image);
-    image.onerror = loadDirect;
-    image.src = normalized;
-  });
-  loadingEntry.promise = promise;
-  return promise;
-}
-
-export function resetAddonLogoCache() {
-  failedAddonLogoUrls.clear();
-  addonLogoCache.clear();
-  addonLogoCacheHydrated = false;
-  if (addonLogoCachePersistTimer) {
-    clearTimeout(addonLogoCachePersistTimer);
-    addonLogoCachePersistTimer = null;
-  }
-  LocalStore.remove(ADDON_LOGO_CACHE_KEY);
 }
 
 export async function preloadStreamBadgeImages(settings = StreamBadgeSettingsStore.snapshot()) {
@@ -543,245 +442,6 @@ async function preloadMatchedStreamBadgeImages(
       });
   });
   await Promise.all(Array.from(urls).map((url) => requestAddonLogo(url)));
-}
-
-async function preloadAddonLogoImages(streams = [], lookup = {}) {
-  const urls = new Set();
-  (streams || []).forEach((stream) => {
-    const url = normalizeAddonLogoUrl(
-      stream?.addonLogo || stream?.raw?.addonLogo || resolveAddonLogo(stream?.addonName, lookup)
-    );
-    if (url) {
-      urls.add(url);
-    }
-  });
-  await Promise.all(Array.from(urls).map((url) => warmAddonLogoPreview(url)));
-}
-
-function hydrateAddonLogoCache() {
-  if (addonLogoCacheHydrated) {
-    return;
-  }
-  addonLogoCacheHydrated = true;
-  const cached = LocalStore.get(ADDON_LOGO_CACHE_KEY, {});
-  const entries = cached && typeof cached === "object" && !Array.isArray(cached) ? cached : {};
-  Object.keys(entries).forEach((url) => {
-    const entry = entries[url];
-    const dataUrl = String(entry?.dataUrl || "").trim();
-    if (!url || !dataUrl.startsWith("data:image/")) {
-      return;
-    }
-    addonLogoCache.set(url, {
-      status: "ready",
-      displayUrl: dataUrl,
-      updatedAt: Number(entry?.updatedAt || Date.now())
-    });
-  });
-}
-
-function persistAddonLogoCache() {
-  addonLogoCachePersistTimer = null;
-  const entries = Array.from(addonLogoCache.entries())
-    .filter(
-      ([, entry]) =>
-        entry?.status === "ready" &&
-        String(entry.displayUrl || "").startsWith("data:image/") &&
-        String(entry.displayUrl || "").length <= ADDON_LOGO_CACHE_MAX_LENGTH
-    )
-    .sort((left, right) => Number(right[1].updatedAt || 0) - Number(left[1].updatedAt || 0))
-    .slice(0, ADDON_LOGO_CACHE_LIMIT);
-  const payload = {};
-  entries.forEach(([url, entry]) => {
-    payload[url] = {
-      dataUrl: entry.displayUrl,
-      updatedAt: Number(entry.updatedAt || Date.now())
-    };
-  });
-  LocalStore.set(ADDON_LOGO_CACHE_KEY, payload);
-}
-
-function scheduleAddonLogoCachePersist() {
-  if (addonLogoCachePersistTimer) {
-    return;
-  }
-  addonLogoCachePersistTimer = setTimeout(persistAddonLogoCache, 800);
-}
-
-function imageToDataUrl(image) {
-  const naturalWidth = Math.max(1, Number(image?.naturalWidth || image?.width || 1));
-  const naturalHeight = Math.max(1, Number(image?.naturalHeight || image?.height || 1));
-  const maxSize = 144;
-  const ratio = Math.min(1, maxSize / Math.max(naturalWidth, naturalHeight));
-  const width = Math.max(1, Math.round(naturalWidth * ratio));
-  const height = Math.max(1, Math.round(naturalHeight * ratio));
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const context = canvas.getContext("2d");
-  if (!context) {
-    throw new Error("Canvas unavailable");
-  }
-  context.clearRect(0, 0, width, height);
-  context.drawImage(image, 0, 0, width, height);
-  return canvas.toDataURL("image/png");
-}
-
-async function awaitImageDecoded(image) {
-  if (!image || typeof image.decode !== "function") {
-    return true;
-  }
-  try {
-    await image.decode();
-    return true;
-  } catch (_) {
-    return false;
-  }
-}
-
-function requestAddonLogo(url = "", onSettled = null) {
-  const normalized = normalizeAddonLogoUrl(url);
-  if (!normalized || failedAddonLogoUrls.has(normalized)) {
-    return Promise.resolve(false);
-  }
-  hydrateAddonLogoCache();
-  const cached = addonLogoCache.get(normalized);
-  if (cached?.status === "ready" || cached?.status === "direct") {
-    return Promise.resolve(true);
-  }
-  if (cached?.status === "loading") {
-    return cached.promise || Promise.resolve(false);
-  }
-
-  if (Environment.isWebOS() && !isWebOsImageProxyUrl(normalized)) {
-    addonLogoCache.set(normalized, {
-      status: "direct",
-      displayUrl: normalized,
-      updatedAt: Date.now()
-    });
-    if (typeof onSettled === "function") {
-      setTimeout(onSettled, 0);
-    }
-    return Promise.resolve(true);
-  }
-
-  const loadingEntry = { status: "loading", updatedAt: Date.now(), promise: null };
-  addonLogoCache.set(normalized, loadingEntry);
-  const promise = new Promise((resolve) => {
-    const settle = (ok) => {
-      if (typeof onSettled === "function") {
-        onSettled();
-      }
-      resolve(ok);
-    };
-    const fail = () => {
-      failedAddonLogoUrls.add(normalized);
-      addonLogoCache.set(normalized, { status: "failed", updatedAt: Date.now() });
-      settle(false);
-    };
-    const finishDirect = () => {
-      addonLogoCache.set(normalized, {
-        status: "direct",
-        displayUrl: normalized,
-        updatedAt: Date.now()
-      });
-      settle(true);
-    };
-    const loadDirect = () => {
-      const directImage = new Image();
-      directImage.decoding = "async";
-      try {
-        directImage.referrerPolicy = "no-referrer";
-      } catch (_) {
-        // Some TV browsers expose referrerPolicy as read-only.
-      }
-      directImage.onload = () => {
-        (async () => {
-          await awaitImageDecoded(directImage);
-          finishDirect();
-        })();
-      };
-      directImage.onerror = fail;
-      directImage.src = normalized;
-    };
-    const image = new Image();
-    image.crossOrigin = "anonymous";
-    image.decoding = "async";
-    try {
-      image.referrerPolicy = "no-referrer";
-    } catch (_) {
-      // Some TV browsers expose referrerPolicy as read-only.
-    }
-    image.onload = () => {
-      (async () => {
-        try {
-          if (!(await awaitImageDecoded(image))) {
-            throw new Error("decode-failed");
-          }
-          const dataUrl = imageToDataUrl(image);
-          addonLogoCache.set(normalized, {
-            status: "ready",
-            displayUrl: dataUrl,
-            updatedAt: Date.now()
-          });
-          scheduleAddonLogoCachePersist();
-          settle(true);
-        } catch (_) {
-          loadDirect();
-        }
-      })();
-    };
-    image.onerror = loadDirect;
-    image.src = normalized;
-  });
-  loadingEntry.promise = promise;
-  return promise;
-}
-
-function getCachedAddonLogoDisplayUrl(url = "") {
-  const normalized = normalizeAddonLogoUrl(url);
-  if (!normalized || failedAddonLogoUrls.has(normalized)) {
-    return "";
-  }
-  hydrateAddonLogoCache();
-  const cached = addonLogoCache.get(normalized);
-  return cached?.status === "ready" || cached?.status === "direct"
-    ? String(cached.displayUrl || "")
-    : "";
-}
-
-function normalizeAddonLookupKey(value = "") {
-  return String(value || "")
-    .trim()
-    .toLowerCase();
-}
-
-function rememberAddonLogoLookup(lookup = {}, addonName = "", addonLogo = "") {
-  const key = normalizeAddonLookupKey(addonName);
-  const rawLogo = String(addonLogo || "").trim();
-  const logo = normalizeAddonLogoUrl(rawLogo) || rawLogo;
-  if (key && logo) {
-    lookup[key] = logo;
-  }
-}
-
-function normalizeAddonLogoLookup(lookup = {}) {
-  const normalized = {};
-  Object.entries(lookup || {}).forEach(([key, value]) => {
-    rememberAddonLogoLookup(normalized, key, value);
-  });
-  return normalized;
-}
-
-function resolveAddonLogo(addonName = "", lookup = {}) {
-  const key = normalizeAddonLookupKey(addonName);
-  return key ? normalizeAddonLogoUrl(lookup?.[key]) : "";
-}
-
-function rememberFailedAddonLogo(url = "") {
-  const normalized = normalizeAddonLogoUrl(url);
-  if (normalized) {
-    failedAddonLogoUrls.add(normalized);
-  }
 }
 
 function getStreamHeadline(stream = {}) {
@@ -1029,7 +689,7 @@ function renderImageBadgeChip(badge = {}) {
     return "";
   }
   let displayImageUrl = getCachedAddonLogoDisplayUrl(imageUrl);
-  if (imageUrl && !displayImageUrl && !failedAddonLogoUrls.has(imageUrl)) {
+  if (imageUrl && !displayImageUrl && !hasFailedAddonLogo(imageUrl)) {
     requestAddonLogo(imageUrl);
     if (Environment.isWebOS()) {
       displayImageUrl = getCachedAddonLogoDisplayUrl(imageUrl);
@@ -1215,7 +875,7 @@ export const StreamScreen = {
       const addonLogoUrl =
         normalizeAddonLogoUrl(stream?.addonLogo) ||
         resolveAddonLogo(stream?.addonName, this.addonLogoLookup);
-      if (!addonLogoUrl || failedAddonLogoUrls.has(addonLogoUrl)) {
+      if (!addonLogoUrl || hasFailedAddonLogo(addonLogoUrl)) {
         return true;
       }
       return Boolean(getCachedAddonLogoDisplayUrl(addonLogoUrl));
@@ -1232,7 +892,7 @@ export const StreamScreen = {
               resolveAddonLogo(stream?.addonName, this.addonLogoLookup)
           )
           .filter(
-            (url) => url && !failedAddonLogoUrls.has(url) && !getCachedAddonLogoDisplayUrl(url)
+            (url) => url && !hasFailedAddonLogo(url) && !getCachedAddonLogoDisplayUrl(url)
           )
       )
     );
@@ -1386,7 +1046,7 @@ export const StreamScreen = {
     }
     if (Environment.isWebOS()) {
       this.releaseImageProxyReadyListener = onWebOsImageProxyReady(() => {
-        failedAddonLogoUrls.clear();
+        clearFailedAddonLogos();
         this.requestRender({ delayMs: 0 });
       });
       void ensureWebOsImageProxyReady();
@@ -2429,7 +2089,7 @@ export const StreamScreen = {
       resolveAddonLogo(stream.addonName, this.addonLogoLookup);
     const cachedAddonLogoUrl = getCachedAddonLogoDisplayUrl(addonLogoUrl);
     let displayAddonLogoUrl = cachedAddonLogoUrl || "";
-    if (addonLogoUrl && !displayAddonLogoUrl && !failedAddonLogoUrls.has(addonLogoUrl)) {
+    if (addonLogoUrl && !displayAddonLogoUrl && !hasFailedAddonLogo(addonLogoUrl)) {
       requestAddonLogo(addonLogoUrl, () => this.requestRender({ delayMs: 160 }));
       if (Environment.isWebOS()) {
         displayAddonLogoUrl = getCachedAddonLogoDisplayUrl(addonLogoUrl);
