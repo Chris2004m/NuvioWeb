@@ -1367,6 +1367,14 @@ function normalizeSubtitleFontSize(value = 100) {
   return clamp(Math.round(parsed), 70, 180);
 }
 
+function formatHtmlSubtitleFontSize(value = 100) {
+  const scale = normalizeSubtitleFontSize(value) / 100;
+  const minPx = Math.round(30 * scale);
+  const preferredVh = (4.4 * scale).toFixed(2);
+  const maxPx = Math.round(82 * scale);
+  return `clamp(${minPx}px, ${preferredVh}vh, ${maxPx}px)`;
+}
+
 function normalizeSubtitleVerticalOffset(value = 0) {
   const parsed = Number(value || 0);
   if (!Number.isFinite(parsed)) {
@@ -6255,10 +6263,12 @@ export const PlayerScreen = {
     const outlineShadow = style.outlineEnabled ? `0 0 2px ${outlineColor}, 0 0 4px ${outlineColor}` : "";
     const subtitleShadow = [outlineShadow, boldShadow].filter(Boolean).join(", ") || "none";
     const subtitleFontSize = normalizeSubtitleFontSize(style.fontSize);
+    const htmlSubtitleFontSize = formatHtmlSubtitleFontSize(subtitleFontSize);
     PlayerController.setWebOsSubtitleFontSize?.(subtitleFontSize);
     uiRoot.style.setProperty("--player-subtitle-color", String(style.textColor || "#FFFFFF"));
     uiRoot.style.setProperty("--player-subtitle-outline-color", outlineColor);
     uiRoot.style.setProperty("--player-subtitle-font-size", `${subtitleFontSize}%`);
+    uiRoot.style.setProperty("--player-html-subtitle-font-size", htmlSubtitleFontSize);
     uiRoot.style.setProperty("--player-subtitle-font-weight", subtitleFontWeight);
     uiRoot.style.setProperty("--player-subtitle-shadow", subtitleShadow);
     uiRoot.style.setProperty("--player-subtitle-offset", `${(verticalOffset.residualOffset * -2).toFixed(2)}vh`);

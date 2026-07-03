@@ -10484,6 +10484,7 @@ button:focus-visible {
   --player-subtitle-color: #ffffff;
   --player-subtitle-outline-color: #000000;
   --player-subtitle-font-size: 100%;
+  --player-html-subtitle-font-size: clamp(30px, 4.4vh, 82px);
   --player-subtitle-font-weight: 500;
   --player-subtitle-shadow: 0 0 2px #000000, 0 0 4px #000000;
   --player-subtitle-offset: 0vh;
@@ -10522,7 +10523,7 @@ button:focus-visible {
   justify-content: flex-end;
   gap: 0.18em;
   color: var(--player-subtitle-color);
-  font-size: var(--player-subtitle-font-size);
+  font-size: var(--player-html-subtitle-font-size);
   font-weight: var(--player-subtitle-font-weight);
   line-height: 1.28;
   text-align: center;
