@@ -7063,7 +7063,7 @@ export const PlayerScreen = {
         return;
       }
 
-      if (!this.hasPresentedPlaybackFrame && (mediaErrorCode === 3 || mediaErrorCode === 4)) {
+      if (!this.hasPresentedPlaybackFrame && (mediaErrorCode === 2 || mediaErrorCode === 3 || mediaErrorCode === 4)) {
         if (currentEngineFsState) {
           const stats = await this.fetchCurrentEngineFsStats({ timeoutMs: 2500 });
           if (this.shouldRetryEngineFsStartupError(stats)) {

@@ -2410,7 +2410,8 @@ export const SettingsScreen = {
     onSelect,
     returnFocusKey,
     dialogClassName = "",
-    optionRenderer = "default"
+    optionRenderer = "default",
+    optionColumns = null
   }) {
     this.textDialog = null;
     this.optionDialog = {
@@ -2422,9 +2423,11 @@ export const SettingsScreen = {
       returnFocusKey,
       dialogClassName,
       optionRenderer,
-      // Grid dialogs lay options out in 2 columns; everything else is a single
-      // column. Used by the dpad handler so left/right can move between columns.
-      optionColumns: String(dialogClassName || "").includes("settings-trakt-grid-dialog") ? 2 : 1
+      // Grid and compact action dialogs use this so dpad left/right can move
+      // between visually adjacent options.
+      optionColumns: Number.isFinite(Number(optionColumns))
+        ? Math.max(1, Math.trunc(Number(optionColumns)))
+        : (String(dialogClassName || "").includes("settings-trakt-grid-dialog") ? 2 : 1)
     };
     const selectedIndex = this.optionDialog.options.findIndex(
       (option) => String(option.id) === String(selectedId)
@@ -4994,8 +4997,10 @@ export const SettingsScreen = {
           { id: "cancel", labelKey: "p2p_consent_cancel" },
           { id: "enable", labelKey: "p2p_consent_enable" }
         ],
+        selectedId: "enable",
         returnFocusKey: "playback:p2pEnabled",
         dialogClassName: "settings-p2p-consent-dialog",
+        optionColumns: 2,
         onSelect: (option) => {
           if (String(option.id) === "enable") {
             TorrentSettingsStore.setP2pEnabled(true);
