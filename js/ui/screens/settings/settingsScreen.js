@@ -331,13 +331,22 @@ function labelForOptionId(options, id, fallback) {
 // settings screen and the player edit the exact same values. Mirrors the Android
 // TV app, which exposes these under Settings > Playback > Subtitles.
 const SUBTITLE_SIZE_OPTIONS = [
+  { id: 50, label: "50%" },
+  { id: 60, label: "60%" },
   { id: 70, label: "70%" },
-  { id: 85, label: "85%" },
+  { id: 80, label: "80%" },
+  { id: 90, label: "90%" },
   { id: 100, label: "100%" },
-  { id: 115, label: "115%" },
+  { id: 110, label: "110%" },
+  { id: 120, label: "120%" },
   { id: 130, label: "130%" },
+  { id: 140, label: "140%" },
   { id: 150, label: "150%" },
-  { id: 180, label: "180%" }
+  { id: 160, label: "160%" },
+  { id: 170, label: "170%" },
+  { id: 180, label: "180%" },
+  { id: 190, label: "190%" },
+  { id: 200, label: "200%" }
 ];
 
 const SUBTITLE_OFFSET_OPTIONS = [
@@ -376,7 +385,7 @@ function clampSubtitleSize(value) {
   if (!Number.isFinite(parsed)) {
     return 100;
   }
-  return Math.min(180, Math.max(70, parsed));
+  return Math.min(200, Math.max(50, parsed));
 }
 
 function clampSubtitleOffset(value) {

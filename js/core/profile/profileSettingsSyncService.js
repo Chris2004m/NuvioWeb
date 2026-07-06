@@ -872,9 +872,9 @@ const FEATURE_ADAPTERS = {
         subtitle_preferred_language: normalizePreferredSubtitleLanguageForAndroid(settings),
         subtitle_secondary_language: normalizeSecondarySubtitleLanguageForAndroid(settings),
         subtitle_use_forced_subtitles: shouldUseForcedSubtitlesForAndroid(settings),
-        subtitle_size: Math.max(
-          50,
-          Math.trunc(Number(settings.subtitleStyle?.fontSize ?? 100) || 100)
+        subtitle_size: Math.min(
+          200,
+          Math.max(50, Math.trunc(Number(settings.subtitleStyle?.fontSize ?? 100) || 100))
         ),
         subtitle_vertical_offset: Math.trunc(
           Number(settings.subtitleStyle?.verticalOffset ?? 0) || 0
@@ -1056,7 +1056,7 @@ const FEATURE_ADAPTERS = {
         subtitleStyle.useForcedSubtitles = Boolean(useForcedSubtitles);
       }
       if (numberOrNull(raw.subtitle_size) != null) {
-        subtitleStyle.fontSize = Math.max(50, Math.trunc(Number(raw.subtitle_size)));
+        subtitleStyle.fontSize = Math.min(200, Math.max(50, Math.trunc(Number(raw.subtitle_size))));
       }
       if (numberOrNull(raw.subtitle_vertical_offset) != null) {
         subtitleStyle.verticalOffset = Math.trunc(Number(raw.subtitle_vertical_offset));

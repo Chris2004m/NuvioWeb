@@ -359,7 +359,7 @@ const SUBTITLE_OUTLINE_COLORS = ["#000000", "#FFFFFF", "#00E5FF", "#FF5C5C"];
 const SUBTITLE_DELAY_MIN_MS = -60000;
 const SUBTITLE_DELAY_MAX_MS = 60000;
 const SUBTITLE_DELAY_STEP_MS = 100;
-const SUBTITLE_FONT_STEP = 5;
+const SUBTITLE_FONT_STEP = 10;
 const SUBTITLE_VERTICAL_OFFSET_STEP = 1;
 const AUDIO_AMPLIFICATION_MIN_DB = 0;
 const AUDIO_AMPLIFICATION_MAX_DB = 10;
@@ -1376,7 +1376,7 @@ function normalizeSubtitleFontSize(value = 100) {
   if (!Number.isFinite(parsed)) {
     return 100;
   }
-  return clamp(Math.round(parsed), 70, 180);
+  return clamp(Math.round(parsed), 50, 200);
 }
 
 function formatHtmlSubtitleFontSize(value = 100) {
