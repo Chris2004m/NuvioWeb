@@ -2356,7 +2356,7 @@
     <string name="player.track.surround">Surround</string>
     <string name="sidebar.profileFallback">Profilo</string>
     <string name="sidebar.switchProfile">Cambia profilo</string>
-    <string name="settings.about.portedBy">Un ringraziamento a TapFrame, edoedac0 e WhiteGiso.</string>
+    <string name="settings.about.portedBy">Un ringraziamento a WhiteGiso, TapFrame, edoedac0.</string>
     <string name="settings.account.signOutSubtitle">Disconnetti questa TV dal tuo account.</string>
     <string name="settings.appearance.themes.amber">Ambra</string>
     <string name="settings.appearance.themes.crimson">Cremisi</string>
