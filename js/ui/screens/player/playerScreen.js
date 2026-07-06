@@ -366,6 +366,7 @@ const AUDIO_AMPLIFICATION_MAX_DB = 10;
 const PLAYER_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 const NEXT_EPISODE_PREFETCH_PERCENT = 0.9;
 const SKIP_INTERVAL_CHECK_MS = 250;
+const SKIP_INTERVAL_SEEK_SUPPRESSION_MS = 12000;
 const PARENTAL_GUIDE_ROW_HEIGHT = 36;
 const PARENTAL_GUIDE_ROW_GAP = 4;
 const PAUSE_OVERLAY_DELAY_MS = 5000;
@@ -653,6 +654,23 @@ function inferTrackLanguageCodeFromText(value) {
   return match?.[1] || "";
 }
 
+function inferUniqueTrackLanguageCodeFromText(value) {
+  const normalized = normalizeLanguageNameText(value);
+  if (!normalized) {
+    return "";
+  }
+  const padded = ` ${normalized} `;
+  const matchedCodes = new Set();
+  Object.entries(LANGUAGE_NAME_ALIASES)
+    .sort((left, right) => right[0].length - left[0].length)
+    .forEach(([name, code]) => {
+      if (padded.includes(` ${name} `)) {
+        matchedCodes.add(code);
+      }
+    });
+  return matchedCodes.size === 1 ? Array.from(matchedCodes)[0] : "";
+}
+
 function getTrackLanguageValue(track = {}) {
   const candidates = [
     track?.language,
@@ -664,10 +682,33 @@ function getTrackLanguageValue(track = {}) {
   return candidates.find((value) => cleanDisplayText(value)) || "";
 }
 
+function inferAudioTrackDisplayLanguageCode(track = {}, entry = {}) {
+  const candidates = [
+    track?.name,
+    track?.label,
+    track?.title,
+    entry?.label
+  ];
+  for (const candidate of candidates) {
+    const inferredCode = inferUniqueTrackLanguageCodeFromText(candidate);
+    if (inferredCode) {
+      return inferredCode;
+    }
+  }
+  return "";
+}
+
 function inferAudioTrackLanguageKey(track = {}, entry = {}) {
   const explicit = normalizeTrackLanguageCode(getTrackLanguageValue(track));
+  const displayCode = inferAudioTrackDisplayLanguageCode(track, entry);
+  if (explicit && displayCode && explicit.split("-")[0] !== displayCode.split("-")[0]) {
+    return displayCode;
+  }
   if (explicit) {
     return explicit;
+  }
+  if (displayCode) {
+    return displayCode;
   }
 
   const candidates = [
@@ -689,6 +730,11 @@ function inferAudioTrackLanguageKey(track = {}, entry = {}) {
     }
   }
   return "";
+}
+
+function getAudioTrackLanguageLabel(track = {}, entry = {}) {
+  const languageKey = inferAudioTrackLanguageKey(track, entry);
+  return languageKey ? getTrackLanguageLabel({ language: languageKey }) : "";
 }
 
 function getTrackLanguageLabel(track = {}) {
@@ -998,7 +1044,7 @@ function formatAudioChannelLayout(value) {
 function formatAudioTrackDisplay(track = {}, index = 0) {
   const rawLabel = getMeaningfulTrackLabel(track);
   const rawLanguage = cleanDisplayText(getTrackLanguageValue(track));
-  const languageLabel = capitalizeDisplayLabel(getTrackLanguageLabel(track));
+  const languageLabel = capitalizeDisplayLabel(getAudioTrackLanguageLabel(track));
   const rawLanguageLabel = capitalizeDisplayLabel(rawLanguage);
   const codecName = formatAudioCodecName(
     track?.sampleMimeType
@@ -1821,6 +1867,10 @@ function buildSkipIntervalLabel(interval = {}) {
   return t("skip_intro", {}, "Skip Intro");
 }
 
+function getSkipIntervalKey(interval = null) {
+  return interval ? `${interval.type}:${interval.startTime}:${interval.endTime}` : "";
+}
+
 function stripQuotes(value) {
   const text = String(value || "").trim();
   if (text.startsWith("\"") && text.endsWith("\"")) {
@@ -2070,6 +2120,8 @@ export const PlayerScreen = {
     this.skipIntroAnimationFrame = null;
     this.skipIntroFocusFrame = null;
     this.skipIntroRenderedKey = "";
+    this.skipIntroSuppressedKey = "";
+    this.skipIntroSuppressedUntil = 0;
     this.lastActionOverlayBottomPx = null;
     this.subtitleSelectionTimer = null;
     this.subtitleLoadToken = 0;
@@ -2451,6 +2503,8 @@ export const PlayerScreen = {
       this.skipIntroCountdownProgress = 0;
       this.skipIntroCountdownLastTickAt = Date.now();
       this.skipIntroCountdownStartAt = 0;
+      this.skipIntroSuppressedKey = "";
+      this.skipIntroSuppressedUntil = 0;
       this.stopSkipIntroCountdownAnimation();
       this.renderSkipIntroButton();
       return;
@@ -2464,6 +2518,8 @@ export const PlayerScreen = {
       this.skipIntroCountdownProgress = 0;
       this.skipIntroCountdownLastTickAt = Date.now();
       this.skipIntroCountdownStartAt = 0;
+      this.skipIntroSuppressedKey = "";
+      this.skipIntroSuppressedUntil = 0;
       this.stopSkipIntroCountdownAnimation();
       this.renderSkipIntroButton();
       return;
@@ -2478,6 +2534,8 @@ export const PlayerScreen = {
     this.skipIntroCountdownProgress = 0;
     this.skipIntroCountdownLastTickAt = Date.now();
     this.skipIntroCountdownStartAt = 0;
+    this.skipIntroSuppressedKey = "";
+    this.skipIntroSuppressedUntil = 0;
     this.stopSkipIntroCountdownAnimation();
     this.updateActiveSkipInterval(this.getPlaybackCurrentSeconds());
   },
@@ -2490,13 +2548,31 @@ export const PlayerScreen = {
       return;
     }
     const previous = this.activeSkipInterval;
-    const active = (Array.isArray(this.skipIntervals) ? this.skipIntervals : []).find((interval) => {
+    let active = (Array.isArray(this.skipIntervals) ? this.skipIntervals : []).find((interval) => {
       const start = Number(interval?.startTime);
       const end = Number(interval?.endTime);
       return Number.isFinite(start) && Number.isFinite(end) && currentTime >= start && currentTime < (end - 0.5);
     }) || null;
-    const previousKey = previous ? `${previous.type}:${previous.startTime}:${previous.endTime}` : "";
-    const nextKey = active ? `${active.type}:${active.startTime}:${active.endTime}` : "";
+    const candidateKey = getSkipIntervalKey(active);
+    const suppressedKey = String(this.skipIntroSuppressedKey || "");
+    if (candidateKey && candidateKey === suppressedKey) {
+      const suppressUntil = Number(this.skipIntroSuppressedUntil || 0);
+      const activeEnd = Number(active?.endTime);
+      const suppressionStillValid = Date.now() < suppressUntil
+        && Number.isFinite(activeEnd)
+        && Number(currentTime) < (activeEnd - 0.5);
+      if (suppressionStillValid) {
+        active = null;
+      } else {
+        this.skipIntroSuppressedKey = "";
+        this.skipIntroSuppressedUntil = 0;
+      }
+    } else if (suppressedKey && (!candidateKey || candidateKey !== suppressedKey)) {
+      this.skipIntroSuppressedKey = "";
+      this.skipIntroSuppressedUntil = 0;
+    }
+    const previousKey = getSkipIntervalKey(previous);
+    const nextKey = getSkipIntervalKey(active);
     if (previousKey !== nextKey) {
       this.skipIntervalDismissed = false;
       this.skipIntroAutoHidden = false;
@@ -2804,8 +2880,11 @@ export const PlayerScreen = {
     if (!this.activeSkipInterval) {
       return false;
     }
-    const targetTime = Number(this.activeSkipInterval.endTime || 0) + 0.25;
-    this.seekPlaybackSeconds(targetTime);
+    const interval = this.activeSkipInterval;
+    const targetTime = Number(interval.endTime || 0) + 0.25;
+    this.skipIntroSuppressedKey = getSkipIntervalKey(interval);
+    this.skipIntroSuppressedUntil = Date.now() + SKIP_INTERVAL_SEEK_SUPPRESSION_MS;
+    this.seekPlaybackSeconds(targetTime, { preserveSkipIntroSuppression: true });
     this.skipIntervalDismissed = false;
     this.activeSkipInterval = null;
     this.skipIntroAutoHidden = false;
@@ -7841,7 +7920,15 @@ export const PlayerScreen = {
       && currentSeconds > 0.2);
   },
 
-  seekPlaybackSeconds(seconds) {
+  clearSkipIntroSeekSuppression() {
+    this.skipIntroSuppressedKey = "";
+    this.skipIntroSuppressedUntil = 0;
+  },
+
+  seekPlaybackSeconds(seconds, { preserveSkipIntroSuppression = false } = {}) {
+    if (!preserveSkipIntroSuppression) {
+      this.clearSkipIntroSeekSuppression();
+    }
     // Mark user-initiated seeks so the player can stay responsive while it settles.
     this.seekLoadingBaselineSeconds = this.getPlaybackCurrentSeconds();
     this.seekLoadingTargetSeconds = Number(seconds || 0);
@@ -11310,7 +11397,7 @@ export const PlayerScreen = {
         selected: Boolean(entry?.selected),
         supported: entry?.supported !== false,
         languageKey,
-        languageLabel: getTrackLanguageLabel(track),
+        languageLabel: getAudioTrackLanguageLabel(track, entry),
         entry,
         entryIndex: index
       };
@@ -15469,6 +15556,8 @@ export const PlayerScreen = {
     this.skipIntroCountdownProgress = 0;
     this.skipIntroCountdownLastTickAt = 0;
     this.skipIntroCountdownStartAt = 0;
+    this.skipIntroSuppressedKey = "";
+    this.skipIntroSuppressedUntil = 0;
     this.stopSkipIntroCountdownAnimation();
     if (this.skipIntroFocusFrame != null && typeof cancelAnimationFrame === "function") {
       cancelAnimationFrame(this.skipIntroFocusFrame);

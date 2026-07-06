@@ -10,6 +10,7 @@ import {
 } from "../../../core/streams/streamAutoPlaySelector.js";
 import { DirectDebridResolver } from "../../../core/debrid/directDebridResolver.js";
 import { DirectDebridStreamPreparer } from "../../../core/debrid/directDebridStreamPreparer.js";
+import { DebridStreamPresentation } from "../../../core/debrid/directDebridStreamPresentation.js";
 import { WebOsEngineFsResolver } from "../../../core/p2p/webosEngineFsResolver.js";
 import { TizenStreamingServerResolver } from "../../../core/p2p/tizenStreamingServerResolver.js";
 import { DebridSettingsStore } from "../../../data/local/debridSettingsStore.js";
@@ -1473,7 +1474,7 @@ export const StreamScreen = {
   getFilteredStreams(filter = this.addonFilter) {
     const orderedStreams = sortStreamsByAddonOrder(this.streams, this.sourceChips);
     if (filter === "all") {
-      return orderedStreams;
+      return DebridStreamPresentation.sortForDisplay(orderedStreams, DebridSettingsStore.get());
     }
     return orderedStreams.filter((stream) => stream.addonName === filter);
   },
