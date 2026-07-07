@@ -2556,12 +2556,10 @@ export const PlayerScreen = {
     const candidateKey = getSkipIntervalKey(active);
     const suppressedKey = String(this.skipIntroSuppressedKey || "");
     if (candidateKey && candidateKey === suppressedKey) {
-      const suppressUntil = Number(this.skipIntroSuppressedUntil || 0);
       const activeEnd = Number(active?.endTime);
-      const suppressionStillValid = Date.now() < suppressUntil
-        && Number.isFinite(activeEnd)
+      const stillInsideSuppressedInterval = Number.isFinite(activeEnd)
         && Number(currentTime) < (activeEnd - 0.5);
-      if (suppressionStillValid) {
+      if (stillInsideSuppressedInterval) {
         active = null;
       } else {
         this.skipIntroSuppressedKey = "";
