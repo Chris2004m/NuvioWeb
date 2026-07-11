@@ -151,6 +151,7 @@ async function syncBuild(targetAppDir, envSourcePath) {
   ]);
 
   await cp(path.join(distDir, "app.bundle.js"), path.join(targetAppDir, "app.bundle.js"));
+  await cp(path.join(distDir, "boot-guard.js"), path.join(targetAppDir, "boot-guard.js"));
   await cp(path.join(distDir, "youtube-proxy.html"), path.join(targetAppDir, "youtube-proxy.html"));
   if (envSourcePath) {
     await writeRuntimeEnvScriptFile(path.join(targetAppDir, "nuvio.env.js"), {
@@ -183,7 +184,8 @@ ${flexGapDetectionScript}  <link rel="stylesheet" href="css/base.css" />
   <link rel="stylesheet" href="css/themes.css" />
 </head>
 <body>
-  <script defer src="main.js"></script>
+  <script src="boot-guard.js"></script>
+  <script defer src="main.js" onerror="window.NuvioBootGuard &amp;&amp; window.NuvioBootGuard.scriptFailed(this.src)"></script>
 </body>
 </html>
 `;
@@ -217,6 +219,14 @@ function loadScript(src) {
   script.async = false;
   script.src = src;
   script.defer = false;
+  script.onerror = function handleStartupScriptError() {
+    if (window.NuvioBootGuard) {
+      window.NuvioBootGuard.scriptFailed(src);
+    }
+  };
+  if (window.NuvioBootGuard) {
+    window.NuvioBootGuard.stage("Loading " + src);
+  }
   document.body.appendChild(script);
 }
 

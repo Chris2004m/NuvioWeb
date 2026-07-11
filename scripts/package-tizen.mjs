@@ -142,7 +142,8 @@ ${flexGapDetectionScript}  <link rel="stylesheet" href="css/base.css" />
   <link rel="stylesheet" href="css/themes.css" />
 </head>
 <body>
-  <script defer src="main.js"></script>
+  <script src="boot-guard.js"></script>
+  <script defer src="main.js" onerror="window.NuvioBootGuard &amp;&amp; window.NuvioBootGuard.scriptFailed(this.src)"></script>
 </body>
 </html>
 `;
@@ -178,6 +179,14 @@ function loadScript(src) {
   script.async = false;
   script.src = src;
   script.defer = false;
+  script.onerror = function handleStartupScriptError() {
+    if (window.NuvioBootGuard) {
+      window.NuvioBootGuard.scriptFailed(src);
+    }
+  };
+  if (window.NuvioBootGuard) {
+    window.NuvioBootGuard.stage("Loading " + src);
+  }
   document.body.appendChild(script);
 }
 
@@ -220,6 +229,7 @@ async function stagePackage({ appId, packageId, version, envSourcePath }) {
     copyDistFolder("css"),
     copyDistFolder("res"),
     cp(path.join(distDir, "app.bundle.js"), path.join(stagingDir, "app.bundle.js")),
+    cp(path.join(distDir, "boot-guard.js"), path.join(stagingDir, "boot-guard.js")),
     cp(path.join(distDir, "youtube-proxy.html"), path.join(stagingDir, "youtube-proxy.html")),
     cp(path.join(rootDir, "assets", "images", "tizenIcon.png"), path.join(stagingDir, "icon.png")),
     writeFile(

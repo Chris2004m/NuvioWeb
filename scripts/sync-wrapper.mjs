@@ -230,6 +230,7 @@ async function syncBuild(targetDir) {
   ]);
 
   await cp(path.join(distDir, "app.bundle.js"), path.join(targetDir, "app.bundle.js"));
+  await cp(path.join(distDir, "boot-guard.js"), path.join(targetDir, "boot-guard.js"));
   await cp(path.join(distDir, "youtube-proxy.html"), path.join(targetDir, "youtube-proxy.html"));
   try {
     await cp(path.join(distDir, "nuvio.env.js"), path.join(targetDir, "nuvio.env.js"));
@@ -268,11 +269,12 @@ ${flexGapDetectionScript}  <link rel="stylesheet" href="css/base.css" />
   <link rel="stylesheet" href="css/themes.css" />
 </head>
 <body>
+  <script src="boot-guard.js"></script>
   <script>window.__NUVIO_PLATFORM__ = "webos";</script>
 ${webOsLegacyPreloadScript}
   <script src="nuvio.env.js"></script>
   <script src="assets/libs/qrcode-generator.js"></script>
-${webOsScriptTag}  <script defer src="app.bundle.js"></script>
+${webOsScriptTag}  <script defer src="app.bundle.js" onerror="window.NuvioBootGuard &amp;&amp; window.NuvioBootGuard.scriptFailed(this.src)"></script>
 </body>
 </html>
 `;
@@ -292,7 +294,8 @@ ${flexGapDetectionScript}  <link rel="stylesheet" href="css/base.css" />
   <link rel="stylesheet" href="css/themes.css" />
 </head>
 <body>
-  <script defer src="main.js"></script>
+  <script src="boot-guard.js"></script>
+  <script defer src="main.js" onerror="window.NuvioBootGuard &amp;&amp; window.NuvioBootGuard.scriptFailed(this.src)"></script>
 </body>
 </html>
 `;
@@ -383,6 +386,14 @@ function buildTizenMainJs({ engineFsServiceId = "" } = {}) {
     script.async = false;
     script.src = src;
     script.defer = false;
+    script.onerror = function handleStartupScriptError() {
+      if (window.NuvioBootGuard) {
+        window.NuvioBootGuard.scriptFailed(src);
+      }
+    };
+    if (window.NuvioBootGuard) {
+      window.NuvioBootGuard.stage("Loading " + src);
+    }
     document.body.appendChild(script);
   }
 

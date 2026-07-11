@@ -69,6 +69,11 @@ export const ConsoleDebugScreen = {
       this.handleClickBound = this.handleClickEvent.bind(this);
       this.container.addEventListener("click", this.handleClickBound);
     }
+    if (!this.handleWheelBound) {
+      this.handleWheelBound = this.handleWheel.bind(this);
+      this.container.addEventListener("wheel", this.handleWheelBound, { passive: false });
+      this.container.addEventListener("mousewheel", this.handleWheelBound, { passive: false });
+    }
     if (!this.unsubscribe) {
       this.unsubscribe = subscribeToConsoleDebugEvents(() => {
         if (Router.getCurrent() !== "debugConsole") {
@@ -87,11 +92,16 @@ export const ConsoleDebugScreen = {
     if (this.container && this.handleClickBound) {
       this.container.removeEventListener("click", this.handleClickBound);
     }
+    if (this.container && this.handleWheelBound) {
+      this.container.removeEventListener("wheel", this.handleWheelBound);
+      this.container.removeEventListener("mousewheel", this.handleWheelBound);
+    }
     if (this.unsubscribe) {
       this.unsubscribe();
     }
     this.unsubscribe = null;
     this.handleClickBound = null;
+    this.handleWheelBound = null;
     this.logScrollTop = Number(this.getLogList()?.scrollTop || this.logScrollTop || 0);
     ScreenUtils.hide(this.container);
   },
@@ -251,6 +261,17 @@ export const ConsoleDebugScreen = {
     this.updateScrollChrome();
   },
 
+  handleWheel(event) {
+    const delta = Number(event?.deltaY || event?.wheelDelta * -1 || 0);
+    if (!delta) {
+      return;
+    }
+    event?.preventDefault?.();
+    this.focusKey = "log";
+    this.applyFocus();
+    this.scrollLog(delta < 0 ? -1 : 1);
+  },
+
   async onKeyDown(event) {
     if (Platform.isBackEvent(event)) {
       event?.preventDefault?.();
@@ -259,6 +280,7 @@ export const ConsoleDebugScreen = {
     }
 
     const code = Number(event?.keyCode || 0);
+    const key = String(event?.key || event?.code || event?.keyName || "").toLowerCase();
     const current = this.container?.querySelector?.(".focusable.focused");
 
     if (code === 13 || code === 23) {
@@ -269,9 +291,11 @@ export const ConsoleDebugScreen = {
       return;
     }
 
-    if (code === 38 || code === 40) {
+    const isUp = code === 38 || code === 33 || key === "arrowup" || key === "up" || key === "pageup";
+    const isDown = code === 40 || code === 34 || key === "arrowdown" || key === "down" || key === "pagedown";
+    if (isUp || isDown) {
       event?.preventDefault?.();
-      const direction = code === 38 ? -1 : 1;
+      const direction = isUp ? -1 : 1;
       if (current?.dataset?.action === "back" && direction > 0) {
         this.focusKey = "log";
         this.applyFocus();

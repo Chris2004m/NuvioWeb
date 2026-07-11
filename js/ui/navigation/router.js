@@ -269,6 +269,11 @@ export const Router = {
       return;
     }
 
+    const bootGuard = globalThis.NuvioBootGuard;
+    if (bootGuard && typeof bootGuard.stage === "function") {
+      bootGuard.stage(`Opening ${routeName} screen`);
+    }
+
     // Cleanup current
     const previousRoute = this.current;
     const shouldSkipPush = skipStackPush || NON_BACKSTACK_ROUTES.has(previousRoute);
@@ -304,6 +309,10 @@ export const Router = {
     // navigation is stale and must not write an extra history entry.
     if (this.current !== routeName || this.currentParams !== targetParams) {
       return;
+    }
+
+    if (bootGuard && typeof bootGuard.ready === "function") {
+      bootGuard.ready();
     }
 
     if (window?.history && typeof window.history.pushState === "function") {

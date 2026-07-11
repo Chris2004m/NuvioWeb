@@ -1830,12 +1830,6 @@ export const ProfileSettingsSyncService = {
       }
       const resolvedProfileId = resolveProfileId(profileId);
       const remoteBlob = await pullRemoteBlob(resolvedProfileId);
-      if (!remoteBlob) {
-        console.warn(
-          "Profile settings sync push skipped: missing remote base blob; refusing to create a partial settings blob"
-        );
-        return false;
-      }
       const blob = buildOutgoingBlob(String(resolvedProfileId), remoteBlob);
       await SupabaseApi.rpc(
         PUSH_RPC,

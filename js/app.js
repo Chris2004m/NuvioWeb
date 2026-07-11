@@ -45,6 +45,13 @@ const SIGNED_OUT_ALLOWED_ROUTES = new Set(["trakt"]);
 let hasSelectedProfileThisSession = false;
 let appShellRendered = false;
 
+function markBootStage(stage) {
+  const guard = globalThis.NuvioBootGuard;
+  if (guard && typeof guard.stage === "function") {
+    guard.stage(stage);
+  }
+}
+
 function isSignedOutRouteAllowed() {
   return SIGNED_OUT_ALLOWED_ROUTES.has(Router.getCurrent());
 }
@@ -61,6 +68,15 @@ function formatErrorMessage(error) {
 
 function renderFatalError(error) {
   const message = formatErrorMessage(error);
+  const guard = globalThis.NuvioBootGuard;
+  if (guard && typeof guard.fail === "function" && guard.isActive?.()) {
+    guard.fail(
+      "Something went wrong while the application was starting.",
+      message,
+      "BOOT-APPLICATION"
+    );
+    return;
+  }
   document.body.innerHTML = `
     <div style="min-height:100vh;background:#0f1115;color:#f4f7fb;padding:48px;font-family:Arial,sans-serif;">
       <div style="max-width:960px;margin:0 auto;">
@@ -384,12 +400,16 @@ function setupWebOsAppLifecycle() {
 }
 
 async function bootstrapApp() {
+  markBootStage("Rendering application shell");
   renderAppShell();
   appShellRendered = true;
+  markBootStage("Initializing TV platform");
   Platform.init();
   applyPerformanceMode();
+  markBootStage("Loading language resources");
   await I18n.init();
 
+  markBootStage("Initializing navigation");
   Router.init();
   PlayerController.init();
 
@@ -400,6 +420,7 @@ async function bootstrapApp() {
   I18n.apply();
   warmStreamingLibs({ delayMs: 1400 });
 
+  markBootStage("Restoring session");
   AuthManager.subscribe((state) => {
     if (state === AuthState.LOADING) {
       StartupSyncService.stop();
@@ -449,6 +470,7 @@ async function bootstrapApp() {
     }
 
     if (state === AuthState.AUTHENTICATED) {
+      markBootStage("Loading profiles");
       LocalStore.remove(GUEST_QR_BYPASS_KEY);
       StartupSyncService.start();
       routeAfterAuthentication().catch((error) => {
@@ -458,6 +480,7 @@ async function bootstrapApp() {
     }
   });
 
+  markBootStage("Checking authentication");
   await AuthManager.bootstrap();
 }
 

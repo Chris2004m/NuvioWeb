@@ -103,10 +103,14 @@
     <link rel="stylesheet" href="css/themes.css?v=20260509s" />
   </head>
   <body>
+    <script src="boot-guard.js"></script>
     <script src="nuvio.env.js"></script>
 
     <script src="assets/libs/qrcode-generator.js"></script>
 
-    <script src="app.bundle.js?v=20260531supporters2"></script>
+    <script
+      src="app.bundle.js?v=20260531supporters2"
+      onerror="window.NuvioBootGuard && window.NuvioBootGuard.scriptFailed(this.src)"
+    ></script>
   </body>
 </html>
