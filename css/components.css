@@ -2286,7 +2286,8 @@ button:focus-visible {
   cursor: pointer;
   color: var(--text-secondary);
   /* ATV profileLeadingInset 18dp -> 36px */
-  padding: 0 var(--legacy-sidebar-label-end) 0 36px;
+  /* ATV profile row has no trailing inset, leaving 88dp for the profile name. */
+  padding: 0 0 0 36px;
   justify-content: flex-start;
   opacity: 0;
   visibility: hidden;

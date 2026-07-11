@@ -104,6 +104,7 @@ function getSidebarTextFitTargets(container) {
       [
         ".home-sidebar .home-nav-label",
         ".modern-sidebar-panel .modern-sidebar-nav-label",
+        ".modern-sidebar-panel .modern-sidebar-profile-name",
         ".modern-sidebar-pill-label"
       ].join(", ")
     ) || []
@@ -165,6 +166,11 @@ function fitRootSidebarText(container) {
     }
     if (node.matches(".modern-sidebar-pill-label")) {
       fitSidebarLabel(node, 28);
+      return;
+    }
+    if (node.matches(".modern-sidebar-profile-name")) {
+      // Android TV AutoResizeText uses a 9sp floor; the Web TV canvas is 2x.
+      fitSidebarLabel(node, 18);
       return;
     }
     fitSidebarLabel(node, 30);
