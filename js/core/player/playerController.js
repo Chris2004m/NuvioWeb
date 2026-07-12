@@ -2169,29 +2169,35 @@ export const PlayerController = {
       return null;
     }
 
-    const video = this.video;
-    const durationSeconds = Number(video?.duration || 0);
-    const currentSeconds = Number(video?.currentTime || 0);
-    const ranges = video?.buffered;
-    if (
-      !ranges
-      || !Number.isFinite(durationSeconds)
-      || durationSeconds <= 0
-      || !Number.isFinite(currentSeconds)
-      || currentSeconds < 0
-    ) {
-      return null;
-    }
-
     try {
-      for (let index = 0; index < Number(ranges.length || 0); index += 1) {
+      const video = this.video;
+      const durationSeconds = Number(video?.duration || 0);
+      const currentSeconds = Number(video?.currentTime || 0);
+      const ranges = video?.buffered;
+      if (
+        !ranges
+        || !Number.isFinite(durationSeconds)
+        || durationSeconds <= 0
+        || !Number.isFinite(currentSeconds)
+        || currentSeconds < 0
+      ) {
+        return null;
+      }
+
+      const rangeCount = Number(ranges.length || 0);
+      if (!Number.isFinite(rangeCount) || rangeCount <= 0) {
+        return null;
+      }
+      for (let index = 0; index < rangeCount; index += 1) {
         const startSeconds = Number(ranges.start(index));
         const endSeconds = Number(ranges.end(index));
         if (
           Number.isFinite(startSeconds)
           && Number.isFinite(endSeconds)
-          && startSeconds <= currentSeconds + 0.25
-          && endSeconds >= currentSeconds - 0.25
+          && startSeconds >= 0
+          && endSeconds >= startSeconds
+          && startSeconds <= currentSeconds
+          && endSeconds >= currentSeconds
         ) {
           return Math.max(0, Math.min(endSeconds, durationSeconds));
         }

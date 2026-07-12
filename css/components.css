@@ -11433,7 +11433,7 @@ html.legacy-webos .debug-console-log-frame {
 }
 
 .player-progress-buffered.is-visible {
-  opacity: 0.4;
+  opacity: 0.35;
 }
 
 .player-progress-fill {
