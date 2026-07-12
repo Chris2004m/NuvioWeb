@@ -7751,7 +7751,11 @@ export const MetaDetailsScreen = {
         );
       if (direction === "up") {
         if (seasons.length) {
-          return this.focusInList(seasons, this.getSelectedSeasonIndex(seasons)) || true;
+          return (
+            this.focusInList(seasons, this.getSelectedSeasonIndex(seasons), {
+              preserveVerticalScroll: true
+            }) || true
+          );
         }
         if (actions.length) {
           return (
