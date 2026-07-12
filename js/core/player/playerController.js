@@ -1223,6 +1223,8 @@ export const PlayerController = {
     if (nudge) {
       this.nudgeAvPlayAfterTrackSwitch();
     }
+    this.reapplyTizenAvPlayDisplayRect();
+    this.reapplyTizenAvPlayDisplayRect(250);
     logTizenAvPlayDebug("Tizen AVPlay subtitle selection requested", {
       state: this.getAvPlayState(),
       targetIndex
