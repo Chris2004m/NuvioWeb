@@ -42,8 +42,18 @@ function hasActiveModal() {
   return Boolean(globalThis?.document?.body?.classList?.contains("nuvio-modal-open"));
 }
 
+const BACK_DEBOUNCE_MS = 250;
+const TIZEN_PAIRED_BACK_EVENT_WINDOW_MS = 3000;
+
+function getBackInputChannel(event) {
+  return String(event?.type || "").toLowerCase() === "tizenhwkey"
+    ? "tizenhwkey"
+    : "keydown";
+}
+
 export const FocusEngine = {
   lastBackHandledAt: 0,
+  lastBackHandledChannel: "",
   lastPointerFocusTarget: null,
   pointerMoveFrame: null,
   pendingPointerMoveEvent: null,
@@ -88,12 +98,27 @@ export const FocusEngine = {
 
   handleBack(event, normalizedEvent = buildNormalizedEvent(event)) {
     const now = Date.now();
-    if (now - this.lastBackHandledAt < 250) {
-      event?.preventDefault?.();
-      event?.stopImmediatePropagation?.();
+    const elapsedSinceHandled = now - Number(this.lastBackHandledAt || 0);
+    const inputChannel = getBackInputChannel(event);
+    const isPairedTizenEvent = Boolean(
+      Platform.isTizen() &&
+      this.lastBackHandledChannel &&
+      this.lastBackHandledChannel !== inputChannel &&
+      elapsedSinceHandled < TIZEN_PAIRED_BACK_EVENT_WINDOW_MS
+    );
+    if (
+      normalizedEvent.repeat ||
+      elapsedSinceHandled < BACK_DEBOUNCE_MS ||
+      isPairedTizenEvent
+    ) {
+      normalizedEvent.preventDefault();
+      normalizedEvent.stopPropagation();
+      normalizedEvent.stopImmediatePropagation();
+      Router.consumeRouteReturnBackGuard?.();
       return;
     }
     this.lastBackHandledAt = now;
+    this.lastBackHandledChannel = inputChannel;
 
     normalizedEvent.preventDefault();
     normalizedEvent.stopPropagation();
