@@ -4811,6 +4811,11 @@ export const SettingsScreen = {
     this.actionMap.set("playback:skipIntro", () => {
       PlayerSettingsStore.set({ skipIntroEnabled: !PlayerSettingsStore.get().skipIntroEnabled });
     });
+    this.actionMap.set("playback:forceDtsTrueHd", () => {
+      PlayerSettingsStore.set({
+        forceDtsTrueHdAudio: !PlayerSettingsStore.get().forceDtsTrueHdAudio
+      }, { silentSync: true });
+    });
     this.actionMap.set("playback:nextEpisodeThresholdMode", () => {
       this.openOptionDialog({
         title: t("settings.playback.nextEpisodeThresholdMode.title", {}, "Next episode threshold"),
@@ -5160,6 +5165,16 @@ export const SettingsScreen = {
           subtitle: t("settings.playback.preferredAudio.subtitle"),
           value: labelForPlaybackLanguage(model.player.preferredAudioLanguage)
         })}
+        ${Platform.isWebOS() ? this.renderToggleRow({
+          focusKey: "playback:forceDtsTrueHd",
+          title: t("settings.playback.forceDtsTrueHd.title", {}, "Force DTS/TrueHD audio"),
+          subtitle: t(
+            "settings.playback.forceDtsTrueHd.subtitle",
+            {},
+            "Keep DTS/TrueHD audio tracks selectable on rooted TVs where the codec was restored. Leave off unless your TV can actually decode them."
+          ),
+          checked: Boolean(model.player.forceDtsTrueHdAudio)
+        }) : ""}
       </div>
     `;
 

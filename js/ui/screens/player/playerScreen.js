@@ -9998,6 +9998,11 @@ export const PlayerScreen = {
         return;
       }
 
+      if (typeof PlayerController.setForceDtsTrueHdAudio === "function") {
+        PlayerController.setForceDtsTrueHdAudio(
+          Boolean(PlayerSettingsStore.get().forceDtsTrueHdAudio)
+        );
+      }
       const capabilityPromise = Environment.isWebOS()
         && typeof PlayerController.refreshWebOsDeviceInfo === "function"
         ? PlayerController.refreshWebOsDeviceInfo()

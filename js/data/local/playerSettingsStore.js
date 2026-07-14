@@ -30,6 +30,9 @@ const DEFAULTS = {
   },
   audioAmplificationDb: 0,
   persistAudioAmplification: false,
+  // Device-specific override for rooted webOS TVs (e.g. dts_restore on LG C5).
+  // Keep this preference local to the current profile and device.
+  forceDtsTrueHdAudio: false,
   // Auto stream selection (matches the Android TV app). When the mode is not
   // MANUAL, pressing play auto-selects a stream and plays it after a countdown.
   streamAutoPlayMode: "MANUAL",

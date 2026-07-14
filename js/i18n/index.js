@@ -274,6 +274,8 @@ const KEY_ALIASES = {
   "settings.playback.groups.stream.title": "playback_section_player",
   "settings.playback.groups.subtitles.subtitle": "playback_section_subtitles_desc",
   "settings.playback.groups.subtitles.title": "playback_section_subtitles",
+  "settings.playback.forceDtsTrueHd.subtitle": "audio_force_dts_truehd_desc",
+  "settings.playback.forceDtsTrueHd.title": "audio_force_dts_truehd",
   "settings.playback.preferredAudio.title": "audio_preferred_lang",
   "settings.playback.subtitleLanguage.title": "sub_preferred_lang",
   "settings.playback.useForcedSubtitles.subtitle": "sub_use_forced_subtitles_desc",

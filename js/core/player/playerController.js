@@ -111,6 +111,7 @@ export const PlayerController = {
   appliedWebOsSubtitleFontSizeKey: "",
   webosDeviceInfoPromise: null,
   webosUnsupportedAudioCodecs: new Set(["dts", "truehd"]),
+  forceDtsTrueHdAudio: false,
   viewportSyncHandler: null,
   avplayDisplayRect: null,
   avplayDisplayMethod: "PLAYER_DISPLAY_MODE_FULL_SCREEN",
@@ -365,11 +366,21 @@ export const PlayerController = {
     return this.webosDeviceInfoPromise;
   },
 
+  setForceDtsTrueHdAudio(enabled) {
+    this.forceDtsTrueHdAudio = Boolean(enabled);
+  },
+
   getWebOsUnsupportedAudioCodecs() {
+    if (this.forceDtsTrueHdAudio) {
+      return [];
+    }
     return Array.from(this.webosUnsupportedAudioCodecs);
   },
 
   getWebOsUnsupportedAudioPenalty(text = "") {
+    if (this.forceDtsTrueHdAudio) {
+      return 0;
+    }
     const normalizedText = String(text || "")
       .toLowerCase()
       .replace(/[_-]+/g, " ")
