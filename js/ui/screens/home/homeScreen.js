@@ -6819,7 +6819,9 @@ export const HomeScreen = {
     this.ensureDelegatedEventsBound();
     this.sidebarExpanded = false;
     this.sidebarOpenedByBack = false;
-    this.pillIconOnly = false;
+    this.pillIconOnly = Boolean(
+      navigationContext?.isBackNavigation && returnFocusState?.focusKind !== "sidebar"
+    );
     this.cancelModernSidebarPillAutoCollapse();
     this.homeRouteEnterPending = !(navigationContext?.isBackNavigation || returnFocusState?.layoutMode);
     this.destroyHomeHoldDialog();
@@ -6883,7 +6885,7 @@ export const HomeScreen = {
       this.container.classList.remove("home-dom-preserved");
       this.container.style.removeProperty("visibility");
       this.container.style.removeProperty("pointer-events");
-      setModernSidebarPillIconOnly(this.container, false);
+      setModernSidebarPillIconOnly(this.container, this.pillIconOnly);
       this.scheduleModernSidebarPillAutoCollapse();
       this.homeLoadToken = (this.homeLoadToken || 0) + 1;
       this.bindHomeViewportEvents();
