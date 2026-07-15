@@ -1,3 +1,4 @@
+import "core-js/stable/global-this";
 import "core-js/stable/object/from-entries";
 import "core-js/stable/array/flat";
 import "core-js/stable/array/flat-map";
