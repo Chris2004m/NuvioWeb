@@ -14164,18 +14164,25 @@ export const PlayerScreen = {
             const addonLogoUrl = showAddonLogo
               ? getPlayerSourceLogoDisplayUrl(stream.addonLogo, () => this.scheduleSourceLogoRender())
               : "";
-            const sourceSide = showAddonLogo || isCurrent
+            const playingMarker = isCurrent
+              ? `<div class="player-source-playing">${escapeHtml(t("sources_playing", {}, "Playing"))}</div>`
+              : "";
+            const sourceTitle = `<div class="player-source-title">${escapeHtml(stream.label || "Stream")}</div>`;
+            const mainTitle = !showAddonLogo && playingMarker
+              ? `<div class="player-source-title-row">${sourceTitle}${playingMarker}</div>`
+              : sourceTitle;
+            const sourceSide = showAddonLogo
               ? `<div class="player-source-side">
-                  ${showAddonLogo && addonLogoUrl ? `<img class="player-source-logo" src="${escapeAttribute(addonLogoUrl)}" alt="" decoding="async" loading="lazy" referrerpolicy="no-referrer" />` : ""}
-                  ${showAddonLogo ? `<div class="player-source-addon">${escapeHtml(stream.addonName || t("nav_addons", {}, "Addon"))}</div>` : ""}
-                  ${isCurrent ? `<div class="player-source-playing">${escapeHtml(t("sources_playing", {}, "Playing"))}</div>` : ""}
+                  ${addonLogoUrl ? `<img class="player-source-logo" src="${escapeAttribute(addonLogoUrl)}" alt="" decoding="async" loading="lazy" referrerpolicy="no-referrer" />` : ""}
+                  <div class="player-source-addon">${escapeHtml(stream.addonName || t("nav_addons", {}, "Addon"))}</div>
+                  ${playingMarker}
                 </div>`
               : "";
             return `
               <article class="player-source-card${sourceSide ? "" : " no-side"} focusable${focused ? " focused" : ""}${isCurrent ? " selected" : ""}" data-sources-zone="list" data-sources-index="${index}">
                 <div class="player-source-main">
                   ${topBadges}
-                  <div class="player-source-title">${escapeHtml(stream.label || "Stream")}</div>
+                  ${mainTitle}
                   <div class="player-source-desc">${escapeHtml(stream.description || stream.addonName || "")}</div>
                   ${bottomBadges}
                 </div>

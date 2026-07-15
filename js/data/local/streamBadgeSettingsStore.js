@@ -11,7 +11,7 @@ const LEGACY_DEBRID_KEY = "debridSettings";
 const DEFAULT_STREAM_BADGE_SETTINGS = {
   rules: { imports: [] },
   showFileSizeBadges: true,
-  showAddonLogo: false,
+  showAddonLogo: true,
   badgePlacement: "BOTTOM"
 };
 
@@ -41,7 +41,7 @@ function normalizeStreamBadgeSettings(value = {}) {
   return {
     rules: normalizeStreamBadgeRules(rulesSource),
     showFileSizeBadges: showFileSizeBadges !== false,
-    showAddonLogo: showAddonLogo === true,
+    showAddonLogo: showAddonLogo !== false,
     badgePlacement: normalizeBadgePlacement(badgePlacement)
   };
 }
