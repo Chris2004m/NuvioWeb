@@ -439,6 +439,10 @@ function cleanDisplayText(value) {
     .trim();
 }
 
+function normalizeSubtitleRenderMode(value) {
+  return String(value || "").trim().toLowerCase() === "html" ? "html" : "native";
+}
+
 function capitalizeDisplayLabel(value) {
   const text = cleanDisplayText(value);
   if (!text) {
@@ -1011,7 +1015,11 @@ function isForcedSubtitleTrack(track = {}) {
     return true;
   }
   const searchText = getTrackMetadataStrings(track).join(" ").toLowerCase();
-  return /\b(forced|forc|forzato|forzata|forzati|forzate)\b/.test(searchText);
+  const hasForcedName = /\b(forced|forc|forzato|forzata|forzati|forzate)\b/.test(searchText);
+  // Match Android TV: anime releases commonly label forced dialogue tracks as
+  // "Songs & Signs" without exposing "forced" in the track name.
+  const isSongsAndSigns = searchText.includes("songs") && searchText.includes("sign");
+  return hasForcedName || isSongsAndSigns;
 }
 
 function getSubtitleEntryLanguageSource(entry = {}) {
@@ -2299,6 +2307,7 @@ export const PlayerScreen = {
     this.mediaSessionActions = [];
 
     const playerSettings = PlayerSettingsStore.get();
+    this.subtitleRenderMode = normalizeSubtitleRenderMode(playerSettings.subtitleRenderMode);
     this.subtitleDelayMs = 0;
     this.subtitleStyleSettings = {
       ...playerSettings.subtitleStyle,
@@ -11677,12 +11686,14 @@ export const PlayerScreen = {
           key: option.languageKey,
           label: option.languageLabel || subtitleLanguageLabel(option.languageKey),
           selected: false,
-          count: 0
+          count: 0,
+          hasInternalTracks: false
         });
       }
       const group = groups.get(option.languageKey);
       group.count += 1;
       group.selected = group.selected || Boolean(option.selected);
+      group.hasInternalTracks = group.hasInternalTracks || option.sourceType === "internal";
     });
     groups.set(SUBTITLE_LANGUAGE_OFF_KEY, {
       key: SUBTITLE_LANGUAGE_OFF_KEY,
@@ -11720,6 +11731,7 @@ export const PlayerScreen = {
         !showOnlyPreferredLanguages
         || entry.key === SUBTITLE_LANGUAGE_OFF_KEY
         || entry.key === selectedLanguageKey
+        || (entry.key === SUBTITLE_LANGUAGE_UNKNOWN_KEY && entry.hasInternalTracks)
         || matchesPreferredLanguage(entry.key)
       ))
       .sort((left, right) => {
@@ -12573,7 +12585,7 @@ export const PlayerScreen = {
     if (Environment.isTizen() && typeof PlayerController.isUsingAvPlay === "function" && PlayerController.isUsingAvPlay()) {
       const nativeTrackIndex = Number(embeddedTrack?.nativeTrackIndex);
       applied = typeof PlayerController.setAvPlaySubtitleTrack === "function" && Number.isFinite(nativeTrackIndex)
-        ? PlayerController.setAvPlaySubtitleTrack(nativeTrackIndex)
+        ? PlayerController.setAvPlaySubtitleTrack(nativeTrackIndex, { renderMode: this.subtitleRenderMode })
         : false;
     } else {
       const nativeTrackIndex = Number(embeddedTrack?.nativeTrackIndex);
@@ -12664,7 +12676,7 @@ export const PlayerScreen = {
     if (Object.prototype.hasOwnProperty.call(entry, "avplaySubtitleTrackIndex")) {
       const targetTrackIndex = Number(entry.avplaySubtitleTrackIndex);
       const applied = typeof PlayerController.setAvPlaySubtitleTrack === "function"
-        ? PlayerController.setAvPlaySubtitleTrack(targetTrackIndex)
+        ? PlayerController.setAvPlaySubtitleTrack(targetTrackIndex, { renderMode: this.subtitleRenderMode })
         : false;
       if (!applied) {
         return;
