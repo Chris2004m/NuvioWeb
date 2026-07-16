@@ -13172,35 +13172,6 @@ export const PlayerScreen = {
   },
 
   getMergedAudioTrackEntries(audioTracks = []) {
-    if (Environment.isWebOS() && this.embeddedAudioTracks.length) {
-      return this.embeddedAudioTracks.map((track, index) => {
-        const embeddedTrackIndex = Number(track?.embeddedTrackIndex);
-        const normalizedEmbeddedIndex = Number.isFinite(embeddedTrackIndex) && embeddedTrackIndex >= 0
-          ? embeddedTrackIndex
-          : index;
-        const nativeTrackIndex = Number(track?.nativeTrackIndex);
-        const display = formatAudioTrackDisplay(track, index);
-        const support = getAudioTrackSupportState(track);
-        return {
-          id: `audio-embedded-${normalizedEmbeddedIndex}`,
-          label: display.label,
-          secondary: display.secondary,
-          selected: this.selectedEmbeddedAudioTrackIndex >= 0
-            ? normalizedEmbeddedIndex === this.selectedEmbeddedAudioTrackIndex
-            : Number.isFinite(nativeTrackIndex)
-              && nativeTrackIndex >= 0
-              && nativeTrackIndex === this.selectedAudioTrackIndex,
-          supported: support.supported,
-          unsupportedReason: support.unsupportedReason,
-          embeddedAudioTrackIndex: normalizedEmbeddedIndex,
-          track: {
-            ...track,
-            ...support
-          }
-        };
-      });
-    }
-
     const entries = [];
     const representedEmbeddedIndexes = new Set();
 
