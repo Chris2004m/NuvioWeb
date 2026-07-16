@@ -231,6 +231,7 @@ const LANGUAGE_CODE_ALIASES = {
   bel: "be",
   ben: "bn",
   bos: "bs",
+  br: "pt-br",
   bul: "bg",
   bur: "my",
   cat: "ca",
@@ -351,6 +352,8 @@ const LANGUAGE_NAME_ALIASES = {
   portuguese: "pt",
   "portuguese br": "pt-br",
   "portuguese brazil": "pt-br",
+  "portuguese brasil": "pt-br",
+  "portuguese do brasil": "pt-br",
   "portugues brasil": "pt-br",
   "portugues do brasil": "pt-br",
   portoghese: "pt",
@@ -752,9 +755,16 @@ function inferAudioTrackDisplayLanguageCode(track = {}, entry = {}) {
 }
 
 function inferAudioTrackLanguageKey(track = {}, entry = {}) {
-  const explicit = normalizeTrackLanguageCode(getTrackLanguageValue(track));
+  const explicit = detectTrackLanguageVariant(track, getTrackLanguageValue(track));
   const displayCode = inferAudioTrackDisplayLanguageCode(track, entry);
-  if (explicit && displayCode && explicit.split("-")[0] !== displayCode.split("-")[0]) {
+  if (
+    displayCode
+    && (
+      !explicit
+      || explicit.split("-")[0] !== displayCode.split("-")[0]
+      || (!explicit.includes("-") && displayCode.includes("-"))
+    )
+  ) {
     return displayCode;
   }
   if (explicit) {
@@ -1026,7 +1036,7 @@ function getSubtitleEntryLanguageSource(entry = {}) {
   const track = entry?.track || entry;
   const explicitLanguage = getTrackLanguageValue(track) || getTrackLanguageValue(entry);
   if (explicitLanguage) {
-    return detectSubtitleTrackLanguageVariant(track, explicitLanguage);
+    return detectTrackLanguageVariant(track, explicitLanguage);
   }
   const secondaryLanguage = normalizeTrackLanguageCode(entry.secondary) ? entry.secondary : "";
   if (secondaryLanguage) {
@@ -1036,7 +1046,7 @@ function getSubtitleEntryLanguageSource(entry = {}) {
   return isGenericSubtitleTrackLabel(fallbackLabel) ? "" : fallbackLabel;
 }
 
-function detectSubtitleTrackLanguageVariant(track = {}, language = getTrackLanguageValue(track)) {
+function detectTrackLanguageVariant(track = {}, language = getTrackLanguageValue(track)) {
   const normalizedLanguage = normalizeTrackLanguageCode(language) || inferTrackLanguageCodeFromText(language);
   if (!normalizedLanguage) {
     return "";
@@ -12169,6 +12179,10 @@ export const PlayerScreen = {
     }
     const options = this.collectAudioOptionItems();
     for (const target of normalizedTargets) {
+      const exactOption = options.find((entry) => entry.supported && entry.languageKey === target);
+      if (exactOption) {
+        return exactOption;
+      }
       const matchingOption = options.find((entry) => entry.supported && this.matchesStartupAudioTarget(entry, target));
       if (matchingOption) {
         return matchingOption;
@@ -12299,18 +12313,18 @@ export const PlayerScreen = {
       if (mode === "audio-forced") {
         const forcedInternal = findMatch(target, { sourceType: "internal", forced: true });
         if (forcedInternal) return forcedInternal;
-        const forcedAddon = findMatch(target, { sourceType: "addon", forced: true });
-        if (forcedAddon) return forcedAddon;
         if (Environment.isWebOS()) {
           // webOS can omit the container forced flag exposed by Android's
-          // ExoPlayer. Only fall back when one internal language match exists,
-          // so an unmarked forced track remains deterministic and addon/full
-          // subtitle choices are not guessed between multiple candidates.
+          // ExoPlayer. Preserve Android's internal-before-addon priority, but
+          // only when one internal language match exists so we do not guess
+          // between multiple unmarked tracks.
           const internalMatches = options.filter((entry) => (
             entry.sourceType === "internal" && matchTarget(entry, target)
           ));
           if (internalMatches.length === 1) return internalMatches[0];
         }
+        const forcedAddon = findMatch(target, { sourceType: "addon", forced: true });
+        if (forcedAddon) return forcedAddon;
         continue;
       }
 
@@ -12350,17 +12364,32 @@ export const PlayerScreen = {
     }
 
     const configuredPreferenceMode = this.getStartupSubtitlePreferenceMode();
+    const preferredSubtitleTargets = this.getStartupPreferredSubtitleLanguageTargets();
+    const selectedAudioOption = this.collectAudioOptionItems().find((entry) => entry.selected && entry.languageKey);
+    if (
+      configuredPreferenceMode !== "off"
+      && !this.startupAudioPreferenceApplied
+      && this.isAudioPreferenceDiscoveryPending()
+    ) {
+      return false;
+    }
     const forcedTarget = configuredPreferenceMode === "audio-forced"
       ? this.getStartupForcedSubtitleLanguageTarget()
       : null;
     // Match Android TV: forced-only applies when the selected audio already
     // matches the subtitle language; foreign audio uses normal subtitles.
-    const preferenceMode = configuredPreferenceMode === "audio-forced" && !forcedTarget
-      ? "language"
-      : configuredPreferenceMode;
+    const audioMatchesPreferredSubtitleLanguage = Boolean(
+      configuredPreferenceMode === "language"
+      && preferredSubtitleTargets[0]
+      && selectedAudioOption
+      && this.matchesStartupAudioTarget(selectedAudioOption, preferredSubtitleTargets[0])
+    );
+    const preferenceMode = audioMatchesPreferredSubtitleLanguage
+      ? "off"
+      : (configuredPreferenceMode === "audio-forced" && !forcedTarget ? "language" : configuredPreferenceMode);
     const preferredTargets = preferenceMode === "audio-forced"
-      ? (forcedTarget ? [forcedTarget] : this.getStartupPreferredSubtitleLanguageTargets())
-      : this.getStartupPreferredSubtitleLanguageTargets();
+      ? (forcedTarget ? [forcedTarget] : preferredSubtitleTargets)
+      : preferredSubtitleTargets;
     const isStillLoading = this.isSubtitlePreferenceDiscoveryPending();
 
     if (this.shouldUseStartupForcedSubtitles() && !this.collectAudioOptionItems().some((entry) => entry.selected && entry.languageKey) && this.isAudioPreferenceDiscoveryPending()) {

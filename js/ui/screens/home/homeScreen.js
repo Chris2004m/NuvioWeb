@@ -6273,7 +6273,7 @@ export const HomeScreen = {
         if (delta <= 1) {
           return;
         }
-        if (Platform.isBrowser() && this.isPerformanceConstrained()) {
+        if (Platform.isTizen() || (Platform.isBrowser() && this.isPerformanceConstrained())) {
           this.cancelScrollAnimation(next.container, "y");
           next.container.scrollTop = Math.round(Number(next.value || 0));
           return;
