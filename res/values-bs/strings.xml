@@ -692,6 +692,7 @@
     <string name="trakt_hide_unaired">Sakrij neemitovane epizode</string>
     <string name="trakt_all_history">Cijela historija</string>
     <string name="trakt_days_format">%1$d dana</string>
+    <string name="trakt_status_cw_window_updated">Prozor za Nastavi gledati je ažuriran</string>
     <string name="debug_title">Debug</string>
     <string name="debug_subtitle">Alati za programere i opcije (samo za debug buildove)</string>
     <string name="debug_section_popup">Testiranje Popupova / Dijaloga</string>

@@ -450,6 +450,7 @@
     <string name="trakt_hide_unaired">Verberg niet-uitgezonden afleveringen</string>
     <string name="trakt_all_history">Volledige geschiedenis</string>
     <string name="trakt_days_format">%1$d dagen</string>
+    <string name="trakt_status_cw_window_updated">Venster Verder kijken bijgewerkt</string>
     <string name="debug_title">Foutopsporing</string>
     <string name="debug_subtitle">Ontwikkelaarstools en feature flags (alleen debug-builds)</string>
     <string name="debug_section_popup">Popup / Dialoog testen</string>

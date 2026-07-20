@@ -683,6 +683,7 @@
     <string name="trakt_hide_unaired">إخفاء الحلقات التي لم تعرض</string>
     <string name="trakt_all_history">كل السجل</string>
     <string name="trakt_days_format">%1$d أيام</string>
+    <string name="trakt_status_cw_window_updated">حُدثت نافذة المتابعة</string>
     <string name="debug_title">معالجة الأخطاء</string>
     <string name="debug_subtitle">أدوات المطورين وميزات الاختبار (لإصدارات التصحيح فقط)</string>
     <string name="debug_section_popup">اختبار النوافذ المنبثقة</string>

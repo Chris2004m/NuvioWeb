@@ -7878,8 +7878,7 @@ button:focus-visible {
 }
 
 .trakt-route-shell .settings-trakt-dialog,
-.trakt-route-shell .settings-trakt-confirm-dialog,
-.trakt-route-shell .settings-trakt-grid-dialog {
+.trakt-route-shell .settings-trakt-confirm-dialog {
   width: min(1240px, calc(100vw - 320px));
 }
 
@@ -8803,15 +8802,6 @@ button:focus-visible {
   width: min(620px, calc(100vw - 160px));
 }
 
-.settings-trakt-grid-dialog {
-  width: min(620px, calc(100vw - 160px));
-}
-
-.settings-trakt-grid-dialog .settings-dialog-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
 .settings-layout-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -9435,6 +9425,27 @@ button:focus-visible {
   line-height: 40px;
   font-weight: 500;
   letter-spacing: 0.1px;
+}
+
+.settings-single-choice-option {
+  justify-content: space-between;
+}
+
+.settings-single-choice-option .settings-dialog-option-label {
+  min-width: 0;
+  flex: 1;
+}
+
+.settings-single-choice-option-check {
+  margin-left: 12px;
+  color: var(--secondary-color);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.settings-single-choice-option.focused .settings-single-choice-option-check {
+  color: #111;
 }
 
 .settings-text-dialog,

@@ -536,6 +536,7 @@
     <string name="trakt_hide_unaired">अनएयर्ड एपिसोड छुपाएँ</string>
     <string name="trakt_all_history">सारा इतिहास</string>
     <string name="trakt_days_format">%1$d दिन</string>
+    <string name="trakt_status_cw_window_updated">देखना जारी रखें विंडो अपडेट की गई</string>
     <string name="debug_title">डीबग</string>
     <string name="debug_subtitle">डेवलपर टूल्स और फीचर फ्लैग्स (केवल डीबग बिल्ड)</string>
     <string name="debug_section_popup">पॉपअप / डायलॉग टेस्टिंग</string>

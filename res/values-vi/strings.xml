@@ -456,6 +456,7 @@
     <string name="trakt_hide_unaired">Ẩn tập chưa phát sóng</string>
     <string name="trakt_all_history">Toàn bộ lịch sử</string>
     <string name="trakt_days_format">%1$d ngày</string>
+    <string name="trakt_status_cw_window_updated">Đã cập nhật cửa sổ Xem tiếp</string>
     <string name="debug_title">Gỡ lỗi</string>
     <string name="debug_subtitle">Công cụ nhà phát triển và cờ tính năng (chỉ bản debug)</string>
     <string name="debug_section_popup">Kiểm tra Popup / Hộp thoại</string>

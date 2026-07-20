@@ -547,6 +547,7 @@
     <string name="trakt_hide_unaired">Dölj osända avsnitt</string>
     <string name="trakt_all_history">All historik</string>
     <string name="trakt_days_format">%1$d dagar</string>
+    <string name="trakt_status_cw_window_updated">Fortsätt titta-fönstret har uppdaterats</string>
     <string name="debug_title">Debug</string>
     <string name="debug_subtitle">Utvecklarverktyg och funktionsflaggor (endast debug-byggen)</string>
     <string name="debug_section_popup">Popup / dialogtestning</string>

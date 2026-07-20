@@ -460,6 +460,7 @@
     <string name="trakt_hide_unaired">Dölj osända avsnitt</string>
     <string name="trakt_all_history">All historik</string>
     <string name="trakt_days_format">%1$d dagar</string>
+    <string name="trakt_status_cw_window_updated">Fortsätt titta-fönstret har uppdaterats</string>
 
     <!-- DebugSettingsScreen -->
     <string name="debug_title">Debug</string>

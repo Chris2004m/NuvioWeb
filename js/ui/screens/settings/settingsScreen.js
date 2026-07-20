@@ -2457,11 +2457,11 @@ export const SettingsScreen = {
       returnFocusKey,
       dialogClassName,
       optionRenderer,
-      // Grid and compact action dialogs use this so dpad left/right can move
-      // between visually adjacent options.
+      // Compact action dialogs can opt into multiple columns so dpad left/right
+      // can move between visually adjacent options.
       optionColumns: Number.isFinite(Number(optionColumns))
         ? Math.max(1, Math.trunc(Number(optionColumns)))
-        : (String(dialogClassName || "").includes("settings-trakt-grid-dialog") ? 2 : 1)
+        : 1
     };
     const selectedIndex = this.optionDialog.options.findIndex(
       (option) => String(option.id) === String(selectedId)
@@ -2560,6 +2560,7 @@ export const SettingsScreen = {
       ? ` ${escapeHtml(this.optionDialog.dialogClassName)}`
       : "";
     const useLanguageRenderer = this.optionDialog.optionRenderer === "subtitle-language";
+    const useSingleChoiceRenderer = this.optionDialog.optionRenderer === "single-choice";
     const useMultiRenderer = this.optionDialog.optionRenderer === "multi";
     const isP2pConsentDialog =
       String(this.optionDialog.dialogClassName || "") === "settings-p2p-consent-dialog";
@@ -2580,7 +2581,7 @@ export const SettingsScreen = {
                   ? this.optionDialog.selectedIds?.has?.(optionId)
                   : optionId === String(this.optionDialog.selectedId);
                 return `
-              <button class="settings-dialog-option settings-content-focusable focusable${useLanguageRenderer ? " settings-language-option" : ""}${isSelected ? " is-selected" : ""}"
+              <button class="settings-dialog-option settings-content-focusable focusable${useLanguageRenderer ? " settings-language-option" : ""}${useSingleChoiceRenderer ? " settings-single-choice-option" : ""}${isSelected ? " is-selected" : ""}"
                       data-zone="dialog"
                       data-dialog-index="${index}"
                       data-dialog-option-id="${escapeHtml(option.id)}">
@@ -2603,7 +2604,9 @@ export const SettingsScreen = {
                     </span>`
                     : useMultiRenderer
                       ? `<span class="settings-dialog-option-label">${escapeHtml(translateOptionLabel(option))}</span><span class="settings-language-option-check" aria-hidden="true">${isSelected ? "&#10003;" : ""}</span>`
-                      : `<span class="settings-dialog-option-label">${escapeHtml(translateOptionLabel(option))}</span>`
+                      : useSingleChoiceRenderer
+                        ? `<span class="settings-dialog-option-label">${escapeHtml(translateOptionLabel(option))}</span>${isSelected ? '<span class="settings-single-choice-option-check" aria-hidden="true">&#10003;</span>' : ""}`
+                        : `<span class="settings-dialog-option-label">${escapeHtml(translateOptionLabel(option))}</span>`
                 }
               </button>
             `
@@ -5719,16 +5722,26 @@ export const SettingsScreen = {
     this.actionMap.set("trakt:cwWindow", () => {
       this.openOptionDialog({
         title: t("trakt_cw_window_title", {}, "Continue Watching Window"),
+        message: t(
+          "trakt_cw_window_subtitle",
+          {},
+          "Choose how much Trakt activity should appear in continue watching."
+        ),
         options: TRAKT_CONTINUE_WATCHING_DAY_OPTIONS.map((days) => ({
           id: String(days),
           label: labelForTraktContinueWatchingDays(days)
         })),
         selectedId: String(settings.continueWatchingDaysCap),
         returnFocusKey: "trakt:cwWindow",
-        dialogClassName: "settings-trakt-grid-dialog",
+        dialogClassName: "settings-trakt-dialog",
+        optionRenderer: "single-choice",
         onSelect: (option) => {
           TraktSettingsStore.setContinueWatchingDaysCap(Number(option.id));
-          this.traktStatusMessage = "Continue watching window updated";
+          this.traktStatusMessage = t(
+            "trakt_status_cw_window_updated",
+            {},
+            "Continue watching window updated"
+          );
         }
       });
     });

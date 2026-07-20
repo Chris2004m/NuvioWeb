@@ -608,6 +608,7 @@
     <string name="trakt_hide_unaired">未放送エピソードを非表示</string>
     <string name="trakt_all_history">すべての履歴</string>
     <string name="trakt_days_format">%1$d日</string>
+    <string name="trakt_status_cw_window_updated">視聴継続ウィンドウを更新しました</string>
     <string name="debug_title">デバッグ</string>
     <string name="debug_subtitle">開発者ツールと機能フラグ（デバッグビルドのみ）</string>
     <string name="debug_section_popup">ポップアップ/ダイアログテスト</string>

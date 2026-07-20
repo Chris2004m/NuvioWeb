@@ -468,6 +468,7 @@
     <string name="trakt_hide_unaired">Ocultar episodios sin transmitir</string>
     <string name="trakt_all_history">Todo el historial</string>
     <string name="trakt_days_format">%1$d días</string>
+    <string name="trakt_status_cw_window_updated">Ventana de Continuar viendo actualizada</string>
     <string name="debug_title">Depuración</string>
     <string name="debug_subtitle">Herramientas de desarrollador y marcas de características (solo compilaciones de depuración)</string>
     <string name="debug_section_popup">Prueba de diálogo/ventana emergente</string>

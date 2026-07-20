@@ -2,7 +2,11 @@ import { WatchProgressStore } from "../local/watchProgressStore.js";
 import { ProfileManager } from "../../core/profile/profileManager.js";
 import { LocalStore } from "../../core/storage/localStore.js";
 import { ContinueWatchingPreferences } from "../local/continueWatchingPreferences.js";
-import { TraktSettingsStore, WatchProgressSource } from "../local/traktSettingsStore.js";
+import {
+  TraktSettingsStore,
+  WatchProgressSource,
+  normalizeTraktContinueWatchingDaysCap
+} from "../local/traktSettingsStore.js";
 import { TraktAuthStore } from "../local/traktAuthStore.js";
 import { TraktAuthService } from "./traktAuthService.js";
 import { metaRepository } from "./metaRepository.js";
@@ -571,7 +575,9 @@ class WatchProgressRepository {
   async getRecent(limit = 30) {
     const now = Date.now();
     const useTraktProgress = selectedContinueWatchingSource() === WatchProgressSource.TRAKT;
-    const daysCap = Number(TraktSettingsStore.get().continueWatchingDaysCap || 60);
+    const daysCap = normalizeTraktContinueWatchingDaysCap(
+      TraktSettingsStore.get().continueWatchingDaysCap
+    );
     const cutoffMs = !useTraktProgress || daysCap === 0 ? 0 : now - daysCap * 24 * 60 * 60 * 1000;
 
     let traktHistoryItems = [];

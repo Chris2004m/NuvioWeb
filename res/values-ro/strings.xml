@@ -425,6 +425,7 @@
     <string name="trakt_hide_unaired">Ascunde episoade neemise în difuzare</string>
     <string name="trakt_all_history">Tot istoricul</string>
     <string name="trakt_days_format">%1$d zile</string>
+    <string name="trakt_status_cw_window_updated">Fereastra Continuă vizionarea a fost actualizată</string>
     <string name="debug_title">Depanare</string>
     <string name="debug_subtitle">Instrumente pentru dezvoltatori și indicatori de funcționalitate (doar pentru build-uri de depanare)</string>
     <string name="debug_section_popup">Testare Popup / Dialog</string>

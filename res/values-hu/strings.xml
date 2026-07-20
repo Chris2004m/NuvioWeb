@@ -558,6 +558,7 @@
     <string name="trakt_hide_unaired">Még nem vetített epizódok elrejtése</string>
     <string name="trakt_all_history">Teljes előzmény</string>
     <string name="trakt_days_format">%1$d nap</string>
+    <string name="trakt_status_cw_window_updated">A Megtekintés folytatása ablak frissítve</string>
 	
     <!-- DebugSettingsScreen -->
     <string name="debug_title">Hibakeresés</string>

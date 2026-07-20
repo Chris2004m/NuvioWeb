@@ -544,6 +544,7 @@
     <string name="trakt_hide_unaired">Slėpti neišleistas serijas</string>
     <string name="trakt_all_history">Visa istorija</string>
     <string name="trakt_days_format">%1$d d.</string>
+    <string name="trakt_status_cw_window_updated">„Tęsti žiūrėjimą“ langas atnaujintas</string>
     <string name="debug_title">Derinimas (Debug)</string>
     <string name="debug_subtitle">Kūrėjo įrankiai ir funkcijų vėliavėlės (tik derinimo versijoms)</string>
     <string name="debug_section_popup">Iššokančių langų / dialogų testavimas</string>

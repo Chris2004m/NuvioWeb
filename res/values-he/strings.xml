@@ -426,6 +426,7 @@
     <string name="trakt_hide_unaired">הסתר פרקים שטרם שודרו</string>
     <string name="trakt_all_history">כל ההיסטוריה</string>
     <string name="trakt_days_format">%1$d ימים</string>
+    <string name="trakt_status_cw_window_updated">חלון המשך הצפייה עודכן</string>
     <string name="debug_title">ניפוי שגיאות</string>
     <string name="debug_subtitle">כלי מפתחים ודגלי פיצ׳רים (גרסאות debug בלבד)</string>
     <string name="debug_section_popup">בדיקת Popup / Dialog</string>

@@ -604,6 +604,7 @@
     <string name="trakt_hide_unaired">Skjul ikke sendt episoder</string>
     <string name="trakt_all_history">All historikk</string>
     <string name="trakt_days_format">%1$d dager</string>
+    <string name="trakt_status_cw_window_updated">Fortsett å se-vinduet er oppdatert</string>
     <string name="debug_title">Feilsøking</string>
     <string name="debug_subtitle">Utviklerverktøy og funksjonsflagg (bare feilsøkingsutgaver)</string>
     <string name="debug_section_popup">Popup-/dialogtesting</string>
