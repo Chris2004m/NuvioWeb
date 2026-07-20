@@ -2392,4 +2392,11 @@
     <string name="player.audio.noSupportedTracks">Nie sú k dispozícii žiadne podporované zvukové stopy</string>
     <string name="settings_stream_addon_logo_title">Logo doplnku</string>
     <string name="settings_stream_addon_logo_description">Zobraziť logo a názov doplnku vedľa zdrojov streamov.</string>
+    <string name="unsupported_device_title">Televízor nie je podporovaný</string>
+    <string name="unsupported_device_message">Tento televízor nespĺňa minimálne požiadavky pre túto verziu Nuvio TV.</string>
+    <string name="unsupported_device_current_platform">Aktuálna platforma</string>
+    <string name="unsupported_device_current_firmware">Aktuálny firmvér</string>
+    <string name="unsupported_device_required_platform">Požadovaná platforma</string>
+    <string name="unsupported_device_close">Zavrieť</string>
+    <string name="unsupported_device_unavailable">Nedostupné</string>
 </resources>

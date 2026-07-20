@@ -2207,4 +2207,11 @@
     <string name="settings_stream_addon_logo_description">Prikaži logotip in ime dodatka ob virih pretočnega predvajanja.</string>
     <string name="autoplay_reuse_binge_group">Ponovno uporabi Binge skupino</string>
     <string name="autoplay_reuse_binge_group_sub">Zapomni si in ponovno uporabi zadnjo skupino med sejami (Nadaljuj ogled, Podrobnosti itd.).</string>
+    <string name="unsupported_device_title">Televizor ni podprt</string>
+    <string name="unsupported_device_message">Ta televizor ne izpolnjuje minimalnih zahtev za to različico Nuvio TV.</string>
+    <string name="unsupported_device_current_platform">Trenutna platforma</string>
+    <string name="unsupported_device_current_firmware">Trenutna vdelana programska oprema</string>
+    <string name="unsupported_device_required_platform">Zahtevana platforma</string>
+    <string name="unsupported_device_close">Zapri</string>
+    <string name="unsupported_device_unavailable">Ni na voljo</string>
 </resources>

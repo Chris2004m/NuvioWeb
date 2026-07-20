@@ -941,4 +941,11 @@
     <string name="autoplay_timeout_sub">Thời gian chờ addon trước khi chọn.</string>
     <string name="autoplay_timeout_instant">Ngay lập tức</string>
     <string name="autoplay_timeout_unlimited">Không giới hạn</string>
+    <string name="unsupported_device_title">TV không được hỗ trợ</string>
+    <string name="unsupported_device_message">TV này không đáp ứng yêu cầu tối thiểu cho phiên bản Nuvio TV này.</string>
+    <string name="unsupported_device_current_platform">Nền tảng hiện tại</string>
+    <string name="unsupported_device_current_firmware">Phần mềm hệ thống hiện tại</string>
+    <string name="unsupported_device_required_platform">Nền tảng yêu cầu</string>
+    <string name="unsupported_device_close">Đóng</string>
+    <string name="unsupported_device_unavailable">Không có</string>
 </resources>

@@ -1373,6 +1373,15 @@ function formatEpisodePanelDate(value = "") {
   }
 }
 
+function formatNextEpisodeAirDate(value = "") {
+  const raw = String(value || "").trim();
+  const datePortion = raw.match(/\b\d{4}-\d{2}-\d{2}\b/)?.[0] || "";
+  const dateLabel = formatEpisodePanelDate(raw) || formatEpisodePanelDate(datePortion);
+  return dateLabel
+    ? t("cw_airs_date", [dateLabel], "Airs %1$s")
+    : t("next_episode_not_aired_yet", {}, "Next episode hasn't aired yet");
+}
+
 function episodeDisplayCode(episode = {}) {
   const season = Number(episode?.season);
   const episodeNumber = Number(episode?.episode);
@@ -8802,6 +8811,9 @@ export const PlayerScreen = {
     const statusText = nextEpisode.hasAired
       ? t("next_episode_play", {}, "Play")
       : t("next_episode_unaired", {}, "Unaired");
+    const airDateText = nextEpisode.hasAired
+      ? ""
+      : formatNextEpisodeAirDate(nextEpisode.released);
     const progressText = this.nextEpisodeCardSearching
       ? t("next_episode_finding_source", {}, "Finding source…")
       : (this.nextEpisodeCardSourceName && this.nextEpisodeCardCountdownSec != null
@@ -8810,7 +8822,7 @@ export const PlayerScreen = {
           [this.nextEpisodeCardSourceName, this.nextEpisodeCardCountdownSec],
           `Playing via ${this.nextEpisodeCardSourceName} in ${this.nextEpisodeCardCountdownSec}s`
         )
-        : "");
+        : airDateText);
     const thumb = this.episodes.find((entry) => String(entry?.id || "") === String(nextEpisode.videoId || ""))?.thumbnail || "";
 
     card.innerHTML = `

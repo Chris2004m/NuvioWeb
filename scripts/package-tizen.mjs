@@ -103,6 +103,12 @@ function buildIndexHtml() {
 
 function buildMainJs({ packageId }) {
   const engineFsServiceId = `${packageId}.EngineFsService`;
+  const compatibilityOptions = JSON.stringify({
+    platform: "tizen",
+    minVersion: Number.parseInt(compatibilityPolicy.tizenRequiredVersion, 10),
+    minChrome: compatibilityPolicy.chromiumVersion,
+    requiredLabel: `Samsung Tizen ${compatibilityPolicy.tizenRequiredVersion}+ · Chromium ${compatibilityPolicy.chromiumVersion}+ (${compatibilityPolicy.tizenSupportYear}+)`
+  });
   return `window.__NUVIO_PLATFORM__ = "tizen";
 window.__NUVIO_TIZEN_ENGINEFS_SERVICE_ID__ = ${JSON.stringify(engineFsServiceId)};
 
@@ -142,9 +148,17 @@ function loadScript(src) {
   document.body.appendChild(script);
 }
 
-loadScript("nuvio.env.js");
-loadScript("assets/libs/qrcode-generator.js");
-loadScript("app.bundle.js");
+function startNuvioApp() {
+  loadScript("nuvio.env.js");
+  loadScript("assets/libs/qrcode-generator.js");
+  loadScript("app.bundle.js");
+}
+
+if (window.NuvioBootGuard && typeof window.NuvioBootGuard.runCompatibilityGate === "function") {
+  window.NuvioBootGuard.runCompatibilityGate(${compatibilityOptions}, startNuvioApp);
+} else {
+  startNuvioApp();
+}
 `;
 }
 

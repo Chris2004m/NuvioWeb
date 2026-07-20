@@ -2614,4 +2614,11 @@
     <string name="player.audio.noSupportedTracks">Nenhuma faixa de áudio suportada disponível</string>
     <string name="settings_stream_addon_logo_title">Logótipo do addon</string>
     <string name="settings_stream_addon_logo_description">Mostra o logótipo e o nome do addon junto das fontes de stream.</string>
+    <string name="unsupported_device_title">TV não suportada</string>
+    <string name="unsupported_device_message">Esta TV não cumpre os requisitos mínimos para esta versão do Nuvio TV.</string>
+    <string name="unsupported_device_current_platform">Plataforma atual</string>
+    <string name="unsupported_device_current_firmware">Firmware atual</string>
+    <string name="unsupported_device_required_platform">Plataforma necessária</string>
+    <string name="unsupported_device_close">Fechar</string>
+    <string name="unsupported_device_unavailable">Indisponível</string>
 </resources>

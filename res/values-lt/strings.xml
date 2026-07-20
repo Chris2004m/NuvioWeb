@@ -925,4 +925,11 @@ Klaida: Bandomoji simuliuojama klaida — tai nėra tikras gedimas. Šaltinis gr
     <string name="settings_stream_addon_logo_description">Rodyti priedo logotipą ir pavadinimą šalia srauto šaltinių.</string>
     <string name="autoplay_reuse_binge_group">Pakartotinai naudoti „Binge“ grupę</string>
     <string name="autoplay_reuse_binge_group_sub">Įsiminti ir pakartotinai naudoti paskutinę grupę tarp seansų (Tęsti žiūrėjimą, Išsami informacija ir kt.).</string>
+    <string name="unsupported_device_title">Televizorius nepalaikomas</string>
+    <string name="unsupported_device_message">Šis televizorius neatitinka minimalių šios „Nuvio TV“ versijos reikalavimų.</string>
+    <string name="unsupported_device_current_platform">Dabartinė platforma</string>
+    <string name="unsupported_device_current_firmware">Dabartinė programinė aparatinė įranga</string>
+    <string name="unsupported_device_required_platform">Reikalinga platforma</string>
+    <string name="unsupported_device_close">Uždaryti</string>
+    <string name="unsupported_device_unavailable">Nepasiekiama</string>
 </resources>

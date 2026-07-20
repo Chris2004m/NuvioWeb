@@ -2088,4 +2088,11 @@
     <string name="settings_stream_addon_logo_description">Zeige das Logo und den Namen des Add-ons neben Stream-Quellen an.</string>
     <string name="autoplay_reuse_binge_group">Binge-Gruppe wiederverwenden</string>
     <string name="autoplay_reuse_binge_group_sub">Die letzte Binge-Gruppe sitzungsübergreifend speichern und wiederverwenden (Weiterschauen, Details usw.).</string>
+    <string name="unsupported_device_title">TV wird nicht unterstützt</string>
+    <string name="unsupported_device_message">Dieser Fernseher erfüllt nicht die Mindestanforderungen für diese Version von Nuvio TV.</string>
+    <string name="unsupported_device_current_platform">Aktuelle Plattform</string>
+    <string name="unsupported_device_current_firmware">Aktuelle Firmware</string>
+    <string name="unsupported_device_required_platform">Erforderliche Plattform</string>
+    <string name="unsupported_device_close">Schließen</string>
+    <string name="unsupported_device_unavailable">Nicht verfügbar</string>
 </resources>

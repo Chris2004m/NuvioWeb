@@ -1227,4 +1227,11 @@
     <string name="settings_stream_addon_logo_description">ストリームソースの横にアドオンのロゴと名前を表示します。</string>
     <string name="autoplay_reuse_binge_group">一気見グループを再利用</string>
     <string name="autoplay_reuse_binge_group_sub">セッション間で最後の一気見グループを記憶・再利用します（視聴を続ける、詳細など）。</string>
+    <string name="unsupported_device_title">このテレビはサポートされていません</string>
+    <string name="unsupported_device_message">このテレビは、このバージョンの Nuvio TV の最小要件を満たしていません。</string>
+    <string name="unsupported_device_current_platform">現在のプラットフォーム</string>
+    <string name="unsupported_device_current_firmware">現在のファームウェア</string>
+    <string name="unsupported_device_required_platform">必要なプラットフォーム</string>
+    <string name="unsupported_device_close">閉じる</string>
+    <string name="unsupported_device_unavailable">利用不可</string>
 </resources>

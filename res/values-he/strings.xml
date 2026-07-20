@@ -954,4 +954,11 @@
     <string name="settings_stream_addon_logo_description">הצגת הלוגו ושם התוסף לצד מקורות הסטרימינג.</string>
     <string name="autoplay_reuse_binge_group">שימוש חוזר בקבוצת Binge</string>
     <string name="autoplay_reuse_binge_group_sub">זכור והשתמש שוב בקבוצת ה-Binge האחרונה בין הפעלות (המשך צפייה, פרטים וכו׳).</string>
+    <string name="unsupported_device_title">הטלוויזיה אינה נתמכת</string>
+    <string name="unsupported_device_message">הטלוויזיה הזו אינה עומדת בדרישות המינימום עבור גרסה זו של Nuvio TV.</string>
+    <string name="unsupported_device_current_platform">פלטפורמה נוכחית</string>
+    <string name="unsupported_device_current_firmware">קושחה נוכחית</string>
+    <string name="unsupported_device_required_platform">פלטפורמה נדרשת</string>
+    <string name="unsupported_device_close">סגור</string>
+    <string name="unsupported_device_unavailable">לא זמין</string>
 </resources>

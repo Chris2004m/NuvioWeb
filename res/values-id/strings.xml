@@ -2258,4 +2258,11 @@
     <string name="player.audio.noSupportedTracks">Tidak ada trek audio yang didukung</string>
     <string name="settings_stream_addon_logo_title">Logo addon</string>
     <string name="settings_stream_addon_logo_description">Tampilkan logo dan nama addon di samping sumber streaming.</string>
+    <string name="unsupported_device_title">TV tidak didukung</string>
+    <string name="unsupported_device_message">TV ini tidak memenuhi persyaratan minimum untuk versi Nuvio TV ini.</string>
+    <string name="unsupported_device_current_platform">Platform saat ini</string>
+    <string name="unsupported_device_current_firmware">Firmware saat ini</string>
+    <string name="unsupported_device_required_platform">Platform yang diperlukan</string>
+    <string name="unsupported_device_close">Tutup</string>
+    <string name="unsupported_device_unavailable">Tidak tersedia</string>
 </resources>

@@ -4,5 +4,6 @@ export const compatibilityPolicy = Object.freeze({
   webOsRequiredVersion: "5.0.0",
   tizenRequiredVersion: "5.0",
   chromiumVersion: 63,
+  webOsChromiumVersion: 68,
   webOsServiceNodeVersion: 8
 });

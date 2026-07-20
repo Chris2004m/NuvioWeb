@@ -2089,4 +2089,11 @@
     <string name="settings_stream_addon_logo_description">ஸ்ட்ரீம் மூலங்களுக்கு அருகில் துணை நிரல் லோகோ மற்றும் பெயரைக் காட்டு.</string>
     <string name="autoplay_reuse_binge_group">பிஞ்ச் குழுவை மீண்டும் பயன்படுத்து</string>
     <string name="autoplay_reuse_binge_group_sub">அமர்வுகளுக்கு இடையில் கடைசி பிஞ்ச் குழுவை நினைவில் வைத்து மீண்டும் பயன்படுத்து (தொடர்ந்து பார்க்க, விவரங்கள் போன்றவை).</string>
+    <string name="unsupported_device_title">இந்த டிவி ஆதரிக்கப்படவில்லை</string>
+    <string name="unsupported_device_message">இந்த டிவி, Nuvio TV இன் இந்தப் பதிப்பிற்கான குறைந்தபட்சத் தேவைகளைப் பூர்த்தி செய்யவில்லை.</string>
+    <string name="unsupported_device_current_platform">தற்போதைய இயங்குதளம்</string>
+    <string name="unsupported_device_current_firmware">தற்போதைய ஃபார்ம்வேர்</string>
+    <string name="unsupported_device_required_platform">தேவையான இயங்குதளம்</string>
+    <string name="unsupported_device_close">மூடு</string>
+    <string name="unsupported_device_unavailable">கிடைக்கவில்லை</string>
 </resources>

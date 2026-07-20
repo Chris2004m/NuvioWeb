@@ -1365,4 +1365,11 @@
     <string name="settings_stream_addon_logo_description">عرض شعار الإضافة واسمها بجانب مصادر البث.</string>
     <string name="autoplay_reuse_binge_group">حفظ مجموعة المشاهدة المتتالية</string>
     <string name="autoplay_reuse_binge_group_sub">حفظ واستخدام آخر مجموعة مشاهدة تلقائية عبر الجلسات (متابعة المشاهدة، التفاصيل، إلخ).</string>
+    <string name="unsupported_device_title">التلفاز غير مدعوم</string>
+    <string name="unsupported_device_message">هذا التلفاز لا يلبي الحد الأدنى لمتطلبات هذا الإصدار من Nuvio TV.</string>
+    <string name="unsupported_device_current_platform">النظام الحالي</string>
+    <string name="unsupported_device_current_firmware">إصدار البرنامج الثابت الحالي</string>
+    <string name="unsupported_device_required_platform">النظام المطلوب</string>
+    <string name="unsupported_device_close">إغلاق</string>
+    <string name="unsupported_device_unavailable">غير متاح</string>
 </resources>

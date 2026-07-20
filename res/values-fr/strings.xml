@@ -2521,4 +2521,11 @@
     <string name="player.audio.noSupportedTracks">Aucune piste audio prise en charge disponible</string>
     <string name="settings_stream_addon_logo_title">Logo de l’addon</string>
     <string name="settings_stream_addon_logo_description">Affiche le logo et le nom de l’addon à côté des sources de streams.</string>
+    <string name="unsupported_device_title">Téléviseur non pris en charge</string>
+    <string name="unsupported_device_message">Ce téléviseur ne répond pas à la configuration minimale requise pour cette version de Nuvio TV.</string>
+    <string name="unsupported_device_current_platform">Plateforme actuelle</string>
+    <string name="unsupported_device_current_firmware">Micrologiciel actuel</string>
+    <string name="unsupported_device_required_platform">Plateforme requise</string>
+    <string name="unsupported_device_close">Fermer</string>
+    <string name="unsupported_device_unavailable">Indisponible</string>
 </resources>

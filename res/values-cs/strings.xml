@@ -1811,4 +1811,11 @@
     <string name="settings_stream_addon_logo_description">Zobrazovat logo a název doplňku vedle zdrojů streamů.</string>
     <string name="autoplay_reuse_binge_group">Znovu použít skupinu pro binge</string>
     <string name="autoplay_reuse_binge_group_sub">Zapamatovat a znovu použít poslední skupinu mezi relacemi (Pokračovat ve sledování, Podrobnosti atd.).</string>
+    <string name="unsupported_device_title">Televizor není podporován</string>
+    <string name="unsupported_device_message">Tento televizor nesplňuje minimální požadavky pro tuto verzi Nuvio TV.</string>
+    <string name="unsupported_device_current_platform">Aktuální platforma</string>
+    <string name="unsupported_device_current_firmware">Aktuální firmware</string>
+    <string name="unsupported_device_required_platform">Požadovaná platforma</string>
+    <string name="unsupported_device_close">Zavřít</string>
+    <string name="unsupported_device_unavailable">Nedostupné</string>
 </resources>

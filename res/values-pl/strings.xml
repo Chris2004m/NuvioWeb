@@ -2499,4 +2499,11 @@
     <string name="player.audio.noSupportedTracks">Brak dostępnych obsługiwanych ścieżek audio</string>
     <string name="settings_stream_addon_logo_title">Logo dodatku</string>
     <string name="settings_stream_addon_logo_description">Pokazuj logo i nazwę dodatku obok źródeł.</string>
+    <string name="unsupported_device_title">Telewizor nie jest obsługiwany</string>
+    <string name="unsupported_device_message">Ten telewizor nie spełnia minimalnych wymagań tej wersji Nuvio TV.</string>
+    <string name="unsupported_device_current_platform">Obecna platforma</string>
+    <string name="unsupported_device_current_firmware">Obecne oprogramowanie sprzętowe</string>
+    <string name="unsupported_device_required_platform">Wymagana platforma</string>
+    <string name="unsupported_device_close">Zamknij</string>
+    <string name="unsupported_device_unavailable">Niedostępne</string>
 </resources>

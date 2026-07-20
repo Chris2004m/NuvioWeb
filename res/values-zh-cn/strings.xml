@@ -2175,4 +2175,11 @@
     <string name="player.audio.noSupportedTracks">没有可用的受支持音轨</string>
     <string name="settings_stream_addon_logo_title">插件徽标</string>
     <string name="settings_stream_addon_logo_description">在流媒体源旁显示插件徽标和名称。</string>
+    <string name="unsupported_device_title">不支持此电视</string>
+    <string name="unsupported_device_message">此电视不满足此版本 Nuvio TV 的最低要求。</string>
+    <string name="unsupported_device_current_platform">当前平台</string>
+    <string name="unsupported_device_current_firmware">当前固件</string>
+    <string name="unsupported_device_required_platform">所需平台</string>
+    <string name="unsupported_device_close">关闭</string>
+    <string name="unsupported_device_unavailable">不可用</string>
 </resources>

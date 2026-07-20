@@ -2,6 +2,7 @@ import { access, cp, mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { constants as fsConstants } from "node:fs";
+import { compatibilityPolicy } from "./compatibilityPolicy.mjs";
 import { writeRuntimeEnvScriptFile } from "./envProperties.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -143,6 +144,12 @@ function buildIndexHtml() {
 }
 
 function buildMainJs() {
+  const compatibilityOptions = JSON.stringify({
+    platform: "tizen",
+    minVersion: Number.parseInt(compatibilityPolicy.tizenRequiredVersion, 10),
+    minChrome: compatibilityPolicy.chromiumVersion,
+    requiredLabel: `Samsung Tizen ${compatibilityPolicy.tizenRequiredVersion}+ · Chromium ${compatibilityPolicy.chromiumVersion}+ (${compatibilityPolicy.tizenSupportYear}+)`
+  });
   return `window.__NUVIO_PLATFORM__ = "tizen";
 
 var tvInput = window.tizen && window.tizen.tvinputdevice;
@@ -181,10 +188,18 @@ function loadScript(src) {
   document.body.appendChild(script);
 }
 
-loadScript("nuvio.env.js");
-loadScript("js/runtime/env.js");
-loadScript("assets/libs/qrcode-generator.js");
-loadScript("app.bundle.js");
+function startNuvioApp() {
+  loadScript("nuvio.env.js");
+  loadScript("js/runtime/env.js");
+  loadScript("assets/libs/qrcode-generator.js");
+  loadScript("app.bundle.js");
+}
+
+if (window.NuvioBootGuard && typeof window.NuvioBootGuard.runCompatibilityGate === "function") {
+  window.NuvioBootGuard.runCompatibilityGate(${compatibilityOptions}, startNuvioApp);
+} else {
+  startNuvioApp();
+}
 `;
 }
 

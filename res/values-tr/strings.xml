@@ -2362,4 +2362,11 @@
     <string name="player.audio.noSupportedTracks">Desteklenen ses parçası bulunmuyor</string>
     <string name="settings_stream_addon_logo_title">Eklenti logosu</string>
     <string name="settings_stream_addon_logo_description">Yayın kaynaklarının yanında eklenti logosunu ve adını göster.</string>
+    <string name="unsupported_device_title">TV desteklenmiyor</string>
+    <string name="unsupported_device_message">Bu TV, Nuvio TV'nin bu sürümü için minimum gereksinimleri karşılamıyor.</string>
+    <string name="unsupported_device_current_platform">Mevcut platform</string>
+    <string name="unsupported_device_current_firmware">Mevcut ürün yazılımı</string>
+    <string name="unsupported_device_required_platform">Gerekli platform</string>
+    <string name="unsupported_device_close">Kapat</string>
+    <string name="unsupported_device_unavailable">Kullanılamıyor</string>
 </resources>

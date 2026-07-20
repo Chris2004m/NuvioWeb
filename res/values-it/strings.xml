@@ -2648,4 +2648,11 @@
     <string name="contributor_role_app_maintainer">Responsabile di questa app</string>
     <string name="settings_stream_addon_logo_title">Logo Addon</string>
     <string name="settings_stream_addon_logo_description">Mostra il logo e il nome dell'addon accanto alle sorgenti degli stream.</string>
+    <string name="unsupported_device_title">TV non supportata</string>
+    <string name="unsupported_device_message">Questa TV non soddisfa i requisiti minimi per questa versione di Nuvio TV.</string>
+    <string name="unsupported_device_current_platform">Piattaforma attuale</string>
+    <string name="unsupported_device_current_firmware">Firmware attuale</string>
+    <string name="unsupported_device_required_platform">Piattaforma richiesta</string>
+    <string name="unsupported_device_close">Chiudi</string>
+    <string name="unsupported_device_unavailable">Non disponibile</string>
 </resources>

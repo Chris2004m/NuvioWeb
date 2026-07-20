@@ -923,4 +923,11 @@
     <string name="autoplay_timeout_sub">Wachttijd voor addons vóór de selectie.</string>
     <string name="autoplay_timeout_instant">Direct</string>
     <string name="autoplay_timeout_unlimited">Onbeperkt</string>
+    <string name="unsupported_device_title">TV wordt niet ondersteund</string>
+    <string name="unsupported_device_message">Deze tv voldoet niet aan de minimumvereisten voor deze versie van Nuvio TV.</string>
+    <string name="unsupported_device_current_platform">Huidig platform</string>
+    <string name="unsupported_device_current_firmware">Huidige firmware</string>
+    <string name="unsupported_device_required_platform">Vereist platform</string>
+    <string name="unsupported_device_close">Sluiten</string>
+    <string name="unsupported_device_unavailable">Niet beschikbaar</string>
 </resources>

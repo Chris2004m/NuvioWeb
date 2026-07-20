@@ -1375,4 +1375,11 @@
     <string name="settings_stream_addon_logo_description">Prikaži logotip i naziv dodatka pored izvora streama.</string>
     <string name="autoplay_reuse_binge_group">Ponovo koristi Binge grupu</string>
     <string name="autoplay_reuse_binge_group_sub">Zapamti i ponovo koristi zadnju Binge grupu između sesija (Nastavi gledati, Detalji itd.).</string>
+    <string name="unsupported_device_title">TV nije podržan</string>
+    <string name="unsupported_device_message">Ovaj TV ne ispunjava minimalne zahtjeve za ovu verziju aplikacije Nuvio TV.</string>
+    <string name="unsupported_device_current_platform">Trenutna platforma</string>
+    <string name="unsupported_device_current_firmware">Trenutni firmver</string>
+    <string name="unsupported_device_required_platform">Potrebna platforma</string>
+    <string name="unsupported_device_close">Zatvori</string>
+    <string name="unsupported_device_unavailable">Nedostupno</string>
 </resources>

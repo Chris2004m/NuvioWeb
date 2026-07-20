@@ -1007,4 +1007,11 @@
     <string name="autoplay_timeout_sub">Várakozási idő a bővítményekre a kiválasztás előtt.</string>
     <string name="autoplay_timeout_instant">Azonnal</string>
     <string name="autoplay_timeout_unlimited">Korlátlan</string>
+    <string name="unsupported_device_title">A TV nem támogatott</string>
+    <string name="unsupported_device_message">Ez a TV nem felel meg a Nuvio TV ezen verziójához szükséges minimumkövetelményeknek.</string>
+    <string name="unsupported_device_current_platform">Jelenlegi platform</string>
+    <string name="unsupported_device_current_firmware">Jelenlegi firmware</string>
+    <string name="unsupported_device_required_platform">Szükséges platform</string>
+    <string name="unsupported_device_close">Bezárás</string>
+    <string name="unsupported_device_unavailable">Nem elérhető</string>
 </resources>

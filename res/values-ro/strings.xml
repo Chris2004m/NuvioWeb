@@ -767,4 +767,11 @@
     <string name="autoplay_timeout_sub">Timp de așteptare pentru addonuri înainte de selectare.</string>
     <string name="autoplay_timeout_instant">Instantaneu</string>
     <string name="autoplay_timeout_unlimited">Nelimitat</string>
+    <string name="unsupported_device_title">Televizor neacceptat</string>
+    <string name="unsupported_device_message">Acest televizor nu îndeplinește cerințele minime pentru această versiune Nuvio TV.</string>
+    <string name="unsupported_device_current_platform">Platformă actuală</string>
+    <string name="unsupported_device_current_firmware">Firmware actual</string>
+    <string name="unsupported_device_required_platform">Platformă necesară</string>
+    <string name="unsupported_device_close">Închide</string>
+    <string name="unsupported_device_unavailable">Indisponibil</string>
 </resources>

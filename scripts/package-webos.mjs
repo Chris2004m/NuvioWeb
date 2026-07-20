@@ -50,6 +50,12 @@ async function resolveWebOsScriptPath(targetDir) {
 
 function buildWebOsIndexHtml({ webOsScriptPath = "" } = {}) {
   const webOsScriptTag = webOsScriptPath ? `  <script src="${webOsScriptPath}"></script>\n` : "";
+  const compatibilityOptions = JSON.stringify({
+    platform: "webos",
+    minVersion: Number.parseInt(compatibilityPolicy.webOsRequiredVersion, 10),
+    minChrome: compatibilityPolicy.webOsChromiumVersion,
+    requiredLabel: `LG webOS ${compatibilityPolicy.webOsRequiredVersion}+ · Chromium ${compatibilityPolicy.webOsChromiumVersion}+ (${compatibilityPolicy.webOsSupportYear}+)`
+  });
 
   return `<!DOCTYPE html>
 <html lang="en" class="no-flex-gap no-css-math no-backdrop-filter no-aspect-ratio">
@@ -69,7 +75,11 @@ function buildWebOsIndexHtml({ webOsScriptPath = "" } = {}) {
   <script>window.__NUVIO_PLATFORM__ = "webos";</script>
   <script src="nuvio.env.js"></script>
   <script src="assets/libs/qrcode-generator.js"></script>
-${webOsScriptTag}  <script defer src="app.bundle.js" onerror="window.NuvioBootGuard &amp;&amp; window.NuvioBootGuard.scriptFailed(this.src)"></script>
+${webOsScriptTag}  <script>
+    window.NuvioBootGuard.runCompatibilityGate(${compatibilityOptions}, function startNuvioApp() {
+      window.NuvioBootGuard.loadScript("app.bundle.js");
+    });
+  </script>
 </body>
 </html>
 `;

@@ -2236,4 +2236,11 @@
     <string name="player.audio.noSupportedTracks">Δεν υπάρχουν διαθέσιμα υποστηριζόμενα κομμάτια ήχου</string>
     <string name="settings_stream_addon_logo_title">Λογότυπο πρόσθετου</string>
     <string name="settings_stream_addon_logo_description">Εμφάνιση λογότυπου και ονόματος πρόσθετου δίπλα στις πηγές ροής.</string>
+    <string name="unsupported_device_title">Η τηλεόραση δεν υποστηρίζεται</string>
+    <string name="unsupported_device_message">Αυτή η τηλεόραση δεν πληροί τις ελάχιστες απαιτήσεις για αυτήν την έκδοση του Nuvio TV.</string>
+    <string name="unsupported_device_current_platform">Τρέχουσα πλατφόρμα</string>
+    <string name="unsupported_device_current_firmware">Τρέχον υλικολογισμικό</string>
+    <string name="unsupported_device_required_platform">Απαιτούμενη πλατφόρμα</string>
+    <string name="unsupported_device_close">Κλείσιμο</string>
+    <string name="unsupported_device_unavailable">Μη διαθέσιμο</string>
 </resources>

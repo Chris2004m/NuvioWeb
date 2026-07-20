@@ -2634,4 +2634,11 @@
     <string name="detail_lists_save_failed">Não foi possível salvar as alterações da lista.</string>
     <string name="skip_outro">Pular encerramento</string>
     <string name="common_all">Todos</string>
+    <string name="unsupported_device_title">TV não compatível</string>
+    <string name="unsupported_device_message">Esta TV não atende aos requisitos mínimos para esta versão do Nuvio TV.</string>
+    <string name="unsupported_device_current_platform">Plataforma atual</string>
+    <string name="unsupported_device_current_firmware">Firmware atual</string>
+    <string name="unsupported_device_required_platform">Plataforma necessária</string>
+    <string name="unsupported_device_close">Fechar</string>
+    <string name="unsupported_device_unavailable">Indisponível</string>
 </resources>
