@@ -2142,6 +2142,8 @@ export const PlayerScreen = {
     this.startupSubtitlePreferenceApplying = false;
     this.startupAudioPreferenceApplied = false;
     this.startupAudioPreferenceApplying = false;
+    this.startupAudioFallbackApplied = false;
+    this.startupAudioTrackSetSignature = "";
     this.startupAudioPreferenceRetryTimer = null;
     this.startupAudioPreferenceRetryDeadline = 0;
     this.startupTrackPreferenceReady = false;
@@ -9415,6 +9417,8 @@ export const PlayerScreen = {
     this.startupSubtitlePreferenceApplying = false;
     this.startupAudioPreferenceApplied = false;
     this.startupAudioPreferenceApplying = false;
+    this.startupAudioFallbackApplied = false;
+    this.startupAudioTrackSetSignature = "";
     this.clearStartupAudioPreferenceRetry();
     if (typeof PlayerController.cancelWebOsAudioTrackSelection === "function") {
       PlayerController.cancelWebOsAudioTrackSelection();
@@ -10137,6 +10141,24 @@ export const PlayerScreen = {
   refreshTrackDialogs() {
     this.invalidateTrackDialogCaches();
     this.syncTrackState();
+    const audioTrackSetSignature = this.getStartupAudioTrackSetSignature();
+    if (
+      Environment.isWebOS()
+      && this.startupAudioFallbackApplied
+      && this.startupAudioTrackSetSignature
+      && audioTrackSetSignature !== this.startupAudioTrackSetSignature
+    ) {
+      // webOS may expose the default track before the complete multi-audio
+      // list. Re-open startup matching when that list grows or gains metadata;
+      // otherwise the provisional first-track fallback becomes permanent.
+      if (this.pendingWebOsAudioSelection?.automaticFallback) {
+        PlayerController.cancelWebOsAudioTrackSelection?.();
+        this.pendingWebOsAudioSelection = null;
+      }
+      this.startupAudioFallbackApplied = false;
+      this.startupAudioPreferenceApplied = false;
+    }
+    this.startupAudioTrackSetSignature = audioTrackSetSignature;
     this.ensureSupportedAudioTrackSelected();
     if (this.startupTrackPreferenceReady) {
       this.applyStartupAudioPreference();
@@ -10154,6 +10176,19 @@ export const PlayerScreen = {
 
   invalidateTrackDialogCaches() {
     this.trackDialogCache = createTrackDialogCache();
+  },
+
+  getStartupAudioTrackSetSignature() {
+    return this.collectAudioOptionItems()
+      .map((option) => [
+        option.id,
+        option.languageKey,
+        option.label,
+        option.secondary,
+        option.supported ? "supported" : "unsupported",
+        option.entry?.implicitAudioTrack ? "implicit" : "explicit"
+      ].map((value) => cleanDisplayText(value)).join("|"))
+      .join("||");
   },
 
   hasAudioTracksAvailable() {
@@ -12536,6 +12571,7 @@ export const PlayerScreen = {
       ? null
       : matchedRememberedOption;
     if (rememberedOption?.entry && Number.isFinite(rememberedOption.entryIndex)) {
+      this.startupAudioFallbackApplied = false;
       if (rememberedOption.selected) {
         this.clearStartupAudioPreferenceRetry();
         this.startupAudioPreferenceApplied = true;
@@ -12568,6 +12604,7 @@ export const PlayerScreen = {
     }
     if (!preferredTargets.length) {
       this.clearStartupAudioPreferenceRetry();
+      this.startupAudioFallbackApplied = false;
       this.startupAudioPreferenceApplied = true;
       return true;
     }
@@ -12579,6 +12616,7 @@ export const PlayerScreen = {
       && preferredTargets.some((target) => this.matchesStartupAudioTarget(selectedOption, target))
     ) {
       this.clearStartupAudioPreferenceRetry();
+      this.startupAudioFallbackApplied = false;
       this.startupAudioPreferenceApplied = true;
       return true;
     }
@@ -12598,6 +12636,7 @@ export const PlayerScreen = {
     }
 
     this.startupAudioPreferenceApplying = true;
+    this.startupAudioFallbackApplied = false;
     try {
       this.applyAudioTrack(preferredOption.entryIndex);
     } finally {
@@ -12629,6 +12668,7 @@ export const PlayerScreen = {
 
   applyStartupAudioFallback() {
     this.clearStartupAudioPreferenceRetry();
+    this.startupAudioFallbackApplied = true;
     const fallbackOption = this.collectAudioOptionItems().find((entry) => entry.supported);
     if (!fallbackOption?.entry || !Number.isFinite(fallbackOption.entryIndex)) {
       this.startupAudioPreferenceApplied = true;
@@ -13915,6 +13955,9 @@ export const PlayerScreen = {
     }
     if (!automaticFallback) {
       this.failedAutomaticAudioFallbackEntryId = "";
+    }
+    if (rememberSelection) {
+      this.startupAudioFallbackApplied = false;
     }
     if (selectedEntry.supported === false || isUnsupportedWebOsAudioTrack(selectedEntry.track)) {
       this.invalidateTrackDialogCaches();
