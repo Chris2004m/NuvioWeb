@@ -8364,6 +8364,11 @@ export const PlayerScreen = {
     this.startupAudioGateActive = false;
     this.startupAudioGateAllowsNativePlayback = false;
     this.startupAudioGateDeadline = 0;
+    // Once playback leaves the startup gate, later webOS track-list churn must
+    // not reopen automatic language matching. A Luna selectTrack request during
+    // normal playback can interrupt the native decoder on some LG TVs.
+    this.startupAudioFallbackApplied = false;
+    this.startupAudioTrackSetSignature = "";
     PlayerController.setStartupAudioGate?.(false, { resume });
   },
 
@@ -10162,13 +10167,14 @@ export const PlayerScreen = {
     const audioTrackSetSignature = this.getStartupAudioTrackSetSignature();
     if (
       Environment.isWebOS()
+      && this.startupAudioGateActive
       && this.startupAudioFallbackApplied
       && this.startupAudioTrackSetSignature
       && audioTrackSetSignature !== this.startupAudioTrackSetSignature
     ) {
       // webOS may expose the default track before the complete multi-audio
-      // list. Re-open startup matching when that list grows or gains metadata;
-      // otherwise the provisional first-track fallback becomes permanent.
+      // list. Re-open matching only while startup still owns playback; after
+      // the gate is released, the bounded fallback remains authoritative.
       if (this.pendingWebOsAudioSelection?.automaticFallback) {
         PlayerController.cancelWebOsAudioTrackSelection?.();
         this.pendingWebOsAudioSelection = null;
