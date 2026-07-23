@@ -22,6 +22,7 @@
     "sync": "node ./scripts/sync-wrapper.mjs",
     "sync:tizen": "node ./scripts/sync-wrapper.mjs --tizen",
     "sync:webos": "node ./scripts/sync-wrapper.mjs --webos",
+    "test": "node --test tests/*.test.mjs",
     "sync:tizenbrew": "node ./scripts/sync-tizenbrew.mjs"
   },
   "devDependencies": {

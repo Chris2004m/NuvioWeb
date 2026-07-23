@@ -10,6 +10,7 @@ import {
   selectAutoPlayStream,
   isAutoPlayEffectivelyEnabled
 } from "../../../core/streams/streamAutoPlaySelector.js";
+import { buildStreamResumeIdentity } from "../../../core/streams/streamResumeIdentity.js";
 import { DirectDebridResolver } from "../../../core/debrid/directDebridResolver.js";
 import { DirectDebridStreamPreparer } from "../../../core/debrid/directDebridStreamPreparer.js";
 import { DebridStreamPresentation } from "../../../core/debrid/directDebridStreamPresentation.js";
@@ -1246,12 +1247,20 @@ export const StreamScreen = {
           Number(settings.streamReuseLastLinkCacheHours || 24) * 60 * 60 * 1000
         )
       : null;
-    const identity = reusableStream ? String(this.params?.resumeStreamIdentity || "").trim() : "";
+    const progressIdentity = reusableStream
+      ? String(this.params?.resumeStreamIdentity || "").trim()
+      : "";
     const preferredStreamId = String(reusableStream?.streamId || "").trim();
-    const canReusePreferredStream = Boolean(
-      this.params?.continueWatchingBackHome && !this.params?.manualSelection && preferredStreamId
+    const canReuseStoredStream = Boolean(
+      this.params?.continueWatchingBackHome && !this.params?.manualSelection && reusableStream
     );
-    if (!identity && !canReusePreferredStream) {
+    const cachedIdentity = canReuseStoredStream
+      ? String(reusableStream?.resumeIdentity || "").trim()
+      : "";
+    const canReusePreferredStream = Boolean(
+      canReuseStoredStream && preferredStreamId
+    );
+    if (!progressIdentity && !cachedIdentity && !canReusePreferredStream) {
       this.autoResumeUiActive = false;
       return;
     }
@@ -1263,9 +1272,16 @@ export const StreamScreen = {
       }
       return;
     }
-    const identityMatch = identity
-      ? this.streams.find((stream) => streamMergeKey(stream) === identity)
-      : null;
+    const identityMatch = this.streams.find((stream) => {
+      const stableIdentity = buildStreamResumeIdentity(stream);
+      return Boolean(
+        (cachedIdentity && stableIdentity === cachedIdentity) ||
+        (progressIdentity && (
+          stableIdentity === progressIdentity ||
+          streamMergeKey(stream) === progressIdentity
+        ))
+      );
+    }) || null;
     // Stream preferences are stored per profile and per video. They are the
     // Web equivalent of Android's local stream-link cache and remain available
     // even when the selected progress source cannot carry stream metadata.

@@ -2993,9 +2993,6 @@ export const SettingsScreen = {
         !isFastHorizontalNavigationEnabled()
       );
     });
-    this.actionMap.set("advanced:rememberLastProfile", () => {
-      ProfileManager.setRememberLastProfileEnabled(!ProfileManager.isRememberLastProfileEnabled());
-    });
     this.actionMap.set("advanced:strictDpadGrid", () => {
       LocalStore.set(STRICT_DPAD_GRID_KEY, !Boolean(LocalStore.get(STRICT_DPAD_GRID_KEY, true)));
     });
@@ -3024,16 +3021,6 @@ export const SettingsScreen = {
               "Increase D-pad repeat speed in rows while keeping repeat throttling enabled."
             ),
             checked: Boolean(model.fastHorizontalNavigation)
-          })}
-          ${this.renderToggleRow({
-            focusKey: "advanced:rememberLastProfile",
-            title: t("advanced_remember_last_profile", {}, "Remember Last Profile"),
-            subtitle: t(
-              "advanced_remember_last_profile_subtitle",
-              {},
-              "Remember the last selected profile at startup. Profiles with a PIN are always requested."
-            ),
-            checked: ProfileManager.isRememberLastProfileEnabled()
           })}
           ${this.renderToggleRow({
             focusKey: "advanced:strictDpadGrid",

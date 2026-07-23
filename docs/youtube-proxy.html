@@ -324,6 +324,11 @@
               widget_referrer: widgetReferrer
             },
             events: {
+              onApiChange: function onApiChange() {
+                if (!captionsEnabled) {
+                  setCaptionsEnabled(false);
+                }
+              },
               onReady: function onReady(event) {
                 ready = true;
                 if (readyWatchdog) {

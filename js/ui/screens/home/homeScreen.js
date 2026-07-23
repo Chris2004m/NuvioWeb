@@ -797,6 +797,7 @@ function buildYoutubeEmbedUrl(videoId, { muted = true } = {}) {
       proxyUrl.searchParams.set("playlist", cleanId);
       proxyUrl.searchParams.set("playsinline", "1");
       proxyUrl.searchParams.set("rel", "0");
+      proxyUrl.searchParams.set("cc_load_policy", "0");
       proxyUrl.searchParams.set("_cb", `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
       return proxyUrl.toString();
     } catch (_) {
@@ -816,6 +817,7 @@ function buildYoutubeEmbedUrl(videoId, { muted = true } = {}) {
     rel: "0",
     modestbranding: "1",
     enablejsapi: "1",
+    cc_load_policy: "0",
     iv_load_policy: "3"
   });
   const origin = String(globalThis?.location?.origin || "").trim();
@@ -5172,6 +5174,8 @@ export const HomeScreen = {
     }
     const activeFrame = container.querySelector("iframe");
     if (activeFrame) {
+      this.homeTrailerFrameCleanup?.get(activeFrame)?.();
+      this.homeTrailerFrameCleanup?.delete(activeFrame);
       try {
         activeFrame.src = "about:blank";
       } catch (_) {
@@ -5217,7 +5221,7 @@ export const HomeScreen = {
     if (!heroLayer || !heroMedia) {
       return false;
     }
-    heroMedia.classList.add("trailer-active");
+    heroMedia.classList.remove("trailer-active");
     this.mountTrailerLayer(heroLayer, cachedState.source, () => {
       if (
         node.classList.contains("focused")
@@ -5263,9 +5267,66 @@ export const HomeScreen = {
       frame.allow = "autoplay; encrypted-media; picture-in-picture";
       frame.allowFullscreen = true;
       frame.referrerPolicy = "strict-origin-when-cross-origin";
+      let revealTimer = 0;
+      let fallbackTimer = 0;
+      let revealed = false;
+      const reveal = (delayMs = 0) => {
+        if (revealed || revealTimer) {
+          return;
+        }
+        revealTimer = setTimeout(() => {
+          revealTimer = 0;
+          if (revealed || !frame.isConnected || frame.parentElement !== container) {
+            return;
+          }
+          revealed = true;
+          if (fallbackTimer) {
+            clearTimeout(fallbackTimer);
+            fallbackTimer = 0;
+          }
+          container.classList.add("is-active");
+          onReady?.();
+        }, delayMs);
+      };
+      const handleProxyMessage = (event) => {
+        if (event?.source !== frame.contentWindow) {
+          return;
+        }
+        const data = event?.data;
+        if (!data || typeof data !== "object" || data.source !== "nuvio-youtube-proxy") {
+          return;
+        }
+        if (data.type === "firstFrame") {
+          reveal(150);
+          return;
+        }
+        const state = data.type === "state" && data.state && typeof data.state === "object"
+          ? data.state
+          : null;
+        if (state && Number(state.currentTime || 0) > 0 && state.paused === false) {
+          reveal(150);
+        } else if (state && state.controllable === false && state.loading === false) {
+          reveal(1200);
+        }
+      };
+      const cleanup = () => {
+        window.removeEventListener("message", handleProxyMessage);
+        if (revealTimer) {
+          clearTimeout(revealTimer);
+          revealTimer = 0;
+        }
+        if (fallbackTimer) {
+          clearTimeout(fallbackTimer);
+          fallbackTimer = 0;
+        }
+      };
+      this.homeTrailerFrameCleanup ||= new WeakMap();
+      this.homeTrailerFrameCleanup.set(frame, cleanup);
+      window.addEventListener("message", handleProxyMessage);
       frame.addEventListener("load", () => {
-        container.classList.add("is-active");
-        onReady?.();
+        if (!revealed) {
+          fallbackTimer = setTimeout(() => reveal(), 7000);
+        }
       }, { once: true });
       container.appendChild(frame);
       return;

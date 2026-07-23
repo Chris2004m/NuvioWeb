@@ -45,6 +45,7 @@ import { TizenStreamingServerResolver } from "../../../core/p2p/tizenStreamingSe
 import { TizenEngineFsService } from "../../../platform/tizen/tizenEngineFsService.js";
 import { requestWebOsCompanionService, subscribeWebOsCompanionService } from "../../../platform/webos/webosCompanionService.js";
 import { StreamPreferencesStore } from "../../../data/local/streamPreferencesStore.js";
+import { buildStreamResumeIdentity } from "../../../core/streams/streamResumeIdentity.js";
 import { TrackPreferencesStore } from "../../../data/local/trackPreferencesStore.js";
 import {
   shouldEnterStillWatchingPrompt,
@@ -2090,14 +2091,7 @@ export const PlayerScreen = {
     // (this skips trailers and synthetic single-url playback).
     if (Array.isArray(params.streamCandidates) && params.streamCandidates.length) {
       const playingStreamCandidate = this.streamCandidates[this.currentStreamIndex] || null;
-      const prefContentId = String(params?.itemId || "").trim();
-      const prefVideoId = String(params?.videoId || params?.itemId || "").trim();
-      if (playingStreamCandidate?.id && prefContentId) {
-        StreamPreferencesStore.set(prefContentId, prefVideoId, playingStreamCandidate.id, {
-          bingeGroup: playingStreamCandidate?.behaviorHints?.bingeGroup ||
-            playingStreamCandidate?.raw?.behaviorHints?.bingeGroup || ""
-        });
-      }
+      this.rememberSelectedStreamPreference(playingStreamCandidate);
     }
     this.activePlaybackSourceContext = this.getPlaybackSourceContext(
       preferredStreamCandidate || initialStreamCandidate || this.streamCandidates[this.currentStreamIndex] || null
@@ -2523,8 +2517,23 @@ export const PlayerScreen = {
       episodeTitle: this.params.episodeTitle || this.params.playerSubtitle || null,
       requestHeaders,
       mediaSourceType,
-      streamIdentity: streamCandidate ? streamMergeKey(streamCandidate) || null : null
+      streamIdentity: streamCandidate
+        ? buildStreamResumeIdentity(streamCandidate) || streamMergeKey(streamCandidate) || null
+        : null
     };
+  },
+
+  rememberSelectedStreamPreference(streamCandidate) {
+    const prefContentId = String(this.params?.itemId || "").trim();
+    const prefVideoId = String(this.params?.videoId || this.params?.itemId || "").trim();
+    if (!streamCandidate?.id || !prefContentId) {
+      return;
+    }
+    StreamPreferencesStore.set(prefContentId, prefVideoId, streamCandidate.id, {
+      bingeGroup: streamCandidate?.behaviorHints?.bingeGroup ||
+        streamCandidate?.raw?.behaviorHints?.bingeGroup || "",
+      resumeIdentity: buildStreamResumeIdentity(streamCandidate)
+    });
   },
 
   buildSubtitleLookupContext() {
@@ -9671,6 +9680,7 @@ export const PlayerScreen = {
         entry.id === streamCandidate.id ? { ...entry, ...streamCandidate } : entry
       ));
     }
+    this.rememberSelectedStreamPreference(streamCandidate);
     await this.playStreamByUrl(targetUrl, {
       ...options,
       mountToken,
