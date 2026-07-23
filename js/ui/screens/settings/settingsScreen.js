@@ -77,6 +77,7 @@ import {
   getRootSidebarNodes,
   getRootSidebarSelectedNode,
   getSidebarProfileState,
+  isModernSidebarBlurAvailable,
   isSelectedSidebarAction,
   isRootSidebarNode,
   renderRootSidebar,
@@ -3421,7 +3422,7 @@ export const SettingsScreen = {
           checked: Boolean(model.layout.modernSidebar)
         })}
         ${
-          model.layout.modernSidebar
+          model.layout.modernSidebar && isModernSidebarBlurAvailable()
             ? this.renderToggleRow({
                 focusKey: "layout:modernSidebarBlur",
                 title: t("settings.layout.modernSidebarBlur.title"),

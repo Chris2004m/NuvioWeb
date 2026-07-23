@@ -16977,6 +16977,13 @@ html.legacy-webos .debug-console-log-frame {
   -webkit-backdrop-filter: none !important;
 }
 
+.performance-constrained.modern-sidebar-blur-capable
+  .modern-sidebar-shell.blur-enabled.expanded:not(.collapsing)
+  .modern-sidebar-panel {
+  backdrop-filter: blur(26px) saturate(1) !important;
+  -webkit-backdrop-filter: blur(26px) saturate(1) !important;
+}
+
 .performance-constrained .series-detail-backdrop,
 .performance-constrained .series-detail-vignette,
 .performance-constrained .series-detail-content {
