@@ -4033,6 +4033,10 @@ export const MetaDetailsScreen = {
           ? t("detail.resume", {}, "Resume")
           : t("episodes_play", {}, "Play")
     });
+    options.push({
+      action: "playManually",
+      label: t("play_manually", {}, "Play manually")
+    });
     if (progress && isWatchProgressInProgress(progress)) {
       options.push({
         action: "playFromBeginning",
@@ -4213,6 +4217,13 @@ export const MetaDetailsScreen = {
             key: "resume",
             onAction: () => {
               void this.activateHeroOptionsMenu("resume");
+            }
+          },
+          {
+            label: t("play_manually", {}, "Play manually"),
+            key: "playManually",
+            onAction: () => {
+              void this.activateHeroOptionsMenu("playManually");
             }
           },
           {
@@ -4454,6 +4465,7 @@ export const MetaDetailsScreen = {
 
   async playDefaultFromHero(options = {}) {
     const startOver = Boolean(options?.startOver);
+    const manualSelection = Boolean(options?.manualSelection);
     if (isSeriesDetailMeta(this.meta, this.episodes)) {
       const targetEpisode =
         this.nextEpisodeToWatch ||
@@ -4461,11 +4473,11 @@ export const MetaDetailsScreen = {
         this.episodes?.[0] ||
         null;
       if (targetEpisode?.id) {
-        await this.openEpisodeStreamChooser(targetEpisode.id, { startOver });
+        await this.openEpisodeStreamChooser(targetEpisode.id, { startOver, manualSelection });
       }
       return;
     }
-    await this.openMovieStreamChooser({ startOver });
+    await this.openMovieStreamChooser({ startOver, manualSelection });
   },
 
   async toggleLibraryFromHero() {
@@ -4867,9 +4879,12 @@ export const MetaDetailsScreen = {
     this.episodeHoldMenu = null;
     this.navigateToStreamScreenForEpisode(
       episode,
-      this.getResumeParamsForProgress(progress, {
-        startOver: Boolean(options.startOver)
-      })
+      {
+        ...this.getResumeParamsForProgress(progress, {
+          startOver: Boolean(options.startOver)
+        }),
+        ...(options.manualSelection ? { manualSelection: true } : {})
+      }
     );
     return true;
   },
@@ -5059,6 +5074,10 @@ export const MetaDetailsScreen = {
       this.closeEpisodeHoldMenu({ restoreFocus: false });
       return this.startEpisodeFromHoldMenu(episode, { startOver: true });
     }
+    if (option.action === "playManually") {
+      this.closeEpisodeHoldMenu({ restoreFocus: false });
+      return this.startEpisodeFromHoldMenu(episode, { manualSelection: true });
+    }
     if (option.action === "toggleWatched") {
       this.closeEpisodeHoldMenu({ restoreFocus: false });
       return this.setEpisodeWatchedState(episode, !this.isEpisodeMarkedWatched(episode));
@@ -5094,7 +5113,10 @@ export const MetaDetailsScreen = {
   async activateHeroOptionsMenu(actionOverride = "") {
     if (this.heroPlayMenu) {
       this.closeHeroMenus({ restoreFocus: false });
-      await this.playDefaultFromHero({ startOver: actionOverride === "playFromBeginning" });
+      await this.playDefaultFromHero({
+        startOver: actionOverride === "playFromBeginning",
+        manualSelection: actionOverride === "playManually"
+      });
       return true;
     }
     if (!this.libraryListMenu) {
@@ -6647,14 +6669,20 @@ export const MetaDetailsScreen = {
     const progress = this.getEpisodeMenuProgress(episode) || this.getActiveResumeProgress();
     this.navigateToStreamScreenForEpisode(
       episode,
-      this.getResumeParamsForProgress(progress, options)
+      {
+        ...this.getResumeParamsForProgress(progress, options),
+        ...(options.manualSelection ? { manualSelection: true } : {})
+      }
     );
   },
 
   async openMovieStreamChooser(options = {}) {
     this.stopTrailerPlaybackForNavigation();
     this.navigateToStreamScreenForMovie(
-      this.getResumeParamsForProgress(this.getActiveResumeProgress(), options)
+      {
+        ...this.getResumeParamsForProgress(this.getActiveResumeProgress(), options),
+        ...(options.manualSelection ? { manualSelection: true } : {})
+      }
     );
   },
 
@@ -6909,6 +6937,7 @@ export const MetaDetailsScreen = {
         : null,
       playerTitle:
         this.meta?.name || this.params?.fallbackTitle || this.params?.itemId || "Untitled",
+      playerReleaseYear: String(this.meta?.releaseInfo || "").match(/\b(19|20)\d{2}\b/)?.[0] || "",
       playerSubtitle: pending.episode
         ? `S${pending.episode.season}E${pending.episode.episode} - ${pending.episode.title || ""}`.replace(
             /\s+-\s*$/,
@@ -6957,6 +6986,7 @@ export const MetaDetailsScreen = {
     const tmdbId = resolveMetaTmdbId(this.meta, this.params);
     const traktId = resolveMetaTraktId(this.meta, this.params);
     const contentLanguage = resolveMetaOriginalLanguage(this.meta, this.params);
+    const releaseYear = String(this.meta?.releaseInfo || "").match(/\b(19|20)\d{2}\b/)?.[0] || "";
     const resumeVideoId = String(this.params?.resumeVideoId || "").trim();
     const isContinueWatchingTarget = Boolean(
       this.params?.fromContinueWatching &&
@@ -6977,6 +7007,7 @@ export const MetaDetailsScreen = {
       returnToDetail: true,
       fromDetailRoute: true,
       itemTitle: this.meta?.name || this.params?.fallbackTitle || this.params?.itemId || "Untitled",
+      year: releaseYear,
       backdrop: streamBackdrop,
       poster: this.meta?.poster || null,
       logo: this.meta?.logo || null,

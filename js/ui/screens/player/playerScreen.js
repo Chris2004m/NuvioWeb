@@ -2564,6 +2564,10 @@ export const PlayerScreen = {
       type,
       id,
       videoId,
+      season: this.params?.season ?? null,
+      episode: this.params?.episode ?? null,
+      title: this.params?.playerTitle || this.params?.itemTitle || null,
+      year: this.params?.playerReleaseYear || this.params?.year || null,
       videoHash: behaviorHints.videoHash || rawStream.videoHash || this.params?.videoHash || null,
       videoSize: behaviorHints.videoSize || rawStream.videoSize || this.params?.videoSize || null,
       filename: behaviorHints.filename || rawStream.filename || this.params?.filename || null
@@ -15927,6 +15931,7 @@ export const PlayerScreen = {
         episode: selected.episode ?? null,
         episodeLabel: `S${selected.season}E${selected.episode}`,
         playerTitle: this.params?.playerTitle || this.params?.itemId,
+        playerReleaseYear: this.params?.playerReleaseYear || this.params?.year || "",
         playerSubtitle: `${selected.title || ""}`.trim() || `S${selected.season}E${selected.episode}`,
         playerBackdropUrl: this.params?.playerBackdropUrl || null,
         playerLogoUrl: this.params?.playerLogoUrl || null,
@@ -15969,6 +15974,10 @@ export const PlayerScreen = {
             subtitleLookup.id,
             subtitleLookup.videoId || null,
             {
+              season: subtitleLookup.season,
+              episode: subtitleLookup.episode,
+              title: subtitleLookup.title,
+              year: subtitleLookup.year,
               videoHash: subtitleLookup.videoHash || null,
               videoSize: subtitleLookup.videoSize || null,
               filename: subtitleLookup.filename || null
