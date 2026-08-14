@@ -2489,6 +2489,7 @@ export const PlayerScreen = {
     this.engineFsStartupErrorRetries = 0;
     this.engineFsStallExtensions = 0;
     this.webOsNativeStartupLoadingExtended = false;
+    this.webOsNativeReadyStartupRetries = 0;
     this.lastEngineFsStallStats = null;
     this.lastEngineFsStartupErrorStats = null;
     this.engineFsKeepAliveHandle = null;
@@ -10398,6 +10399,7 @@ export const PlayerScreen = {
       resetSilentAudioState = true,
       preservePlaybackState = false,
       preservePendingRestore = false,
+      preserveStartupRecoveryState = false,
       forceEngine = null,
       sourceCandidate: explicitSourceCandidate = null,
       mountToken = null
@@ -10460,6 +10462,9 @@ export const PlayerScreen = {
 
     this.hasPresentedPlaybackFrame = false;
     this.webOsNativeStartupLoadingExtended = false;
+    if (!preserveStartupRecoveryState) {
+      this.webOsNativeReadyStartupRetries = 0;
+    }
     this.startupPlaybackBaselineSeconds = null;
     this.startupPlaybackHasAdvanced = false;
     this.bufferingSpinnerBaselineSeconds = null;
@@ -11241,17 +11246,17 @@ export const PlayerScreen = {
 
       const startupMediaErrorCode = Number(PlayerController.getLastPlaybackErrorCode?.() || 0);
       const networkState = Number(PlayerController.video?.networkState ?? 0);
+      const startupHlsError =
+        startup && typeof PlayerController.getLastHlsErrorDetail === "function"
+          ? PlayerController.getLastHlsErrorDetail()
+          : "";
       if (startup) {
-        const hlsError =
-          typeof PlayerController.getLastHlsErrorDetail === "function"
-            ? PlayerController.getLastHlsErrorDetail()
-            : "";
         console.warn("[Nuvio playback] startup stall", {
           engine: String(PlayerController.playbackEngine || "unknown"),
           readyState,
           networkState,
           mediaErrorCode: startupMediaErrorCode || null,
-          hlsError: hlsError || null
+          hlsError: startupHlsError || null
         });
       }
       if (
@@ -11289,6 +11294,39 @@ export const PlayerScreen = {
           preservePlaybackState: true,
           resetSilentAudioState: false,
           forceEngine: targetEngine
+        });
+        return;
+      }
+
+      if (
+        startup &&
+        Environment.isWebOS() &&
+        !this.currentEngineFsStream &&
+        String(PlayerController.playbackEngine || "") === "native-file" &&
+        startupMediaErrorCode === 0 &&
+        !startupHlsError &&
+        readyState >= 3 &&
+        networkState === 2 &&
+        Number(this.webOsNativeReadyStartupRetries || 0) < 1
+      ) {
+        this.webOsNativeReadyStartupRetries = Number(this.webOsNativeReadyStartupRetries || 0) + 1;
+        const stalledPlaybackUrl = this.activePlaybackUrl;
+        const sourceCandidate =
+          this.getStreamCandidateByUrl(stalledPlaybackUrl) || this.getCurrentStreamCandidate();
+        console.warn(
+          "webOS native playback is ready but has not started; retrying the current source once",
+          {
+            engine: PlayerController.playbackEngine,
+            readyState,
+            networkState
+          }
+        );
+        void this.playStreamByUrl(stalledPlaybackUrl, {
+          preservePanel: true,
+          preservePlaybackState: true,
+          resetSilentAudioState: false,
+          preserveStartupRecoveryState: true,
+          sourceCandidate
         });
         return;
       }
