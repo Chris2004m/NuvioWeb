@@ -13,6 +13,7 @@ function resetController() {
   PlayerController.appliedAvPlayPlaybackRate = 1;
   PlayerController.appliedWebOsPlaybackRate = 1;
   PlayerController.webOsPlaybackRateRequestToken = 0;
+  PlayerController.webOsPlaybackRateCommandPromise = null;
   PlayerController.webOsPlaybackRateReapplyPromise = null;
 }
 
@@ -129,6 +130,44 @@ test("webOS ignores a pending playback-rate result after a source reset", async 
     assert.equal(await ratePromise, false);
     assert.equal(PlayerController.getPlaybackRate(), 1);
     assert.equal(PlayerController.appliedWebOsPlaybackRate, 1);
+  } finally {
+    resetController();
+    Platform.current = originalPlatform;
+    globalThis.webOS = originalWebOs;
+  }
+});
+
+test("latest webOS playback-rate selection wins when Luna responses arrive out of order", async () => {
+  const originalPlatform = Platform.current;
+  const originalWebOs = globalThis.webOS;
+  const pendingRequests = [];
+
+  try {
+    Platform.current = { name: "webos" };
+    globalThis.webOS = {
+      service: {
+        request(_service, options) {
+          pendingRequests.push(options);
+        }
+      }
+    };
+    resetController();
+    PlayerController.video = { mediaId: "media-race", playbackRate: 1 };
+    PlayerController.playbackEngine = "native-file";
+
+    const firstRatePromise = PlayerController.setPlaybackRate(1.25);
+    const secondRatePromise = PlayerController.setPlaybackRate(1.5);
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.equal(pendingRequests.length, 1);
+    pendingRequests[0].onSuccess({ returnValue: true });
+    assert.equal(await firstRatePromise, false);
+    await Promise.resolve();
+    assert.equal(pendingRequests.length, 2);
+    pendingRequests[1].onSuccess({ returnValue: true });
+    assert.equal(await secondRatePromise, true);
+    assert.equal(PlayerController.getPlaybackRate(), 1.5);
+    assert.equal(PlayerController.appliedWebOsPlaybackRate, 1.5);
   } finally {
     resetController();
     Platform.current = originalPlatform;

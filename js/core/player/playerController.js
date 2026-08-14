@@ -156,6 +156,7 @@ export const PlayerController = {
   appliedAvPlayPlaybackRate: 1,
   appliedWebOsPlaybackRate: 1,
   webOsPlaybackRateRequestToken: 0,
+  webOsPlaybackRateCommandPromise: null,
   webOsPlaybackRateReapplyPromise: null,
 
   isExpectedPlayInterruption(error) {
@@ -527,6 +528,7 @@ export const PlayerController = {
     this.nativeMediaIdLookupToken = Number(this.nativeMediaIdLookupToken || 0) + 1;
     this.webOsPlaybackRateRequestToken = Number(this.webOsPlaybackRateRequestToken || 0) + 1;
     this.appliedWebOsPlaybackRate = 1;
+    this.webOsPlaybackRateCommandPromise = null;
     this.webOsPlaybackRateReapplyPromise = null;
     this.cancelWebOsAudioTrackSelection();
     this.selectedWebOsEmbeddedAudioTrackIndex = -1;
@@ -3813,6 +3815,22 @@ export const PlayerController = {
     }
   },
 
+  queueWebOsPlaybackRate(speed = this.desiredPlaybackRate) {
+    const previousCommand = this.webOsPlaybackRateCommandPromise;
+    const commandPromise = previousCommand
+      ? Promise.resolve(previousCommand)
+          .catch(() => false)
+          .then(() => this.applyWebOsPlaybackRate(speed))
+      : this.applyWebOsPlaybackRate(speed);
+    const trackedPromise = commandPromise.finally(() => {
+      if (this.webOsPlaybackRateCommandPromise === trackedPromise) {
+        this.webOsPlaybackRateCommandPromise = null;
+      }
+    });
+    this.webOsPlaybackRateCommandPromise = trackedPromise;
+    return trackedPromise;
+  },
+
   reapplyWebOsPlaybackRate() {
     if (
       !Platform.isWebOS() ||
@@ -3825,7 +3843,7 @@ export const PlayerController = {
     if (this.webOsPlaybackRateReapplyPromise) {
       return this.webOsPlaybackRateReapplyPromise;
     }
-    const reapplyPromise = this.applyWebOsPlaybackRate(this.desiredPlaybackRate).finally(() => {
+    const reapplyPromise = this.queueWebOsPlaybackRate(this.desiredPlaybackRate).finally(() => {
       if (this.webOsPlaybackRateReapplyPromise === reapplyPromise) {
         this.webOsPlaybackRateReapplyPromise = null;
       }
@@ -3880,7 +3898,7 @@ export const PlayerController = {
 
       const requestToken = Number(this.webOsPlaybackRateRequestToken || 0) + 1;
       this.webOsPlaybackRateRequestToken = requestToken;
-      const applied = await this.applyWebOsPlaybackRate(targetSpeed);
+      const applied = await this.queueWebOsPlaybackRate(targetSpeed);
       if (!applied || requestToken !== this.webOsPlaybackRateRequestToken) {
         return false;
       }
