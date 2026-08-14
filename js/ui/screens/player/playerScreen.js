@@ -77,6 +77,7 @@ import {
 } from "../../../core/player/subtitleVerticalOffset.js";
 import {
   BitmapSubtitleDecoder,
+  normalizeBitmapSubtitleFormat,
   supportsBitmapSubtitleDecoding,
   warmBitmapSubtitleDecoder
 } from "../../../core/player/bitmapSubtitleDecoder.js";
@@ -648,16 +649,14 @@ function isUnsupportedEmbeddedSubtitleTrack(track = {}) {
   return UNSUPPORTED_EMBEDDED_SUBTITLE_CODEC_PATTERNS.some((pattern) => pattern.test(searchText));
 }
 
-function isVobSubEmbeddedSubtitleTrack(track = {}) {
-  const codecText = normalizeTrackCodecText(
+function getEmbeddedBitmapSubtitleFormat(track = {}) {
+  const primaryFormat = normalizeBitmapSubtitleFormat(
     track?.codec || track?.subtitleCodec || track?.codec_name || track?.format || ""
   );
-  if (codecText === "VOBSUB" || codecText === "S VOBSUB") {
-    return true;
+  if (primaryFormat) {
+    return primaryFormat;
   }
-  return /\bvob[ /_-]*sub\b|\bdvd[ /_-]*sub(?:title)?\b/i.test(
-    getTrackMetadataStrings(track).join(" ")
-  );
+  return normalizeBitmapSubtitleFormat(getTrackMetadataStrings(track).join(" "));
 }
 
 function canUseWebOsBitmapSubtitles() {
@@ -3125,7 +3124,9 @@ export const PlayerScreen = {
     }
     this.activeSkipInterval = active;
     if (previousKey !== nextKey) {
-      const intervalType = String(active?.type || "").trim().toLowerCase();
+      const intervalType = String(active?.type || "")
+        .trim()
+        .toLowerCase();
       const autoSkipType = ["outro", "ed", "mixed-ed"].includes(intervalType)
         ? "outro"
         : intervalType === "recap"
@@ -4180,12 +4181,13 @@ export const PlayerScreen = {
         return type === "text" || type === "subtitle";
       })
       .filter((track) =>
-        isVobSubEmbeddedSubtitleTrack(track)
+        getEmbeddedBitmapSubtitleFormat(track)
           ? canUseWebOsBitmapSubtitles()
           : !isUnsupportedEmbeddedSubtitleTrack(track)
       )
       .map((track, index) => {
-        const bitmapSubtitle = isVobSubEmbeddedSubtitleTrack(track);
+        const bitmapSubtitleFormat = getEmbeddedBitmapSubtitleFormat(track);
+        const bitmapSubtitle = Boolean(bitmapSubtitleFormat);
         const sourceTrackId = Number(track?.id);
         const rawLanguage = getTrackLanguageValue(track);
         const normalizedLanguage = normalizeTrackLanguageCode(rawLanguage);
@@ -4203,6 +4205,7 @@ export const PlayerScreen = {
           sourceTrackId: Number.isFinite(sourceTrackId) ? sourceTrackId : -1,
           nativeTrackIndex: bitmapSubtitle ? -1 : nativeTrackIndex++,
           bitmapSubtitle,
+          bitmapSubtitleFormat,
           label: getMeaningfulTrackLabel(track) || fallbackLabel,
           language:
             normalizedLanguage ||
@@ -7730,7 +7733,10 @@ export const PlayerScreen = {
       PlayerController.setAvPlayExternalSubtitleDelay?.(this.subtitleDelayMs);
     }
     uiRoot.style.setProperty("--player-subtitle-color", String(style.textColor || "#FFFFFF"));
-    uiRoot.style.setProperty("--player-subtitle-background", String(style.backgroundColor || "#00000000"));
+    uiRoot.style.setProperty(
+      "--player-subtitle-background",
+      String(style.backgroundColor || "#00000000")
+    );
     uiRoot.style.setProperty("--player-subtitle-outline-color", outlineColor);
     uiRoot.style.setProperty("--player-subtitle-font-size", `${subtitleFontSize}%`);
     uiRoot.style.setProperty("--player-html-subtitle-font-size", htmlSubtitleFontSize);
@@ -7741,7 +7747,10 @@ export const PlayerScreen = {
       `${(verticalOffset.value * -2).toFixed(2)}vh`
     );
     video.style.setProperty("--player-subtitle-color", String(style.textColor || "#FFFFFF"));
-    video.style.setProperty("--player-subtitle-background", String(style.backgroundColor || "#00000000"));
+    video.style.setProperty(
+      "--player-subtitle-background",
+      String(style.backgroundColor || "#00000000")
+    );
     video.style.setProperty("--player-subtitle-outline-color", outlineColor);
     video.style.setProperty("--player-subtitle-font-size", `${subtitleFontSize}%`);
     video.style.setProperty("--player-subtitle-font-weight", subtitleFontWeight);
@@ -8593,6 +8602,7 @@ export const PlayerScreen = {
       this.attemptPendingPlaybackRestore();
       this.completeSeekLoadingIfReady();
       this.markPlaybackProgress();
+      this.renderBitmapSubtitleAtCurrentTime({ force: true });
       this.updateUiTick();
     };
 
@@ -9782,6 +9792,7 @@ export const PlayerScreen = {
     this.seekLoadingTargetSeconds = Number(seconds || 0);
     this.seekLoading = true;
     this.updateLoadingVisibility();
+    this.prepareBitmapSubtitleForSeek(this.seekLoadingTargetSeconds);
     if (typeof PlayerController.seekToSeconds === "function") {
       const didSeek = Boolean(PlayerController.seekToSeconds(seconds));
       if (!didSeek) {
@@ -12670,6 +12681,28 @@ export const PlayerScreen = {
     }
   },
 
+  prepareBitmapSubtitleForSeek(timeSeconds) {
+    const track = this.bitmapSubtitleTrack;
+    if (!track) {
+      return;
+    }
+    const targetSeconds = Math.max(0, Number(timeSeconds) || 0);
+    this.bitmapSubtitleLoadToken = Number(this.bitmapSubtitleLoadToken || 0) + 1;
+    this.bitmapSubtitleLoading = false;
+    this.bitmapSubtitleLastErrorAt = 0;
+    this.clearBitmapSubtitleCanvas();
+    const outsideWindow =
+      targetSeconds < this.bitmapSubtitleWindowStart ||
+      targetSeconds >= this.bitmapSubtitleWindowEnd;
+    if (outsideWindow) {
+      this.bitmapSubtitleDecoder?.dispose?.();
+      this.bitmapSubtitleDecoder = null;
+      this.bitmapSubtitleWindowStart = 0;
+      this.bitmapSubtitleWindowEnd = 0;
+      void this.loadBitmapSubtitleWindow(targetSeconds);
+    }
+  },
+
   async loadBitmapSubtitleWindow(timeSeconds) {
     const track = this.bitmapSubtitleTrack;
     const sourceUrl = this.getTrackProbeUrl();
@@ -12695,7 +12728,11 @@ export const PlayerScreen = {
       }
       const decoder = new BitmapSubtitleDecoder();
       if (windowData.cueCount > 0) {
-        await decoder.load(windowData.idxContent, windowData.subData);
+        await decoder.load({
+          format: windowData.format,
+          idxContent: windowData.idxContent,
+          data: windowData.data
+        });
       }
       if (requestToken !== this.bitmapSubtitleLoadToken || this.bitmapSubtitleTrack !== track) {
         decoder.dispose();
@@ -12713,7 +12750,8 @@ export const PlayerScreen = {
       if (requestToken === this.bitmapSubtitleLoadToken && this.bitmapSubtitleTrack === track) {
         this.bitmapSubtitleLastErrorAt = Date.now();
         this.clearBitmapSubtitleCanvas();
-        console.warn("Embedded VOBSUB rendering failed", {
+        console.warn("Embedded bitmap subtitle rendering failed", {
+          format: track.bitmapSubtitleFormat || "unknown",
           trackNumber: track.sourceTrackId,
           error: error?.message || String(error || "")
         });
@@ -12752,7 +12790,8 @@ export const PlayerScreen = {
       return false;
     }
     const canvas = this.uiRefs?.bitmapSubtitles || document.getElementById("playerBitmapSubtitles");
-    if (!canvas || !frame.width || !frame.height || !frame.screenWidth || !frame.screenHeight) {
+    const compositions = Array.isArray(frame.compositions) ? frame.compositions : [];
+    if (!canvas || !frame.screenWidth || !frame.screenHeight) {
       return false;
     }
     const viewport =
@@ -12786,12 +12825,18 @@ export const PlayerScreen = {
       sizeScale,
       verticalOffsetPx
     ].join(":");
+    const hasRenderableCompositions = compositions.some(
+      (composition) =>
+        composition?.width > 0 &&
+        composition?.height > 0 &&
+        composition.rgba?.length === composition.width * composition.height * 4
+    );
     if (
       !force &&
       renderKey === this.bitmapSubtitleLastFrameKey &&
-      !canvas.classList.contains("hidden")
+      canvas.classList.contains("hidden") !== hasRenderableCompositions
     ) {
-      return true;
+      return hasRenderableCompositions;
     }
     canvas.width = viewportWidth;
     canvas.height = viewportHeight;
@@ -12800,30 +12845,54 @@ export const PlayerScreen = {
       return false;
     }
     context.clearRect(0, 0, viewportWidth, viewportHeight);
-    const scratch = this.bitmapSubtitleScratchCanvas || document.createElement("canvas");
-    this.bitmapSubtitleScratchCanvas = scratch;
-    scratch.width = frame.width;
-    scratch.height = frame.height;
-    const scratchContext = scratch.getContext("2d");
-    if (!scratchContext || frame.rgba.length !== frame.width * frame.height * 4) {
+    if (!hasRenderableCompositions) {
+      canvas.classList.add("hidden");
+      canvas.setAttribute("aria-hidden", "true");
+      this.bitmapSubtitleLastFrameKey = renderKey;
       return false;
     }
-    const imageData = scratchContext.createImageData(frame.width, frame.height);
-    imageData.data.set(frame.rgba);
-    scratchContext.putImageData(imageData, 0, 0);
+    const scratch = this.bitmapSubtitleScratchCanvas || document.createElement("canvas");
+    this.bitmapSubtitleScratchCanvas = scratch;
+    const scratchContext = scratch.getContext("2d");
+    if (!scratchContext) {
+      return false;
+    }
     const scaleX = rect.width / frame.screenWidth;
     const scaleY = rect.height / frame.screenHeight;
-    const targetWidth = frame.width * scaleX * sizeScale;
-    const targetHeight = frame.height * scaleY * sizeScale;
-    const targetCenterX = rect.x + (frame.x + frame.width / 2) * scaleX;
-    const targetCenterY = rect.y + (frame.y + frame.height / 2) * scaleY + verticalOffsetPx;
-    context.drawImage(
-      scratch,
-      targetCenterX - targetWidth / 2,
-      targetCenterY - targetHeight / 2,
-      targetWidth,
-      targetHeight
-    );
+    let renderedCompositions = 0;
+    compositions.forEach((composition) => {
+      if (
+        !composition?.width ||
+        !composition?.height ||
+        composition.rgba?.length !== composition.width * composition.height * 4
+      ) {
+        return;
+      }
+      scratch.width = composition.width;
+      scratch.height = composition.height;
+      const imageData = scratchContext.createImageData(composition.width, composition.height);
+      imageData.data.set(composition.rgba);
+      scratchContext.putImageData(imageData, 0, 0);
+      const targetWidth = composition.width * scaleX * sizeScale;
+      const targetHeight = composition.height * scaleY * sizeScale;
+      const targetCenterX = rect.x + (composition.x + composition.width / 2) * scaleX;
+      const targetCenterY =
+        rect.y + (composition.y + composition.height / 2) * scaleY + verticalOffsetPx;
+      context.drawImage(
+        scratch,
+        targetCenterX - targetWidth / 2,
+        targetCenterY - targetHeight / 2,
+        targetWidth,
+        targetHeight
+      );
+      renderedCompositions += 1;
+    });
+    if (!renderedCompositions) {
+      canvas.classList.add("hidden");
+      canvas.setAttribute("aria-hidden", "true");
+      this.bitmapSubtitleLastFrameKey = renderKey;
+      return false;
+    }
     canvas.classList.remove("hidden");
     canvas.setAttribute("aria-hidden", "false");
     this.bitmapSubtitleLastFrameKey = renderKey;
