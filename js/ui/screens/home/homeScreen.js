@@ -870,6 +870,13 @@ function buildYoutubeEmbedUrl(videoId, { muted = true } = {}) {
       proxyUrl.searchParams.set("playsinline", "1");
       proxyUrl.searchParams.set("rel", "0");
       proxyUrl.searchParams.set("cc_load_policy", "0");
+      if (Platform.isWebOS()) {
+        // Home previews do not need the controllable IFrame API. On webOS it
+        // commonly reaches the same direct-embed fallback only after the
+        // proxy watchdog expires, keeping the trailer hidden for several
+        // seconds after the focused poster has already expanded.
+        proxyUrl.searchParams.set("direct", "1");
+      }
       proxyUrl.searchParams.set("_cb", `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
       return proxyUrl.toString();
     } catch (_) {
@@ -3599,7 +3606,10 @@ export const HomeScreen = {
     if (Platform.isTizen()) {
       return 1600;
     }
-    if (this.isLegacyTvRuntime()) {
+    // The configured focused-poster delay already settles focus before this
+    // flow starts. Android begins resolving its preview during that dwell, so
+    // adding another delay after expansion only makes webOS visibly later.
+    if (Platform.isWebOS()) {
       return 0;
     }
     if (this.isPerformanceConstrained()) {

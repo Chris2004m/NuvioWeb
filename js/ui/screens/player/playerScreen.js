@@ -4147,6 +4147,20 @@ export const PlayerScreen = {
   },
 
   canDiscoverEmbeddedAudioTracks() {
+    if (Environment.isTizen()) {
+      const usingNativePlayback =
+        typeof PlayerController.isUsingNativePlayback === "function"
+          ? PlayerController.isUsingNativePlayback()
+          : false;
+      const usingAvPlay =
+        typeof PlayerController.isUsingAvPlay === "function"
+          ? PlayerController.isUsingAvPlay()
+          : false;
+      const probeUrl = this.getTrackProbeUrl();
+      return Boolean(
+        usingNativePlayback && usingAvPlay && probeUrl && !this.isCurrentSourceAdaptiveManifest()
+      );
+    }
     return this.canDiscoverEmbeddedSubtitleTracks();
   },
 
@@ -12146,9 +12160,10 @@ export const PlayerScreen = {
 
   mergeAvPlayAudioTrackMetadata(track, index) {
     const avplayTrackIndex = Number(track?.avplayTrackIndex);
-    let embeddedTrack = this.getEmbeddedAudioTrackByNativeIndex(
-      Number.isFinite(avplayTrackIndex) ? avplayTrackIndex : index
-    );
+    let embeddedTrack =
+      this.getEmbeddedAudioTrackByNativeIndex(
+        Number.isFinite(avplayTrackIndex) ? avplayTrackIndex : index
+      ) || this.getEmbeddedAudioTrack(index);
     const explicitLanguage = normalizeTrackLanguageCode(track?.language || track?.lang || "");
     let embeddedLanguage = normalizeTrackLanguageCode(
       embeddedTrack?.language || embeddedTrack?.lang || ""
