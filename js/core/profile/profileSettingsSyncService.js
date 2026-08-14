@@ -1,7 +1,7 @@
 import { LocalStore } from "../storage/localStore.js";
 import { AuthManager } from "../auth/authManager.js";
 import { SupabaseApi } from "../../data/remote/supabase/supabaseApi.js";
-import { ThemeStore } from "../../data/local/themeStore.js";
+import { accentColorForTheme, ThemeStore } from "../../data/local/themeStore.js";
 import { LayoutPreferences } from "../../data/local/layoutPreferences.js";
 import { ExperienceModeStore } from "../../data/local/experienceModeStore.js";
 import { TrackPreferencesStore } from "../../data/local/trackPreferencesStore.js";
@@ -649,7 +649,9 @@ const FEATURE_ADAPTERS = {
       const raw = normalizeFeaturePayload(rawFeature);
       const partial = {};
       if (stringOrNull(raw.selected_theme)) {
-        partial.themeName = String(raw.selected_theme).toUpperCase();
+        const selectedTheme = String(raw.selected_theme).toUpperCase();
+        partial.themeName = selectedTheme;
+        partial.accentColor = accentColorForTheme(selectedTheme);
       }
       if (stringOrNull(raw.selected_font)) {
         partial.fontFamily = String(raw.selected_font).toUpperCase();
