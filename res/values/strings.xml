@@ -2726,6 +2726,7 @@
     <string name="layout_cw_card_style_poster">Poster</string>
     <string name="layout_cw_sort_split_upcoming">Separate Upcoming Row</string>
     <string name="layout_cw_sort_split_upcoming_desc">Move unaired episodes to a separate Upcoming row</string>
+    <string name="upcoming_section_title">Upcoming</string>
     <string name="settings_card_depth_edge">Edge glow</string>
     <string name="settings_card_depth_edge_subtle">Subtle</string>
     <string name="settings_card_depth_edge_balanced">Balanced</string>
