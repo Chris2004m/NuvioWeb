@@ -16406,16 +16406,24 @@ export const PlayerScreen = {
     this.resetControlsAutoHide();
   },
 
-  applyPlaybackSpeed(speed = 1) {
-    const applied =
-      typeof PlayerController.setPlaybackRate === "function"
-        ? PlayerController.setPlaybackRate(speed)
-        : false;
+  async applyPlaybackSpeed(speed = 1) {
+    let applied = false;
+    try {
+      applied =
+        typeof PlayerController.setPlaybackRate === "function"
+          ? await PlayerController.setPlaybackRate(speed)
+          : false;
+    } catch (_) {
+      applied = false;
+    }
     if (!applied) {
-      return;
+      this.renderControlButtons();
+      this.renderSpeedDialog();
+      return false;
     }
     this.renderControlButtons();
     this.renderSpeedDialog();
+    return true;
   },
 
   renderSpeedDialog() {
