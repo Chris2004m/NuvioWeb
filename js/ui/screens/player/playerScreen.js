@@ -3346,7 +3346,7 @@ export const PlayerScreen = {
     this.stickyProgressFocus = false;
     this.autoHideControlsAfterSeek = false;
     this.controlFocusZone = "skipIntro";
-    this.renderControlButtons();
+    this.syncControlFocusDom();
     this.syncSkipIntroFocusState();
     this.resetControlsAutoHide();
     return true;
@@ -8992,6 +8992,19 @@ export const PlayerScreen = {
     ];
   },
 
+  getControlRenderSignature(controls = this.getControlDefinitions()) {
+    return JSON.stringify(
+      controls.map((control) => [
+        control.action || "",
+        control.label || "",
+        control.icon || "",
+        control.title || "",
+        Boolean(control.primary),
+        Boolean(control.useMask)
+      ])
+    );
+  },
+
   renderControlButtons() {
     if (this.isExternalFrameMode()) {
       return;
@@ -9002,6 +9015,7 @@ export const PlayerScreen = {
     }
 
     const controls = this.getControlDefinitions();
+    const controlRenderSignature = this.getControlRenderSignature(controls);
     if (
       this.stickyProgressFocus &&
       this.controlsVisible &&
@@ -9029,6 +9043,7 @@ export const PlayerScreen = {
     `
       )
       .join("");
+    this.renderedControlSignature = controlRenderSignature;
 
     const buttons = Array.from(wrap.querySelectorAll(".player-control-btn"));
     buttons.forEach((button, index) => {
@@ -9085,6 +9100,70 @@ export const PlayerScreen = {
         progressShell.blur();
       }
     }
+    this.syncSkipIntroFocusState();
+    this.renderNextEpisodeCard();
+    this.syncPlayerOverlayLayoutState();
+    this.renderBitmapSubtitleAtCurrentTime();
+  },
+
+  syncControlFocusDom() {
+    if (this.isExternalFrameMode()) {
+      return;
+    }
+    const wrap = this.uiRefs?.controlButtons;
+    if (!wrap) {
+      return;
+    }
+
+    const controls = this.getControlDefinitions();
+    const buttons = Array.from(wrap.querySelectorAll(".player-control-btn"));
+    const controlsMatchDom = buttons.every(
+      (button, index) => button.dataset.action === String(controls[index]?.action || "")
+    );
+    // This path is used only when focus moves. If playback state changed the
+    // available controls without rendering them first, fall back to the full
+    // state render instead of focusing a stale button.
+    if (
+      buttons.length !== controls.length ||
+      !controlsMatchDom ||
+      this.renderedControlSignature !== this.getControlRenderSignature(controls)
+    ) {
+      this.renderControlButtons();
+      return;
+    }
+
+    this.controlFocusIndex = clamp(this.controlFocusIndex, 0, Math.max(0, controls.length - 1));
+    buttons.forEach((button, index) => {
+      button.classList.toggle(
+        "focused",
+        this.controlFocusZone === "buttons" && index === this.controlFocusIndex
+      );
+    });
+
+    const progressShell = this.uiRefs?.progressShell;
+    progressShell?.classList.toggle("focused", this.controlFocusZone === "progress");
+
+    if (this.controlFocusZone === "progress") {
+      buttons.forEach((button) => button.blur?.());
+      if (progressShell && document.activeElement !== progressShell) {
+        progressShell.focus?.();
+      }
+    } else if (this.controlFocusZone === "buttons") {
+      if (progressShell && document.activeElement === progressShell) {
+        progressShell.blur?.();
+      }
+      const focusedButton = buttons[this.controlFocusIndex] || null;
+      if (focusedButton && document.activeElement !== focusedButton) {
+        focusedButton.focus?.();
+      }
+    } else if (this.controlFocusZone === "skipIntro") {
+      buttons.forEach((button) => button.blur?.());
+      if (progressShell && document.activeElement === progressShell) {
+        progressShell.blur?.();
+      }
+    }
+
+    // Preserve the non-markup side effects of renderControlButtons().
     this.syncSkipIntroFocusState();
     this.renderNextEpisodeCard();
     this.syncPlayerOverlayLayoutState();
@@ -9216,7 +9295,7 @@ export const PlayerScreen = {
     this.autoHideControlsAfterSeek = false;
     this.controlFocusZone = "buttons";
     this.controlFocusIndex = 0;
-    this.renderControlButtons();
+    this.syncControlFocusDom();
     const firstButton = this.container.querySelector(".player-control-btn[data-action]");
     firstButton?.focus?.();
   },
@@ -9226,7 +9305,7 @@ export const PlayerScreen = {
       this.stickyProgressFocus = false;
       this.autoHideControlsAfterSeek = false;
       this.controlFocusZone = "buttons";
-      this.renderControlButtons();
+      this.syncControlFocusDom();
       return;
     }
     const activeElement = document.activeElement;
@@ -9239,7 +9318,7 @@ export const PlayerScreen = {
     }
     this.stickyProgressFocus = true;
     this.controlFocusZone = "progress";
-    this.renderControlButtons();
+    this.syncControlFocusDom();
     this.uiRefs?.progressShell?.focus?.();
     this.scheduleProgressBarRefocus();
   },
@@ -16381,9 +16460,9 @@ export const PlayerScreen = {
     );
   },
 
-  getSourceFilters() {
+  getSourceFilters(orderedStreams = this.getOrderedStreamCandidates()) {
     const addons = [];
-    this.getOrderedStreamCandidates().forEach((stream) => {
+    orderedStreams.forEach((stream) => {
       const addonName = String(stream?.addonName || "").trim();
       if (addonName && !addons.includes(addonName)) {
         addons.push(addonName);
@@ -16406,17 +16485,16 @@ export const PlayerScreen = {
       .map((entry) => entry.stream);
   },
 
-  getFilteredSources() {
-    const ordered = this.getOrderedStreamCandidates();
+  getFilteredSources(orderedStreams = this.getOrderedStreamCandidates()) {
     if (this.sourceFilter === "all") {
-      return ordered;
+      return orderedStreams;
     }
-    return ordered.filter((stream) => stream.addonName === this.sourceFilter);
+    return orderedStreams.filter((stream) => stream.addonName === this.sourceFilter);
   },
 
-  ensureSourcesFocus() {
-    const filters = this.getSourceFilters();
-    const list = this.getFilteredSources();
+  ensureSourcesFocus(filters = null, list = null) {
+    const availableFilters = Array.isArray(filters) ? filters : this.getSourceFilters();
+    const availableSources = Array.isArray(list) ? list : this.getFilteredSources();
 
     if (!this.sourcesFocus || !["top", "filter", "list"].includes(this.sourcesFocus.zone)) {
       this.sourcesFocus = { zone: "filter", index: 0 };
@@ -16428,12 +16506,20 @@ export const PlayerScreen = {
     }
 
     if (this.sourcesFocus.zone === "filter") {
-      this.sourcesFocus.index = clamp(this.sourcesFocus.index, 0, Math.max(0, filters.length - 1));
+      this.sourcesFocus.index = clamp(
+        this.sourcesFocus.index,
+        0,
+        Math.max(0, availableFilters.length - 1)
+      );
       return;
     }
 
-    this.sourcesFocus.index = clamp(this.sourcesFocus.index, 0, Math.max(0, list.length - 1));
-    if (!list.length && filters.length) {
+    this.sourcesFocus.index = clamp(
+      this.sourcesFocus.index,
+      0,
+      Math.max(0, availableSources.length - 1)
+    );
+    if (!availableSources.length && availableFilters.length) {
       this.sourcesFocus = { zone: "filter", index: 0 };
     }
   },
@@ -16605,12 +16691,13 @@ export const PlayerScreen = {
       return;
     }
 
-    const filters = this.getSourceFilters();
-    const filtered = this.getFilteredSources();
+    const orderedSources = this.getOrderedStreamCandidates();
+    const filters = this.getSourceFilters(orderedSources);
+    const filtered = this.getFilteredSources(orderedSources);
     const badgeSettings = StreamBadgeSettingsStore.snapshot();
     const showAddonLogo = badgeSettings.showAddonLogo === true;
     const badgePlacement = resolvePlayerSourceBadgePlacement(badgeSettings);
-    this.ensureSourcesFocus();
+    this.ensureSourcesFocus(filters, filtered);
 
     panel.innerHTML = `
       <div class="player-sources-header">
@@ -16702,9 +16789,41 @@ export const PlayerScreen = {
     }
   },
 
+  syncSourcesFocusDom() {
+    const panel = this.uiRefs?.sourcesPanel;
+    if (!panel || !this.sourcesPanelVisible) {
+      return;
+    }
+
+    const zone = String(this.sourcesFocus?.zone || "filter");
+    const index = Number(this.sourcesFocus?.index || 0);
+    const focusedNode = panel.querySelector(
+      `[data-sources-zone="${zone}"][data-sources-index="${index}"]`
+    );
+    // Source/filter data can change asynchronously while the panel is open.
+    // If the live DOM no longer represents the state, retain the existing full
+    // render path so content and focus cannot become misaligned.
+    if (!focusedNode) {
+      this.renderSourcesPanel();
+      return;
+    }
+
+    panel.querySelectorAll("[data-sources-zone].focused").forEach((node) => {
+      if (node !== focusedNode) {
+        node.classList.remove("focused");
+      }
+    });
+    focusedNode.classList.add("focused");
+    if (focusedNode.classList.contains("player-source-card")) {
+      focusedNode.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
+  },
+
   moveSourcesFocus(direction) {
-    const filters = this.getSourceFilters();
-    const list = this.getFilteredSources();
+    const orderedSources = this.getOrderedStreamCandidates();
+    const filters = this.getSourceFilters(orderedSources);
+    const list = this.getFilteredSources(orderedSources);
+    this.ensureSourcesFocus(filters, list);
     const zone = this.sourcesFocus.zone;
     let index = Number(this.sourcesFocus.index || 0);
 
@@ -16782,8 +16901,9 @@ export const PlayerScreen = {
   async activateSourcesFocus() {
     const zone = this.sourcesFocus.zone;
     const index = Number(this.sourcesFocus.index || 0);
-    const filters = this.getSourceFilters();
-    const list = this.getFilteredSources();
+    const orderedSources = this.getOrderedStreamCandidates();
+    const filters = this.getSourceFilters(orderedSources);
+    const list = this.getFilteredSources(orderedSources);
 
     if (zone === "top") {
       if (index === 0) {
@@ -16816,22 +16936,22 @@ export const PlayerScreen = {
 
     if (keyCode === 37) {
       this.moveSourcesFocus("left");
-      this.renderSourcesPanel();
+      this.syncSourcesFocusDom();
       return true;
     }
     if (keyCode === 39) {
       this.moveSourcesFocus("right");
-      this.renderSourcesPanel();
+      this.syncSourcesFocusDom();
       return true;
     }
     if (keyCode === 38) {
       this.moveSourcesFocus("up");
-      this.renderSourcesPanel();
+      this.syncSourcesFocusDom();
       return true;
     }
     if (keyCode === 40) {
       this.moveSourcesFocus("down");
-      this.renderSourcesPanel();
+      this.syncSourcesFocusDom();
       return true;
     }
     if (isSelectKeyCode(keyCode)) {
@@ -18051,13 +18171,13 @@ export const PlayerScreen = {
     if (this.controlFocusZone === "progress") {
       this.controlFocusZone = "buttons";
       this.controlFocusIndex = delta < 0 ? 0 : 0;
-      this.renderControlButtons();
+      this.syncControlFocusDom();
       return;
     }
     const nextIndex = clamp(this.controlFocusIndex + delta, 0, controls.length - 1);
     this.controlFocusZone = "buttons";
     this.controlFocusIndex = nextIndex;
-    this.renderControlButtons();
+    this.syncControlFocusDom();
     this.resetControlsAutoHide();
   },
 
@@ -18838,7 +18958,7 @@ export const PlayerScreen = {
         this.stickyProgressFocus = false;
         this.autoHideControlsAfterSeek = false;
         this.controlFocusZone = "buttons";
-        this.renderControlButtons();
+        this.syncControlFocusDom();
         return;
       }
       if (isSelectKeyCode(keyCode)) {
