@@ -11,6 +11,7 @@ import {
   LibrarySourceMode
 } from "../../../data/repository/libraryRepository.js";
 import { mapWithConcurrency } from "../../../core/network/mapWithConcurrency.js";
+import { filterReleasedItems } from "../../../core/util/releaseInfoUtils.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
 import { ContinueWatchingPreferences } from "../../../data/local/continueWatchingPreferences.js";
 import { HomeCatalogStore } from "../../../data/local/homeCatalogStore.js";
@@ -8678,6 +8679,24 @@ export const HomeScreen = {
     return this.heroCandidates[0] || this.pickHeroItem(this.rows);
   },
 
+  filterUnreleasedResult(result) {
+    if (
+      !this.layoutPrefs?.hideUnreleasedContent ||
+      result?.status !== "success"
+    ) {
+      return result;
+    }
+    const items = result.data?.items;
+    if (!Array.isArray(items)) {
+      return result;
+    }
+    const filtered = filterReleasedItems(items);
+    if (filtered === items) {
+      return result;
+    }
+    return { ...result, data: { ...result.data, items: filtered } };
+  },
+
   async fetchCatalogRows(descriptors = [], options = {}) {
     const allowLoading = Boolean(options?.allowLoading);
     const timeoutMs = Number(options?.timeoutMs || HOME_ROW_TIMEOUT_MS);
@@ -8691,19 +8710,21 @@ export const HomeScreen = {
     const fetchBatch = async (batchDescriptors = []) => {
       const rowResults = await Promise.all(
         batchDescriptors.map(async (catalog) => {
-          const result = await withTimeout(
-            catalogRepository.getCatalog({
-              addonBaseUrl: catalog.addonBaseUrl,
-              addonId: catalog.addonId,
-              addonName: catalog.addonName,
-              catalogId: catalog.catalogId,
-              catalogName: catalog.catalogName,
-              type: catalog.type,
-              skip: 0,
-              supportsSkip: true
-            }),
-            timeoutMs,
-            { status: "error", message: "timeout" }
+          const result = this.filterUnreleasedResult(
+            await withTimeout(
+              catalogRepository.getCatalog({
+                addonBaseUrl: catalog.addonBaseUrl,
+                addonId: catalog.addonId,
+                addonName: catalog.addonName,
+                catalogId: catalog.catalogId,
+                catalogName: catalog.catalogName,
+                type: catalog.type,
+                skip: 0,
+                supportsSkip: true
+              }),
+              timeoutMs,
+              { status: "error", message: "timeout" }
+            )
           );
           const rowKey = buildModernRowKey(catalog);
           const row = {
@@ -8806,19 +8827,21 @@ export const HomeScreen = {
         const batch = pendingRows.slice(index, index + retryBatchSize);
         const settled = await Promise.allSettled(
           batch.map(async (row) => {
-            const result = await withTimeout(
-              catalogRepository.getCatalog({
-                addonBaseUrl: row.addonBaseUrl,
-                addonId: row.addonId,
-                addonName: row.addonName,
-                catalogId: row.catalogId,
-                catalogName: row.catalogName,
-                type: row.type,
-                skip: 0,
-                supportsSkip: true
-              }),
-              HOME_ROW_RETRY_TIMEOUT_MS,
-              { status: "error", message: "timeout" }
+            const result = this.filterUnreleasedResult(
+              await withTimeout(
+                catalogRepository.getCatalog({
+                  addonBaseUrl: row.addonBaseUrl,
+                  addonId: row.addonId,
+                  addonName: row.addonName,
+                  catalogId: row.catalogId,
+                  catalogName: row.catalogName,
+                  type: row.type,
+                  skip: 0,
+                  supportsSkip: true
+                }),
+                HOME_ROW_RETRY_TIMEOUT_MS,
+                { status: "error", message: "timeout" }
+              )
             );
             if (result?.status !== "success") {
               return null;

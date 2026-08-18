@@ -31,6 +31,7 @@ import {
   renderTitleWatchedBadge
 } from "../../components/watchedTitleBadge.js";
 import { renderLoadingIndicator } from "../../components/loadingIndicator.js";
+import { filterReleasedItems } from "../../../core/util/releaseInfoUtils.js";
 import {
   buildSearchScheduleIndices,
   buildSearchTargets,
@@ -712,7 +713,10 @@ export const SearchScreen = {
       responses
         .filter(({ result } = {}) => result?.status === "success" && result?.data?.items?.length)
         .map(({ catalog, result }) => {
-          const items = result?.data?.items || [];
+          const rawItems = result?.data?.items || [];
+          const items = this.layoutPrefs?.hideUnreleasedContent
+            ? filterReleasedItems(rawItems)
+            : rawItems;
           return {
             title: formatCatalogRowTitle(
               catalog.catalogName,
@@ -733,7 +737,8 @@ export const SearchScreen = {
             hasMore: Boolean(items.length > itemLimit || result?.data?.hasMore),
             items: items.slice(0, itemLimit)
           };
-        });
+        })
+        .filter((row) => row.items.length);
 
     const publishFirstResults = () => {
       if (
