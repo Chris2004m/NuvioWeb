@@ -34,6 +34,8 @@ const TMDB_API_URL = "https://api.themoviedb.org/3";
 const TMDB_POSTER_IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w342";
 const TMDB_BACKDROP_IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w1280";
 const TRAKT_PAGE_SIZE = 50;
+const FOLDER_LOADING_ROW_ITEM_COUNT = 6;
+const FOLDER_SOURCE_RENDER_BATCH_MS = 180;
 const STREAMING_NETWORK_PRESETS = new Map([
   ["netflix", { title: "Netflix", tmdbId: 213 }],
   ["hbo", { title: "HBO", tmdbId: 49 }],
@@ -205,8 +207,9 @@ function buildFolderSourceRows(tabs = []) {
     .map((tab, index) => {
       const sourceTabIndex = tabs.indexOf(tab);
       const type = sourceType(tab.source || {});
+      const rowKey = tab.key || `folder_source_${index}`;
       return {
-        homeCatalogKey: tab.key || `folder_source_${index}`,
+        homeCatalogKey: rowKey,
         folderTabIndex: sourceTabIndex >= 0 ? sourceTabIndex : index,
         addonId: tab.source?.addonId || tab.source?.provider || "collection",
         addonBaseUrl: tab.source?.addonBaseUrl || "",
@@ -225,6 +228,13 @@ function buildFolderSourceRows(tabs = []) {
             items: Array.isArray(tab.items) ? tab.items : []
           }
         },
+        loadingItems: tab.loading
+          ? Array.from({ length: FOLDER_LOADING_ROW_ITEM_COUNT }, (_, loadingIndex) => ({
+              id: `${rowKey}__loading_${loadingIndex}`,
+              name: "Loading",
+              isLoading: true
+            }))
+          : null,
         suppressPosterText: true
       };
     });
@@ -744,6 +754,26 @@ export const FolderDetailScreen = {
     return `folderDetail:${collectionId}:${folderId}`;
   },
 
+  cancelScheduledRender() {
+    if (this.folderDetailRenderTimer) {
+      clearTimeout(this.folderDetailRenderTimer);
+      this.folderDetailRenderTimer = null;
+    }
+  },
+
+  scheduleRender() {
+    if (this.folderDetailRenderTimer || !this.container || Router.getCurrent() !== "folderDetail") {
+      return;
+    }
+    this.folderDetailRenderTimer = setTimeout(() => {
+      this.folderDetailRenderTimer = null;
+      if (!this.container || Router.getCurrent() !== "folderDetail") {
+        return;
+      }
+      this.render();
+    }, FOLDER_SOURCE_RENDER_BATCH_MS);
+  },
+
   captureRouteState() {
     const shell = this.container?.querySelector(".seeall-shell");
     const active =
@@ -838,6 +868,7 @@ export const FolderDetailScreen = {
 
   async mount(params = {}, navigationContext = {}) {
     this.container = document.getElementById("folderDetail");
+    this.cancelScheduledRender();
     ScreenUtils.show(this.container);
     this.params = params || {};
     this.layoutPrefs = LayoutPreferences.get();
@@ -855,6 +886,9 @@ export const FolderDetailScreen = {
     this.restoredTrackScrollStates = {};
     this.restoredFollowLayoutFocusState = null;
     this.restoredFocusedItem = null;
+    this.isRestoringFocusFromBack = false;
+    this.homeHoldFocusLocked = false;
+    this.lastMainFocus = null;
     this.navModel = { rows: [] };
     this.tabs = [];
     const preferredHomeLayout = String(this.layoutPrefs?.homeLayout || "classic").toLowerCase();
@@ -936,7 +970,6 @@ export const FolderDetailScreen = {
         : sourceTabs;
 
     const restored = this.hydrateFromRouteState(navigationContext?.restoredState, this.params);
-    this.render();
     const sourceOffset = this.tabs[0]?.isAllTab ? 1 : 0;
     const tabsToLoad = restored
       ? this.tabs
@@ -944,7 +977,19 @@ export const FolderDetailScreen = {
           .filter(({ tab }) => !tab.isAllTab && tab.restoreNeedsReload)
           .map(({ index }) => index)
       : sourceTabs.map((_, index) => index + sourceOffset);
-    await Promise.all(tabsToLoad.map((index) => this.loadTab(index, { append: false })));
+    tabsToLoad.forEach((index) => {
+      const tab = this.tabs[index];
+      if (tab && !tab.isAllTab) {
+        this.tabs[index] = { ...tab, loading: true, error: "" };
+      }
+    });
+    this.sourceTabs = this.tabs.filter((tab) => !tab.isAllTab);
+    this.rebuildAllTab();
+    this.render();
+    await Promise.all(tabsToLoad.map((index) => this.loadTab(index, { background: true })));
+    if (tabsToLoad.length && Router.getCurrent() === "folderDetail") {
+      this.render();
+    }
   },
 
   rebuildAllTab() {
@@ -961,14 +1006,16 @@ export const FolderDetailScreen = {
     };
   },
 
-  async loadTab(tabIndex, { append = false } = {}) {
+  async loadTab(tabIndex, { append = false, background = false } = {}) {
     const tab = this.tabs[tabIndex];
-    if (!tab || tab.isAllTab || tab.loading) {
+    if (!tab || tab.isAllTab || (tab.loading && !background)) {
       return;
     }
-    this.tabs[tabIndex] = { ...tab, loading: true, error: "" };
-    this.rebuildAllTab();
-    this.render();
+    if (!background) {
+      this.tabs[tabIndex] = { ...tab, loading: true, error: "" };
+      this.rebuildAllTab();
+      this.render();
+    }
     try {
       const nextPage = append ? Math.max(1, Number(tab.page || 1) + 1) : 1;
       const result = await fetchSourceItems(tab.source, nextPage);
@@ -1001,7 +1048,11 @@ export const FolderDetailScreen = {
       };
     }
     this.rebuildAllTab();
-    this.render();
+    if (background) {
+      this.scheduleRender();
+    } else {
+      this.render();
+    }
   },
 
   getSelectedTab() {
@@ -1165,7 +1216,7 @@ export const FolderDetailScreen = {
       }
       if (
         this.restoredFollowLayoutFocusState &&
-        HomeScreen.restoreFocusState.call(this, this.restoredFollowLayoutFocusState)
+        HomeScreen.restoreModernFocusState.call(this, this.restoredFollowLayoutFocusState)
       ) {
         this.restoredFollowLayoutFocusState = null;
         return;
@@ -1237,6 +1288,7 @@ export const FolderDetailScreen = {
   },
 
   render() {
+    this.cancelScheduledRender();
     if (this.useHomeFollowLayout) {
       this.renderFollowLayout();
       return;
@@ -1427,6 +1479,10 @@ export const FolderDetailScreen = {
   },
 
   renderFollowLayout() {
+    this.renderedLayoutMode = "modern";
+    // Catalog sources resolve independently. Preserve the live TV-navigation state
+    // before replacing the layout so an arriving row cannot send focus to the top.
+    const liveFocusState = HomeScreen.captureCurrentContentFocusState.call(this);
     HomeScreen.cancelModernCameraFollow.call(this, { stopAnimations: true });
     HomeScreen.teardownModernTrackScrollPagination.call(this);
     HomeScreen.cancelFocusedPosterFlow.call(this);
@@ -1492,7 +1548,11 @@ export const FolderDetailScreen = {
         )
       );
     }
-    this.restoreFocus();
+    const restoredLiveFocus =
+      liveFocusState && HomeScreen.restoreModernFocusState.call(this, liveFocusState);
+    if (!restoredLiveFocus) {
+      this.restoreFocus();
+    }
     this.setupModernTrackScrollPagination();
     HomeScreen.applyHeroToDom.call(this);
     HomeScreen.ensureHomeTruncationObservers.call(this);
@@ -1914,6 +1974,7 @@ export const FolderDetailScreen = {
   },
 
   cleanup() {
+    this.cancelScheduledRender();
     if (this.useHomeFollowLayout) {
       HomeScreen.cancelModernCameraFollow.call(this, { stopAnimations: true });
       HomeScreen.stopHeroRotation.call(this);
