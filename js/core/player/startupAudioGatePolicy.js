@@ -13,6 +13,13 @@ export function canReleasePlayingNativeStartupAudioGate({
   );
 }
 
+export function shouldAllowNativePlaybackDuringStartupAudioGate({
+  isHlsPlayback = false,
+  isPrioritizedWebOsRemoteMkvPlayback = false
+} = {}) {
+  return Boolean(isHlsPlayback || isPrioritizedWebOsRemoteMkvPlayback);
+}
+
 export function selectStartupAudioFallbackOption(options = []) {
   const supportedOptions = (Array.isArray(options) ? options : []).filter(
     (entry) => entry?.supported !== false

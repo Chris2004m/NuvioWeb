@@ -7,6 +7,7 @@ import { nativeVideoEngine } from "./engines/nativeVideoEngine.js";
 import { hlsJsEngine } from "./engines/hlsJsEngine.js";
 import { dashJsEngine } from "./engines/dashJsEngine.js";
 import { resolvePlatformAvplayEngine } from "./engines/platformAvplayEngine.js";
+import { isTerminalHlsHttpStatus } from "./hlsNetworkErrorPolicy.js";
 import {
   applyWebOsAudioCodecOverrides,
   detectWebOsAudioCapabilities
@@ -2892,6 +2893,12 @@ export const PlayerController = {
       if (preferTvNative && canUseAvPlay) {
         pushCandidate(candidates, avplayEngine);
       }
+      if (!isTizenRuntime) {
+        // Android opens HLS through HlsMediaSource, which reports manifest
+        // failures directly. Prefer the equivalent hls.js pipeline here; if
+        // MSE is unavailable, playWithHlsJs falls back to native playback.
+        pushCandidate(candidates, "hls.js");
+      }
       if (canPlayNativeHls) {
         pushCandidate(candidates, "native-hls");
       }
@@ -2899,9 +2906,6 @@ export const PlayerController = {
         pushCandidate(candidates, "hls.js");
       }
       if (isTizenRuntime && !isLivePlayback) {
-        pushCandidate(candidates, "hls.js");
-      }
-      if (!isTizenRuntime && canUseHlsJs) {
         pushCandidate(candidates, "hls.js");
       }
       if (canUseAvPlay) {
@@ -3238,6 +3242,19 @@ export const PlayerController = {
       }
     };
 
+    const emitFatalHlsNetworkError = (data = {}, responseCode = 0) => {
+      clearTransientLevelNotFoundRetry();
+      this.lastPlaybackErrorCode = 2;
+      this.teardownHlsInstance();
+      this.emitVideoEvent("error", {
+        playbackEngine: "hls.js",
+        mediaErrorCode: 2,
+        hlsErrorType: String(data.type || ""),
+        hlsErrorDetails: String(data.details || ""),
+        hlsResponseCode: Number(responseCode) || null
+      });
+    };
+
     const scheduleTransientLevelNotFoundRetry = () => {
       transientLevelNotFoundRetries += 1;
       const retryAttempt = transientLevelNotFoundRetries;
@@ -3289,16 +3306,12 @@ export const PlayerController = {
           scheduleTransientLevelNotFoundRetry();
           return;
         }
+        if (isTerminalHlsHttpStatus(responseCode)) {
+          emitFatalHlsNetworkError(data, responseCode);
+          return;
+        }
         if (networkRecoveryAttempts >= 1) {
-          clearTransientLevelNotFoundRetry();
-          this.lastPlaybackErrorCode = 2;
-          this.teardownHlsInstance();
-          this.emitVideoEvent("error", {
-            playbackEngine: "hls.js",
-            mediaErrorCode: 2,
-            hlsErrorType: String(data.type || ""),
-            hlsErrorDetails: String(data.details || "")
-          });
+          emitFatalHlsNetworkError(data, responseCode);
           return;
         }
         try {
@@ -4314,7 +4327,10 @@ export const PlayerController = {
       this.isLikelyHlsMimeType(normalizedSourceType) ||
       this.isLikelyDashMimeType(normalizedSourceType)
     ) {
-      await loadStreamingLibs();
+      await loadStreamingLibs({
+        hls: this.isLikelyHlsMimeType(normalizedSourceType),
+        dash: this.isLikelyDashMimeType(normalizedSourceType)
+      });
     }
   },
 

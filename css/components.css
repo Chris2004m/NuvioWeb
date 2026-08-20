@@ -11625,7 +11625,7 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
   opacity: 1;
   transition: opacity 180ms ease;
   box-sizing: border-box;
-  padding: 48px;
+  padding: clamp(24px, 4vh, 48px) clamp(32px, 4vw, 72px);
   pointer-events: auto;
 }
 
@@ -11635,17 +11635,18 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
 }
 
 .player-startup-error-shell {
-  width: min(82vw, 920px);
+  width: min(94vw, 1856px);
+  max-height: 100%;
   text-align: center;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 20px;
+  gap: clamp(12px, 2vh, 20px);
 }
 
 .player-startup-error-title {
   color: #ffffff;
-  font-size: 42px;
+  font-size: clamp(28px, 2.2vw, 42px);
   font-weight: 800;
   letter-spacing: 0.2px;
   text-shadow: 0 10px 26px rgba(0, 0, 0, 0.6);
@@ -11653,23 +11654,22 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
 
 .player-startup-error-message {
   color: rgba(255, 255, 255, 0.82);
-  font-size: 24px;
+  font-size: clamp(18px, 1.25vw, 24px);
   line-height: 1.35;
   white-space: pre-line;
 }
 
 .player-startup-error-details {
-  width: min(78vw, 840px);
-  max-height: min(28vh, 260px);
-  overflow: auto;
-  padding: 14px 16px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.08);
+  width: 100%;
+  max-height: none;
+  overflow: visible;
+  padding: 0;
   color: rgba(255, 255, 255, 0.72);
-  font-size: 16px;
-  line-height: 1.4;
-  text-align: left;
+  font-size: clamp(11px, 1vw, 16px);
+  line-height: 1.35;
+  text-align: center;
   word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .player-startup-error-actions {

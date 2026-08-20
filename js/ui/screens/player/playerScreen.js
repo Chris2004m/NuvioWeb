@@ -9,8 +9,10 @@ import {
 } from "../../../core/player/audioTrackCodecMetadata.js";
 import {
   canReleasePlayingNativeStartupAudioGate,
-  selectStartupAudioFallbackOption
+  selectStartupAudioFallbackOption,
+  shouldAllowNativePlaybackDuringStartupAudioGate
 } from "../../../core/player/startupAudioGatePolicy.js";
+import { isTerminalHlsHttpStatus } from "../../../core/player/hlsNetworkErrorPolicy.js";
 import { buildClockFormatOptions, resolveSystemHour12 } from "../../../core/player/clockFormat.js";
 import { resolveSubtitleStyleControlAvailability } from "../../../core/player/subtitlePresentationCapabilities.js";
 import {
@@ -62,6 +64,7 @@ import {
   shouldEnterStillWatchingPrompt,
   shouldShowNextEpisodeCard as shouldShowNextEpisodeCardRule
 } from "./playerNextEpisodeRules.js";
+import { normalizePlaybackDisplayLineBreaks } from "./playbackDisplayText.js";
 import {
   buildHtmlSubtitleCue,
   getSubtitleAssAlignment,
@@ -2591,6 +2594,11 @@ export const PlayerScreen = {
         Environment.isWebOS() &&
         !this.currentEngineFsStream &&
         this.isCurrentSourceLikelyMkv(initialStreamUrl, sourceCandidate);
+      const allowNativePlaybackDuringStartupAudioGate =
+        shouldAllowNativePlaybackDuringStartupAudioGate({
+          isHlsPlayback: this.isCurrentSourceLikelyHls(initialStreamUrl, sourceCandidate),
+          isPrioritizedWebOsRemoteMkvPlayback: prioritizeWebOsRemoteMkvPlayback
+        });
       if (prioritizeWebOsRemoteMkvPlayback) {
         // The probe must start only after webOS has accepted the media request,
         // but startup preference checks must already know discovery is pending.
@@ -2603,7 +2611,7 @@ export const PlayerScreen = {
       } else {
         this.engineFsPlaybackToken = "";
         this.enableStartupAudioGate({
-          allowNativePlayback: prioritizeWebOsRemoteMkvPlayback,
+          allowNativePlayback: allowNativePlaybackDuringStartupAudioGate,
           maxWaitMs: prioritizeWebOsRemoteMkvPlayback ? WEBOS_REMOTE_MKV_AUDIO_GATE_MAX_WAIT_MS : 0
         });
       }
@@ -4099,6 +4107,25 @@ export const PlayerScreen = {
     );
   },
 
+  isCurrentSourceLikelyHls(
+    url = this.getTrackProbeUrl(),
+    streamCandidate = this.getCurrentStreamCandidate()
+  ) {
+    const isLikelyHlsMimeType = PlayerController.isLikelyHlsMimeType;
+    if (typeof isLikelyHlsMimeType !== "function") {
+      return false;
+    }
+    const declaredSourceType = this.resolvePlaybackMediaSourceType(streamCandidate);
+    const inferredSourceType =
+      typeof PlayerController.guessMediaMimeType === "function"
+        ? PlayerController.guessMediaMimeType(url)
+        : null;
+    return Boolean(
+      isLikelyHlsMimeType.call(PlayerController, declaredSourceType) ||
+        isLikelyHlsMimeType.call(PlayerController, inferredSourceType)
+    );
+  },
+
   isCurrentSourceLikelyMkv(
     url = this.getTrackProbeUrl(),
     streamCandidate = this.getCurrentStreamCandidate()
@@ -5444,10 +5471,12 @@ export const PlayerScreen = {
 
   getPlaybackEventErrorDetail(eventDetail = {}) {
     const detail = eventDetail && typeof eventDetail === "object" ? eventDetail : {};
+    const hlsResponseCode = Number(detail.hlsResponseCode || 0);
     return [
       detail.avplayError,
       detail.hlsErrorType,
       detail.hlsErrorDetails,
+      hlsResponseCode >= 400 && hlsResponseCode <= 599 ? `HTTP ${hlsResponseCode}` : "",
       detail.dashError,
       detail.playbackEngine
     ]
@@ -5493,7 +5522,7 @@ export const PlayerScreen = {
                     "\n\nThe stream server is currently unavailable. Try a different source."
                   )
                 : "";
-    return `HTTP ${status}${providerHint}`;
+    return `HTTP ${status}${normalizePlaybackDisplayLineBreaks(providerHint)}`;
   },
 
   getWebHeaderRestrictedStreamMessage(streamCandidate = this.getCurrentStreamCandidate()) {
@@ -8724,6 +8753,7 @@ export const PlayerScreen = {
         detailErrorCode || Number(video?.error?.code || 0) || controllerErrorCode;
       const eventDetail = event?.detail && typeof event.detail === "object" ? event.detail : {};
       const playbackErrorDetail = this.getPlaybackEventErrorDetail(eventDetail);
+      const terminalHlsHttpFailure = isTerminalHlsHttpStatus(eventDetail.hlsResponseCode);
       const avplayError = String(eventDetail?.avplayError || "").toLowerCase();
       const normalizedPlaybackErrorDetail = String(playbackErrorDetail || "").toLowerCase();
       const currentSourceCandidate =
@@ -8800,6 +8830,7 @@ export const PlayerScreen = {
 
         this.markPlaybackSourceFailed(this.activePlaybackUrl);
         const targetEngine =
+          !terminalHlsHttpFailure &&
           typeof PlayerController.getAlternativePlaybackEngine === "function"
             ? PlayerController.getAlternativePlaybackEngine(this.activePlaybackUrl)
             : null;
@@ -10536,6 +10567,11 @@ export const PlayerScreen = {
       Environment.isWebOS() &&
       !nextEngineFsState &&
       this.isCurrentSourceLikelyMkv(streamUrl, sourceCandidate);
+    const allowNativePlaybackDuringStartupAudioGate =
+      shouldAllowNativePlaybackDuringStartupAudioGate({
+        isHlsPlayback: this.isCurrentSourceLikelyHls(streamUrl, sourceCandidate),
+        isPrioritizedWebOsRemoteMkvPlayback: prioritizeWebOsRemoteMkvPlayback
+      });
     const sameEngineFsState = this.isSameEngineFsState(
       this.currentEngineFsStream,
       nextEngineFsState
@@ -10580,7 +10616,7 @@ export const PlayerScreen = {
       this.releaseStartupAudioGate({ resume: false });
     } else {
       this.enableStartupAudioGate({
-        allowNativePlayback: prioritizeWebOsRemoteMkvPlayback,
+        allowNativePlayback: allowNativePlaybackDuringStartupAudioGate,
         maxWaitMs: prioritizeWebOsRemoteMkvPlayback ? WEBOS_REMOTE_MKV_AUDIO_GATE_MAX_WAIT_MS : 0
       });
     }
