@@ -1,6 +1,7 @@
 import { DebridSettingsStore } from "../../data/local/debridSettingsStore.js";
 import { DEBRID_PROVIDER_IDS, DebridProviders } from "./debridProviders.js";
 import { DebridStreamTemplateEngine } from "./debridStreamTemplateEngine.js";
+import { sizeBytesFromStreamText } from "./streamTextSizeParser.js";
 
 const RESOLUTION_RANK = {
   P2160: 700,
@@ -417,6 +418,7 @@ function streamSize(stream = {}) {
       resolve.stream?.raw?.size ??
         stream.behaviorHints?.videoSize ??
         stream.debridCacheStatus?.cachedSize ??
+        sizeBytesFromStreamText(stream) ??
         0
     ) || 0
   );
@@ -915,7 +917,11 @@ function buildTemplateValues(stream = {}, fact = {}) {
       : (fact.languages || []).map((language) => LANGUAGE_LABELS[language]?.[0]).filter(Boolean)
     ).map(languageEmoji),
     "stream.size":
-      raw.size ?? stream.behaviorHints?.videoSize ?? stream.debridCacheStatus?.cachedSize ?? null,
+      raw.size ??
+      stream.behaviorHints?.videoSize ??
+      stream.debridCacheStatus?.cachedSize ??
+      sizeBytesFromStreamText(stream) ??
+      null,
     "stream.folderSize": raw.folderSize ?? null,
     "stream.encode": parsed.codec
       ? String(parsed.codec).toUpperCase()
