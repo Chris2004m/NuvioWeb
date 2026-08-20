@@ -646,7 +646,10 @@ export const SearchScreen = {
     return resolved
       .filter((entry) => entry.result?.status === "success" && entry.result?.data?.items?.length)
       .map((entry) => {
-        const items = entry.result?.data?.items || [];
+        const rawItems = entry.result?.data?.items || [];
+        const items = this.layoutPrefs?.hideUnreleasedContent
+          ? filterReleasedItems(rawItems)
+          : rawItems;
         return {
           title: formatCatalogRowTitle(
             entry.catalogName,
@@ -667,7 +670,8 @@ export const SearchScreen = {
           hasMore: Boolean(items.length > itemLimit || entry.result?.data?.hasMore),
           items: items.slice(0, itemLimit)
         };
-      });
+      })
+      .filter((row) => row.items.length);
   },
 
   async searchRows(query, { token = this.loadToken, onFirstResults = null } = {}) {

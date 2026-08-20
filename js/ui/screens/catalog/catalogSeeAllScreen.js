@@ -5,6 +5,7 @@ import { watchedItemsRepository } from "../../../data/repository/watchedItemsRep
 import { Environment } from "../../../platform/environment.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
 import { I18n } from "../../../i18n/index.js";
+import { filterReleasedItems } from "../../../core/util/releaseInfoUtils.js";
 import { focusWithoutAutoScroll } from "../../components/sidebarNavigation.js";
 import {
   posterItemFromNode,
@@ -161,7 +162,10 @@ export const CatalogSeeAllScreen = {
       return false;
     }
     this.params = params || {};
-    this.items = Array.isArray(snapshot.items) ? [...snapshot.items] : [];
+    const snapshotItems = Array.isArray(snapshot.items) ? snapshot.items : [];
+    this.items = this.layoutPrefs?.hideUnreleasedContent
+      ? filterReleasedItems(snapshotItems)
+      : [...snapshotItems];
     this.nextSkip = Number(snapshot.nextSkip || 0);
     this.hasMore = Boolean(snapshot.hasMore);
     this.lastFocusedKey = snapshot.lastFocusedKey ? String(snapshot.lastFocusedKey) : null;
@@ -180,9 +184,12 @@ export const CatalogSeeAllScreen = {
     this.container = document.getElementById("catalogSeeAll");
     ScreenUtils.show(this.container);
     this.params = params || {};
-    this.items = Array.isArray(params?.initialItems) ? [...params.initialItems] : [];
-    this.nextSkip = this.items.length ? 100 : 0;
     this.layoutPrefs = LayoutPreferences.get();
+    const initialItems = Array.isArray(params?.initialItems) ? params.initialItems : [];
+    this.items = this.layoutPrefs?.hideUnreleasedContent
+      ? filterReleasedItems(initialItems)
+      : [...initialItems];
+    this.nextSkip = this.items.length ? 100 : 0;
     this.loading = false;
     this.hasMore = true;
     this.lastFocusedKey = this.items[0]?.id ? `item:${this.items[0].id}` : null;
@@ -250,9 +257,12 @@ export const CatalogSeeAllScreen = {
       this.render();
       return;
     }
-    const incoming = Array.isArray(result?.data?.items) ? result.data.items : [];
+    const rawIncoming = Array.isArray(result?.data?.items) ? result.data.items : [];
+    const incoming = this.layoutPrefs?.hideUnreleasedContent
+      ? filterReleasedItems(rawIncoming)
+      : rawIncoming;
     let addedCount = 0;
-    if (incoming.length) {
+    if (rawIncoming.length) {
       const seen = new Set(this.items.map((item) => item.id));
       incoming.forEach((item) => {
         if (!item?.id || seen.has(item.id)) {
@@ -264,7 +274,7 @@ export const CatalogSeeAllScreen = {
       });
       this.nextSkip = skip + 100;
     }
-    this.hasMore = incoming.length > 0;
+    this.hasMore = rawIncoming.length > 0;
     this.loading = false;
     this.pendingRestoreFocus = true;
     this.preserveViewportOnNextRender = Boolean(preserveViewport && addedCount > 0);
