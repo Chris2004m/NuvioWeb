@@ -26,6 +26,20 @@ test("delta applies direction", () => {
   assert.equal(deltaMsForKeyRepeat(8, true), STEP_LONG_MS);
 });
 
+test("media seek directions share the Android ramp", () => {
+  const repeatCounts = [0, 3, 8, 15];
+  const expected = [STEP_SHORT_MS, STEP_MEDIUM_MS, STEP_LONG_MS, STEP_VERY_LONG_MS];
+
+  assert.deepEqual(
+    repeatCounts.map((count) => deltaMsForKeyRepeat(count, true)),
+    expected
+  );
+  assert.deepEqual(
+    repeatCounts.map((count) => deltaMsForKeyRepeat(count, false)),
+    expected.map((step) => -step)
+  );
+});
+
 test("step clamps a negative repeat count", () => {
   assert.equal(stepMsForKeyRepeat(-1), STEP_SHORT_MS);
 });
