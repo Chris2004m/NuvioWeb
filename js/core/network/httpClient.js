@@ -85,7 +85,7 @@ export async function httpRequest(url, options = {}) {
           error.detail = parsed.message;
         }
       }
-    } catch (parseError) {
+    } catch (_parseError) {
       // Keep raw response text in error.message when payload is not JSON.
     }
     throw error;
