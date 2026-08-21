@@ -46,7 +46,6 @@ body:
         - LG webOS / Luna media
         - Packaging / Build
         - Installer
-        - TizenBrew wrapper
         - webOS Homebrew wrapper
         - Browser development mode
         - Documentation
@@ -65,7 +64,6 @@ body:
         - LG webOS
         - Browser development mode
         - Nuvio WebTV Installer
-        - TizenBrew wrapper
         - webOS Homebrew wrapper
         - Shared web app
         - Not sure

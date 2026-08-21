@@ -28,7 +28,6 @@
 - [ ] Next Episode / Auto-play
 - [ ] Packaging / Build
 - [ ] Nuvio WebTV Installer compatibility
-- [ ] TizenBrew wrapper
 - [ ] webOS Homebrew wrapper
 - [ ] Documentation
 - [ ] Other
@@ -90,7 +89,6 @@
 - [ ] `sync:tizen` changed
 - [ ] `sync:webos` changed
 - [ ] Nuvio WebTV Installer compatibility changed
-- [ ] TizenBrew wrapper support changed
 - [ ] webOS Homebrew metadata support changed
 
 ## Policy check

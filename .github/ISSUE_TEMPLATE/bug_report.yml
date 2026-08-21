@@ -63,7 +63,6 @@ body:
         - LG webOS
         - Browser development mode
         - Nuvio WebTV Installer
-        - TizenBrew wrapper
         - webOS Homebrew wrapper
         - Other (please describe below)
     validations:
@@ -75,7 +74,6 @@ body:
       label: Install method
       options:
         - Nuvio WebTV Installer
-        - TizenBrew
         - webOS Homebrew Channel
         - Manual WGT install
         - Manual IPK install
@@ -140,7 +138,6 @@ body:
         - LG webOS / Luna media
         - Packaging / Build
         - Installer
-        - TizenBrew wrapper
         - webOS Homebrew wrapper
         - Browser development mode
         - Other

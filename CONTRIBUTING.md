@@ -105,7 +105,7 @@ Platform-specific PRs must include:
 - Package metadata
 - Tizen `.wgt` packaging
 - webOS `.ipk` packaging
-- Homebrew or TizenBrew wrapper behavior
+- webOS Homebrew wrapper behavior
 - Nuvio WebTV Installer behavior
 
 ---
@@ -155,7 +155,6 @@ This includes:
 - `sync:tizen`
 - `sync:webos`
 - Nuvio WebTV Installer compatibility
-- TizenBrew wrapper support
 - webOS Homebrew metadata support
   PRs in this area must include:
 - The exact command tested
@@ -195,7 +194,7 @@ To keep issues fixable, bug reports should include:
 - Platform: Samsung Tizen, LG webOS, browser, or installer
 - Device model
 - Platform version, when available
-- Install method, such as WebTV Installer, TizenBrew, Homebrew Channel, manual WGT, manual IPK, or local development build
+- Install method, such as WebTV Installer, Homebrew Channel, manual WGT, manual IPK, or local development build
 - Steps to reproduce, with exact steps
 - Expected vs actual behavior
 - Frequency: always, sometimes, or once

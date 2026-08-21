@@ -64,12 +64,6 @@ chmod +x Nuvio-WebTV-Installer-Linux-*.AppImage
 
 ### Samsung Tizen
 
-#### TizenBrew
-
-- Open TizenBrew on your Samsung TV.
-- Add the GitHub module `NuvioMedia/NuvioTVTizen`.
-- Launch Nuvio TV from your installed modules.
-
 #### Manual WGT install
 
 Download the latest `.wgt` package from [GitHub Releases](https://github.com/NuvioMedia/NuvioWeb/releases/latest) and install it with your preferred Samsung/Tizen development workflow.
@@ -103,7 +97,6 @@ Then install the package with webOS Dev Manager or your preferred webOS developm
 
 ## Platform Repositories
 
-- TizenBrew wrapper: `NuvioMedia/NuvioTVTizen`
 - webOS metadata repository: `NuvioMedia/NuvioTVWebOS`
 - Desktop installer: `NuvioMedia/NuvioWebTVInstaller`
 
@@ -252,7 +245,7 @@ NuvioTV Web can run in different deployment modes:
 - Packaged as a Samsung Tizen `.wgt`.
 - Packaged as an LG webOS `.ipk`.
 - Installed through the Nuvio WebTV Installer.
-- Used through platform wrapper repositories such as TizenBrew and webOS Homebrew.
+- Used through the webOS Homebrew metadata repository when applicable.
 
 The shared web app remains the source of truth for the TV experience across these targets.
 
@@ -275,8 +268,6 @@ NuvioTV Web expands that foundation into a shared smart TV web app for Samsung T
 NuvioTV Web functions solely as a client-side interface for browsing metadata and playing media provided by user-installed extensions and/or user-provided sources. It is intended for content the user owns or is otherwise authorized to access.
 
 NuvioTV Web is not affiliated with any third-party extensions, catalogs, sources, or content providers. It does not host, store, or distribute any media content.
-
-For comprehensive legal information, including our full disclaimer, third-party extension policy, and DMCA/Copyright information, please visit our [Legal & Disclaimer Page](https://nuvioapp.space/legal).
 
 ## Built With
 
