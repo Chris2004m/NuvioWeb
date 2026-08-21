@@ -2452,4 +2452,7 @@
     <string name="cloud_library_error_provider_unavailable">Knjižnica v oblaku ni na voljo za %1$s.</string>
     <string name="cloud_library_error_disabled">Knjižnica v oblaku je onemogočena.</string>
     <string name="cloud_library_search_clear">Počisti iskanje</string>
+    <string name="layout_overall_ratings">Skupne ocene</string>
+    <string name="layout_overall_ratings_sub_on">Standardne ocene in ocene TMDB so prikazane.</string>
+    <string name="layout_overall_ratings_sub_off">Standardne ocene in ocene TMDB so skrite. Nastavitve ponudnika MDBList imajo na straneh s podrobnostmi prednost.</string>
 </resources>

@@ -1293,4 +1293,7 @@
     <string name="cloud_library_error_provider_unavailable">Skybibliotek er ikke tilgjengelig for %1$s.</string>
     <string name="cloud_library_error_disabled">Skybiblioteket er deaktivert.</string>
     <string name="cloud_library_search_clear">Tøm søk</string>
+    <string name="layout_overall_ratings">Samlede vurderinger</string>
+    <string name="layout_overall_ratings_sub_on">Standard- og TMDB-vurderinger vises.</string>
+    <string name="layout_overall_ratings_sub_off">Standard- og TMDB-vurderinger er skjult. Innstillingene for MDBList-leverandøren har prioritet på detaljsider.</string>
 </resources>

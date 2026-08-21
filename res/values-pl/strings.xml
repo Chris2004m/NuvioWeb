@@ -2707,4 +2707,7 @@
     <string name="cloud_library_search_placeholder">Wyszukaj pliki</string>
     <string name="cloud_library_search_clear">Wyczyść wyszukiwanie</string>
     <string name="upcoming_section_title">Nadchodzące</string>
+    <string name="layout_overall_ratings">Oceny ogólne</string>
+    <string name="layout_overall_ratings_sub_on">Wyświetlane są standardowe oceny oraz oceny TMDB.</string>
+    <string name="layout_overall_ratings_sub_off">Standardowe oceny oraz oceny TMDB są ukryte. Na stronach szczegółów priorytet mają ustawienia dostawcy MDBList.</string>
 </resources>

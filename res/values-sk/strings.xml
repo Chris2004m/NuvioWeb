@@ -2684,4 +2684,7 @@
     <string name="cloud_library_error_disabled">Cloudová knižnica je vypnutá.</string>
     <string name="cloud_library_search_clear">Vymazať vyhľadávanie</string>
     <string name="upcoming_section_title">Nespustené</string>
+    <string name="layout_overall_ratings">Celkové hodnotenia</string>
+    <string name="layout_overall_ratings_sub_on">Štandardné hodnotenia a hodnotenia TMDB sa zobrazujú.</string>
+    <string name="layout_overall_ratings_sub_off">Štandardné hodnotenia a hodnotenia TMDB sú skryté. Nastavenia poskytovateľa MDBList majú na stránkach s podrobnosťami prednosť.</string>
 </resources>

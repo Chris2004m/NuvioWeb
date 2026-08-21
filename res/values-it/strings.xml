@@ -2738,4 +2738,7 @@
     <string name="cloud_library_search_label">Cerca nella libreria cloud</string>
     <string name="cloud_library_search_placeholder">Cerca file</string>
     <string name="cloud_library_search_clear">Cancella ricerca</string>
+    <string name="layout_overall_ratings">Valutazioni complessive</string>
+    <string name="layout_overall_ratings_sub_on">Vengono mostrate le valutazioni standard e TMDB.</string>
+    <string name="layout_overall_ratings_sub_off">Le valutazioni standard e TMDB sono nascoste. Nelle pagine dei dettagli hanno la priorità le impostazioni del provider MDBList.</string>
 </resources>

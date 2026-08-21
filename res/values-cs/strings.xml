@@ -2261,4 +2261,7 @@
     <string name="cloud_library_error_provider_unavailable">Cloudová knihovna není pro %1$s dostupná.</string>
     <string name="cloud_library_error_disabled">Cloudová knihovna je vypnutá.</string>
     <string name="cloud_library_search_clear">Vymazat vyhledávání</string>
+    <string name="layout_overall_ratings">Celkové hodnocení</string>
+    <string name="layout_overall_ratings_sub_on">Zobrazují se standardní hodnocení a hodnocení TMDB.</string>
+    <string name="layout_overall_ratings_sub_off">Standardní hodnocení a hodnocení TMDB jsou skryta. Nastavení poskytovatele MDBList mají na stránkách s podrobnostmi přednost.</string>
 </resources>

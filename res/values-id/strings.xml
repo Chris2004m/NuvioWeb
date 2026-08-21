@@ -2348,4 +2348,7 @@
     <string name="cloud_library_error_provider_unavailable">Pustaka cloud tidak tersedia untuk %1$s.</string>
     <string name="cloud_library_error_disabled">Perpustakaan awan dinonaktifkan.</string>
     <string name="cloud_library_search_clear">Hapus pencarian</string>
+    <string name="layout_overall_ratings">Rating Keseluruhan</string>
+    <string name="layout_overall_ratings_sub_on">Rating standar dan TMDB ditampilkan.</string>
+    <string name="layout_overall_ratings_sub_off">Rating standar dan TMDB disembunyikan. Pengaturan penyedia MDBList diprioritaskan di halaman detail.</string>
 </resources>

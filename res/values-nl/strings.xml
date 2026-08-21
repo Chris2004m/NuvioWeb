@@ -1178,4 +1178,7 @@
     <string name="cloud_library_error_provider_unavailable">Cloudbibliotheek is niet beschikbaar voor %1$s.</string>
     <string name="cloud_library_error_disabled">Cloudbibliotheek is uitgeschakeld.</string>
     <string name="cloud_library_search_clear">Duidelijke zoekopdracht</string>
+    <string name="layout_overall_ratings">Algemene beoordelingen</string>
+    <string name="layout_overall_ratings_sub_on">Standaard- en TMDB-beoordelingen worden weergegeven.</string>
+    <string name="layout_overall_ratings_sub_off">Standaard- en TMDB-beoordelingen zijn verborgen. Op detailpagina's hebben de instellingen van de MDBList-provider voorrang.</string>
 </resources>

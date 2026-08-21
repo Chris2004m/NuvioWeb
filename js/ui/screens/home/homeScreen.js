@@ -13,6 +13,7 @@ import {
 import { mapWithConcurrency } from "../../../core/network/mapWithConcurrency.js";
 import { filterReleasedItems } from "../../../core/util/releaseInfoUtils.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
+import { showHomeRatings } from "../../../core/util/imdbRatingVisibility.js";
 import { ContinueWatchingPreferences } from "../../../data/local/continueWatchingPreferences.js";
 import { HomeCatalogStore } from "../../../data/local/homeCatalogStore.js";
 import { CollectionsStore, buildCollectionHomeKey } from "../../../data/local/collectionsStore.js";
@@ -1882,6 +1883,10 @@ function buildHeroIdentity(item = null) {
   ].join("|");
 }
 
+function hideHomeHeroRatings() {
+  return !showHomeRatings(LayoutPreferences.get()?.homeImdbRatingsVisibility);
+}
+
 /**
  * @param {HomeMediaSourceLike | null | undefined} hero
  * @param {string} layoutMode
@@ -1907,7 +1912,7 @@ function buildHeroDisplayModel(hero, layoutMode) {
     };
   }
   const year = extractYear(hero);
-  const imdb = resolveImdbRating(hero);
+  const imdb = hideHomeHeroRatings() ? null : resolveImdbRating(hero);
   const genres = Array.isArray(hero?.genres) ? hero.genres.filter(Boolean).slice(0, 3) : [];
   const typeLabel = formatContentTypeLabel(hero?.type || hero?.apiType || "movie", "movie");
   const isContinueWatchingHero = hero?.heroSource === "continueWatching";
@@ -1994,7 +1999,7 @@ export function buildModernHeroPresentation(hero) {
   );
   const runtimeText = formatRuntimeText(normalized);
   const yearText = extractReleaseDateText(normalized);
-  const imdbText = resolveImdbRating(normalized);
+  const imdbText = hideHomeHeroRatings() ? "" : resolveImdbRating(normalized);
   const statusBadge = firstNonEmpty(normalized.status).toUpperCase();
   const ageRatingBadge = firstNonEmpty(normalized.ageRating);
   const languageText = firstNonEmpty(normalized.language).toUpperCase();

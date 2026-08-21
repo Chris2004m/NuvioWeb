@@ -1829,4 +1829,7 @@
     <string name="cloud_library_error_provider_unavailable">المكتبة السحابية غير متوفرة لـ %1$s.</string>
     <string name="cloud_library_error_disabled">المكتبة السحابية معطلة.</string>
     <string name="cloud_library_search_clear">مسح البحث</string>
+    <string name="layout_overall_ratings">التقييمات العامة</string>
+    <string name="layout_overall_ratings_sub_on">يتم عرض التقييمات القياسية وتقييمات TMDB.</string>
+    <string name="layout_overall_ratings_sub_off">التقييمات القياسية وتقييمات TMDB مخفية. تكون إعدادات مزود MDBList لها الأولوية في صفحات التفاصيل.</string>
 </resources>

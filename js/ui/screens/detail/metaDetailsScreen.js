@@ -10,6 +10,10 @@ import { watchedSeriesReconciliationService } from "../../../data/repository/wat
 import { TmdbService } from "../../../core/tmdb/tmdbService.js";
 import { TmdbMetadataService } from "../../../core/tmdb/tmdbMetadataService.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
+import {
+  showHomeRatings,
+  showStandardDetailRatings
+} from "../../../core/util/imdbRatingVisibility.js";
 import { imdbEpisodeRatingsRepository } from "../../../data/repository/imdbEpisodeRatingsRepository.js";
 import { normalizeEpisodeImdbRating, parseEpisodeRuntimeMinutes } from "./episodeCardMetadata.js";
 import { mdbListRepository } from "../../../data/repository/mdbListRepository.js";
@@ -3205,7 +3209,13 @@ export const MetaDetailsScreen = {
     const primaryParts = [
       genresText ? `<span>${escapeHtml(genresText)}</span>` : "",
       yearText ? `<span>${escapeHtml(yearText)}</span>` : "",
-      imdbText && !hasExternalRatings ? renderImdbBadge(imdbText) : ""
+      imdbText &&
+      showStandardDetailRatings(
+        LayoutPreferences.get().homeImdbRatingsVisibility,
+        hasExternalRatings
+      )
+        ? renderImdbBadge(imdbText)
+        : ""
     ].filter(Boolean);
     const secondaryParts = [];
     if (ageRating && status) {
@@ -3510,9 +3520,10 @@ export const MetaDetailsScreen = {
   },
   renderMovieInsightSection(meta) {
     const trailerItems = resolveTrailerItems(meta);
+    const showRatings = showHomeRatings(LayoutPreferences.get().homeImdbRatingsVisibility);
     const tabItems = [
       ["cast", t("detail.creatorCast", {}, "Creator and Cast")],
-      ["ratings", t("detail.ratings", {}, "Ratings")],
+      ...(showRatings ? [["ratings", t("detail.ratings", {}, "Ratings")]] : []),
       ...(this.moreLikeThisItems.length
         ? [["morelike", t("detail.moreLikeThis", {}, "More Like This")]]
         : []),
@@ -3521,7 +3532,7 @@ export const MetaDetailsScreen = {
     ];
     const tabs =
       tabItems.length > 1 ? this.renderPeopleTabs("movie", this.movieInsightTab, tabItems) : "";
-    if (this.movieInsightTab === "ratings") {
+    if (this.movieInsightTab === "ratings" && showRatings) {
       const imdbValue = resolveImdbRating(meta);
       const imdb = imdbValue != null && String(imdbValue).trim() !== "" ? String(imdbValue) : "-";
       const tmdb = Number.isFinite(Number(meta?.tmdbRating)) ? String(meta.tmdbRating) : "-";

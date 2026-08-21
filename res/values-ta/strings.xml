@@ -2336,4 +2336,7 @@
     <string name="cloud_library_error_provider_unavailable">%1$s க்கு கிளவுட் லைப்ரரி கிடைக்கவில்லை.</string>
     <string name="cloud_library_error_disabled">கிளவுட் லைப்ரரி முடக்கப்பட்டுள்ளது.</string>
     <string name="cloud_library_search_clear">தெளிவான தேடல்</string>
+    <string name="layout_overall_ratings">ஒட்டுமொத்த மதிப்பீடுகள்</string>
+    <string name="layout_overall_ratings_sub_on">நிலையான மற்றும் TMDB மதிப்பீடுகள் காட்டப்படும்.</string>
+    <string name="layout_overall_ratings_sub_off">நிலையான மற்றும் TMDB மதிப்பீடுகள் மறைக்கப்பட்டுள்ளன. விவரப் பக்கங்களில் MDBList வழங்குநர் அமைப்புகளுக்கு முன்னுரிமை உண்டு.</string>
 </resources>

@@ -1567,4 +1567,7 @@
     <string name="cloud_library_error_disabled">ספריית הענן מושבתת.</string>
     <string name="cloud_library_search_clear">Clear search</string>
     <string name="upcoming_section_title">עתידי</string>
+    <string name="layout_overall_ratings">דירוגים כלליים</string>
+    <string name="layout_overall_ratings_sub_on">הדירוגים הרגילים ודירוגי TMDB מוצגים.</string>
+    <string name="layout_overall_ratings_sub_off">הדירוגים הרגילים ודירוגי TMDB מוסתרים. להגדרות ספק MDBList יש עדיפות בדפי הפרטים.</string>
 </resources>

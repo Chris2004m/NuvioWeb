@@ -1678,4 +1678,7 @@
     <string name="cloud_library_error_provider_unavailable">Molnbiblioteket är inte tillgängligt för %1$s.</string>
     <string name="cloud_library_error_disabled">Molnbiblioteket är inaktiverat.</string>
     <string name="cloud_library_search_clear">Rensa sökning</string>
+    <string name="layout_overall_ratings">Övergripande betyg</string>
+    <string name="layout_overall_ratings_sub_on">Standard- och TMDB-betyg visas.</string>
+    <string name="layout_overall_ratings_sub_off">Standard- och TMDB-betyg är dolda. Inställningarna för MDBList-leverantören har företräde på detaljsidor.</string>
 </resources>
