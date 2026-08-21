@@ -13339,6 +13339,15 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
   border-color: var(--secondary-color);
 }
 
+.player-next-episode-card-inner.focused,
+.player-next-episode-card-inner:focus,
+.player-next-episode-card-inner:focus-visible {
+  outline: none;
+  background: var(--player-focus-background) !important;
+  border-color: var(--player-focus-ring) !important;
+  box-shadow: 0 0 0 4px var(--player-focus-ring);
+}
+
 .player-next-episode-thumb-wrap {
   position: relative;
   width: clamp(140px, 10vw, 180px);

@@ -7,6 +7,7 @@ import {
   cloudPlaybackFileForSession
 } from "../../data/local/cloudLibraryPlaybackStore.js";
 import { Platform } from "../../platform/index.js";
+import { TizenPlaybackProxy } from "../../platform/tizen/tizenPlaybackProxy.js";
 import { WatchProgressSyncService } from "../profile/watchProgressSyncService.js";
 import { nativeVideoEngine } from "./engines/nativeVideoEngine.js";
 import { hlsJsEngine } from "./engines/hlsJsEngine.js";
@@ -4563,8 +4564,26 @@ export const PlayerController = {
     if (!this.isPlaybackRequestActive(playToken, requestedUrl)) {
       return;
     }
+
+    let playbackUrl = requestedUrl;
+    if (Platform.isTizen() && this.canUseAvPlay()) {
+      const proxyResult = await TizenPlaybackProxy.resolve(requestedUrl, requestHeaders);
+      if (!this.isPlaybackRequestActive(playToken, requestedUrl)) {
+        return;
+      }
+      playbackUrl = String(proxyResult?.url || requestedUrl).trim() || requestedUrl;
+      if (proxyResult?.proxied) {
+        this.currentPlaybackUrl = playbackUrl;
+        logTizenAvPlayDebug("PlayerController: Tizen playback proxy selected", {
+          baseUrl: proxyResult.baseUrl,
+          headerNames: proxyResult.headerNames,
+          playbackUrl
+        });
+      }
+    }
+
     try {
-      const parsedUrl = new URL(String(url || ""));
+      const parsedUrl = new URL(String(playbackUrl || ""));
       const isEngineFsUrl = /\/([0-9a-f]{40})\/\d+(?:\/|$)/i.test(parsedUrl.pathname);
       if (isEngineFsUrl) {
         const host = parsedUrl.hostname;
@@ -4574,7 +4593,7 @@ export const PlayerController = {
             : "public-service";
         logEngineFsDebug("PlayerController: EngineFS playback selected", {
           baseUrlKind,
-          playbackUrl: String(url || ""),
+          playbackUrl,
           declaredMediaSourceType: this.currentPlaybackMediaSourceType || null,
           chosenSourceType: sourceType || null,
           playbackEngine: preferredEngine,
@@ -4602,9 +4621,9 @@ export const PlayerController = {
         : "native-file";
 
     if (preferredEngine === this.getPlatformAvplayEngineName()) {
-      const avplayStarted = this.playWithAvPlay(url, requestHeaders, sourceType, playToken);
+      const avplayStarted = this.playWithAvPlay(playbackUrl, requestHeaders, sourceType, playToken);
       if (!avplayStarted) {
-        this.applyNativeSource(url, sourceType || null, nativeFallbackEngine);
+        this.applyNativeSource(playbackUrl, sourceType || null, nativeFallbackEngine);
         this.attemptVideoPlay({
           warningLabel: "Playback start rejected",
           playToken,
@@ -4613,7 +4632,12 @@ export const PlayerController = {
             if (!this.isUnsupportedSourceError(error) || !this.canUseAvPlay()) {
               return false;
             }
-            const fallbackStarted = this.playWithAvPlay(url, requestHeaders, sourceType, playToken);
+            const fallbackStarted = this.playWithAvPlay(
+              playbackUrl,
+              requestHeaders,
+              sourceType,
+              playToken
+            );
             if (fallbackStarted) {
               this.isPlaying = true;
             }
@@ -4622,9 +4646,13 @@ export const PlayerController = {
         });
       }
     } else if (preferredEngine === "hls.js") {
-      const hlsStarted = this.playWithHlsJs(url, requestHeaders, playToken);
+      const hlsStarted = this.playWithHlsJs(playbackUrl, requestHeaders, playToken);
       if (!hlsStarted) {
-        this.applyNativeSource(url, sourceType || "application/vnd.apple.mpegurl", "native-hls");
+        this.applyNativeSource(
+          playbackUrl,
+          sourceType || "application/vnd.apple.mpegurl",
+          "native-hls"
+        );
         this.attemptVideoPlay({
           warningLabel: "Playback start rejected",
           playToken,
@@ -4632,9 +4660,9 @@ export const PlayerController = {
         });
       }
     } else if (preferredEngine === "dash.js") {
-      const dashStarted = this.playWithDashJs(url, playToken);
+      const dashStarted = this.playWithDashJs(playbackUrl, playToken);
       if (!dashStarted) {
-        this.applyNativeSource(url, sourceType || "application/dash+xml", "native-dash");
+        this.applyNativeSource(playbackUrl, sourceType || "application/dash+xml", "native-dash");
       }
       this.attemptVideoPlay({
         warningLabel: "DASH playback start rejected",
@@ -4642,7 +4670,11 @@ export const PlayerController = {
         beforePlay: dashStarted ? null : () => this.waitForNativeMediaId()
       });
     } else if (preferredEngine === "native-hls") {
-      this.applyNativeSource(url, sourceType || "application/vnd.apple.mpegurl", "native-hls");
+      this.applyNativeSource(
+        playbackUrl,
+        sourceType || "application/vnd.apple.mpegurl",
+        "native-hls"
+      );
       this.attemptVideoPlay({
         warningLabel: "Native HLS playback start rejected",
         playToken,
@@ -4651,7 +4683,7 @@ export const PlayerController = {
           if (!this.isUnsupportedSourceError(error)) {
             return false;
           }
-          const fallbackStarted = this.playWithHlsJs(url, requestHeaders, playToken);
+          const fallbackStarted = this.playWithHlsJs(playbackUrl, requestHeaders, playToken);
           if (fallbackStarted) {
             this.isPlaying = true;
           }
@@ -4659,7 +4691,7 @@ export const PlayerController = {
         }
       });
     } else if (preferredEngine === "native-dash") {
-      this.applyNativeSource(url, sourceType || "application/dash+xml", "native-dash");
+      this.applyNativeSource(playbackUrl, sourceType || "application/dash+xml", "native-dash");
       this.attemptVideoPlay({
         warningLabel: "Native DASH playback start rejected",
         playToken,
@@ -4668,7 +4700,7 @@ export const PlayerController = {
           if (!this.isUnsupportedSourceError(error) || !this.canUseDashJs()) {
             return false;
           }
-          const fallbackStarted = this.playWithDashJs(url, playToken);
+          const fallbackStarted = this.playWithDashJs(playbackUrl, playToken);
           if (fallbackStarted) {
             this.isPlaying = true;
           }
@@ -4676,19 +4708,19 @@ export const PlayerController = {
         }
       });
     } else {
-      const isWebOsEngineFsPlayback = Platform.isWebOS() && this.isEngineFsPlaybackUrl(url);
+      const isWebOsEngineFsPlayback = Platform.isWebOS() && this.isEngineFsPlaybackUrl(playbackUrl);
       const isWebOsMatroskaPlayback =
         Platform.isWebOS() && this.normalizeMimeType(sourceType) === "video/x-matroska";
       const shouldStageWebOsNativePlayback = isWebOsEngineFsPlayback || isWebOsMatroskaPlayback;
       if (shouldStageWebOsNativePlayback) {
         // Match Stremio's webOS startup order: src -> mediaId -> load -> play.
-        this.applyWebOsStagedNativeSource(url, "native-file");
-        await this.prepareWebOsStagedNativePlayback(playToken, requestedUrl);
+        this.applyWebOsStagedNativeSource(playbackUrl, "native-file");
+        await this.prepareWebOsStagedNativePlayback(playToken, playbackUrl);
         if (!this.isPlaybackRequestActive(playToken, requestedUrl)) {
           return;
         }
       } else {
-        this.applyNativeSource(url, sourceType || null, "native-file");
+        this.applyNativeSource(playbackUrl, sourceType || null, "native-file");
       }
       this.attemptVideoPlay({
         warningLabel: "Playback start rejected",
@@ -4698,11 +4730,16 @@ export const PlayerController = {
           if (
             !this.isUnsupportedSourceError(error) ||
             !this.canUseAvPlay() ||
-            !this.isLikelyDirectFileUrl(url)
+            !this.isLikelyDirectFileUrl(playbackUrl)
           ) {
             return false;
           }
-          const fallbackStarted = this.playWithAvPlay(url, requestHeaders, sourceType, playToken);
+          const fallbackStarted = this.playWithAvPlay(
+            playbackUrl,
+            requestHeaders,
+            sourceType,
+            playToken
+          );
           if (fallbackStarted) {
             this.isPlaying = true;
           }

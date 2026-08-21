@@ -33,6 +33,7 @@ import {
 import { localMediaTracksRepository } from "../../../data/repository/localMediaTracksRepository.js";
 import { localMediaSubtitleRepository } from "../../../data/repository/localMediaSubtitleRepository.js";
 import { localMediaBitmapSubtitleRepository } from "../../../data/repository/localMediaBitmapSubtitleRepository.js";
+import { localMediaEmbeddedSubtitleRepository } from "../../../data/repository/localMediaEmbeddedSubtitleRepository.js";
 import { subtitleRepository } from "../../../data/repository/subtitleRepository.js";
 import { streamRepository } from "../../../data/repository/streamRepository.js";
 import { addonRepository } from "../../../data/repository/addonRepository.js";
@@ -444,6 +445,9 @@ const SKIP_INTERVAL_SEEK_SUPPRESSION_MS = 12000;
 const BITMAP_SUBTITLE_WINDOW_SECONDS = 120;
 const BITMAP_SUBTITLE_PREFETCH_SECONDS = 20;
 const BITMAP_SUBTITLE_WINDOW_BUCKET_SECONDS = 90;
+const EMBEDDED_TEXT_SUBTITLE_WINDOW_SECONDS = 120;
+const EMBEDDED_TEXT_SUBTITLE_PREFETCH_SECONDS = 20;
+const EMBEDDED_TEXT_SUBTITLE_WINDOW_BUCKET_SECONDS = 90;
 const PARENTAL_GUIDE_ROW_HEIGHT = 36;
 const PARENTAL_GUIDE_ROW_GAP = 4;
 const PAUSE_OVERLAY_DELAY_MS = 5000;
@@ -2347,6 +2351,14 @@ export const PlayerScreen = {
     this.bitmapSubtitleLastFrameKey = "";
     this.bitmapSubtitleLastErrorAt = 0;
     this.bitmapSubtitleScratchCanvas = null;
+    this.webOsEmbeddedTextSubtitleTrack = null;
+    this.webOsEmbeddedTextSubtitleLoadToken = 0;
+    this.webOsEmbeddedTextSubtitleLoading = false;
+    this.webOsEmbeddedTextSubtitleUsingHtml = false;
+    this.webOsEmbeddedTextSubtitleUsingAss = false;
+    this.webOsEmbeddedTextSubtitleWindowStart = 0;
+    this.webOsEmbeddedTextSubtitleWindowEnd = 0;
+    this.webOsEmbeddedTextSubtitleLastErrorAt = 0;
     this.subtitleCueStyleBindings = new Map();
     this.subtitleCueOriginalState = new WeakMap();
     this.embeddedSubtitleCueRefreshTimers = new Set();
@@ -2423,6 +2435,7 @@ export const PlayerScreen = {
     this.nextEpisodeLaunching = false;
     this.nextEpisodeLaunchToken = Number(this.nextEpisodeLaunchToken || 0) + 1;
     this.nextEpisodeCardTriggered = false;
+    this.nextEpisodeCardRenderedKey = "";
     this.nextEpisodeCardSearching = false;
     this.nextEpisodeCardSourceName = "";
     this.nextEpisodeCardCountdownSec = null;
@@ -3336,6 +3349,16 @@ export const PlayerScreen = {
     );
   },
 
+  isNextEpisodeCardFocusable() {
+    const card = this.uiRefs?.nextEpisodeCard;
+    const target = card?.querySelector(".player-next-episode-card-inner.is-playable");
+    return Boolean(
+      target &&
+      target.isConnected &&
+      !card.classList.contains("hidden")
+    );
+  },
+
   syncSkipIntroFocusState() {
     const button = this.uiRefs?.skipIntro?.querySelector(".player-skip-intro-btn");
     if (!button) {
@@ -3364,6 +3387,45 @@ export const PlayerScreen = {
     this.syncSkipIntroButtonTheme(button);
   },
 
+  syncNextEpisodeCardFocusState() {
+    const card = this.uiRefs?.nextEpisodeCard;
+    const target = card?.querySelector(".player-next-episode-card-inner.is-playable");
+    if (!target) {
+      return;
+    }
+    const focused =
+      this.controlFocusZone === "nextEpisode" &&
+      !card.classList.contains("hidden") &&
+      this.isNextEpisodeCardFocusable();
+    target.classList.toggle("focused", focused);
+    if (!focused) {
+      if (document.activeElement === target) {
+        target.blur?.();
+      }
+      return;
+    }
+    const activeElement = document.activeElement;
+    if (
+      activeElement &&
+      activeElement !== target &&
+      activeElement !== document.body &&
+      typeof activeElement.blur === "function"
+    ) {
+      activeElement.blur();
+    }
+    if (document.activeElement !== target && typeof target.focus === "function") {
+      try {
+        target.focus({ preventScroll: true });
+      } catch (_) {
+        try {
+          target.focus();
+        } catch (_) {
+          // Some TV runtimes can reject focus during DOM churn.
+        }
+      }
+    }
+  },
+
   focusSkipIntroButton() {
     if (!this.isSkipIntroButtonFocusable()) {
       return false;
@@ -3373,6 +3435,19 @@ export const PlayerScreen = {
     this.controlFocusZone = "skipIntro";
     this.syncControlFocusDom();
     this.syncSkipIntroFocusState();
+    this.resetControlsAutoHide();
+    return true;
+  },
+
+  focusNextEpisodeCard() {
+    if (!this.isNextEpisodeCardFocusable()) {
+      return false;
+    }
+    this.stickyProgressFocus = false;
+    this.autoHideControlsAfterSeek = false;
+    this.controlFocusZone = "nextEpisode";
+    this.syncControlFocusDom();
+    this.syncNextEpisodeCardFocusState();
     this.resetControlsAutoHide();
     return true;
   },
@@ -3443,7 +3518,8 @@ export const PlayerScreen = {
       isVisible &&
       !this.controlsVisible &&
       !this.skipIntroAutoHidden &&
-      !this.skipIntervalDismissed
+      !this.skipIntervalDismissed &&
+      this.controlFocusZone !== "nextEpisode"
     ) {
       if (this.skipIntroFocusFrame != null && typeof cancelAnimationFrame === "function") {
         cancelAnimationFrame(this.skipIntroFocusFrame);
@@ -7038,18 +7114,14 @@ export const PlayerScreen = {
     if (!this.isNaturalPlaybackCompletionEligible(durationSeconds)) {
       return false;
     }
+    const shouldShow = this.getNextEpisodeCardThresholdReached(currentSeconds, durationSeconds);
+    if (this.nextEpisodeCardTriggered && !shouldShow) {
+      this.resetNextEpisodeCardCycle({ render: false });
+      return false;
+    }
     if (this.nextEpisodeCardTriggered) {
       return true;
     }
-    const settings = PlayerSettingsStore.get();
-    const shouldShow = shouldShowNextEpisodeCardRule({
-      positionSeconds: currentSeconds,
-      durationSeconds,
-      skipIntervals: settings.skipIntroEnabled ? this.skipIntervals : [],
-      thresholdMode: settings.nextEpisodeThresholdMode,
-      thresholdPercent: settings.nextEpisodeThresholdPercent,
-      thresholdMinutesBeforeEnd: settings.nextEpisodeThresholdMinutesBeforeEnd
-    });
     if (shouldShow) {
       this.nextEpisodeCardTriggered = true;
     }
@@ -7079,6 +7151,32 @@ export const PlayerScreen = {
       hasRenderedFirstFrame: Boolean(this.hasPresentedPlaybackFrame),
       hasFatalError: this.hasFatalPlaybackError(),
       durationMs: duration * 1000
+    });
+  },
+
+  getNextEpisodeCardThresholdReached(
+    positionSeconds = this.getPlaybackCurrentSeconds(),
+    durationSeconds = this.getPlaybackDurationSeconds()
+  ) {
+    const duration = Number(durationSeconds || 0);
+    const position = Number(positionSeconds || 0);
+    if (
+      !Number.isFinite(duration) ||
+      duration <= 0 ||
+      !Number.isFinite(position) ||
+      position < 0 ||
+      !this.isNaturalPlaybackCompletionEligible(duration)
+    ) {
+      return false;
+    }
+    const settings = PlayerSettingsStore.get();
+    return shouldShowNextEpisodeCardRule({
+      positionSeconds: position,
+      durationSeconds: duration,
+      skipIntervals: settings.skipIntroEnabled ? this.skipIntervals : [],
+      thresholdMode: settings.nextEpisodeThresholdMode,
+      thresholdPercent: settings.nextEpisodeThresholdPercent,
+      thresholdMinutesBeforeEnd: settings.nextEpisodeThresholdMinutesBeforeEnd
     });
   },
 
@@ -7182,6 +7280,49 @@ export const PlayerScreen = {
       return;
     }
     this.renderNextEpisodeCard();
+  },
+
+  resetNextEpisodeCardCycle({ render = true } = {}) {
+    const hadState =
+      this.nextEpisodeCardTriggered ||
+      this.nextEpisodeCardDismissed ||
+      this.nextEpisodeBackExitArmed ||
+      this.controlFocusZone === "nextEpisode";
+    if (!hadState) {
+      return false;
+    }
+    this.nextEpisodeCardTriggered = false;
+    this.nextEpisodeCardDismissed = false;
+    this.nextEpisodeBackExitArmed = false;
+    if (this.controlFocusZone === "nextEpisode") {
+      this.controlFocusZone =
+        this.controlsVisible && this.isSeekBarAvailable() ? "progress" : "buttons";
+    }
+    if (render) {
+      if (this.nextEpisodeLaunching) {
+        this.cancelNextEpisodeLaunch();
+      } else {
+        this.renderNextEpisodeCard();
+      }
+    }
+    return true;
+  },
+
+  resetNextEpisodeCardAfterBackwardSeek(targetSeconds) {
+    if (!this.nextEpisodeCardTriggered) {
+      return false;
+    }
+    const currentSeconds = Number(this.getPlaybackCurrentSeconds());
+    const target = Number(targetSeconds);
+    if (
+      !Number.isFinite(currentSeconds) ||
+      !Number.isFinite(target) ||
+      target >= currentSeconds - 0.5 ||
+      this.getNextEpisodeCardThresholdReached(target)
+    ) {
+      return false;
+    }
+    return this.resetNextEpisodeCardCycle();
   },
 
   resetNextEpisodeCardDismissal() {
@@ -8382,6 +8523,13 @@ export const PlayerScreen = {
 
   refreshSubtitleTrackRendering() {
     if (Environment.isWebOS()) {
+      if (this.webOsEmbeddedTextSubtitleUsingAss) {
+        return;
+      }
+      if (this.webOsEmbeddedTextSubtitleUsingHtml) {
+        this.renderWebOsEmbeddedTextSubtitleAtCurrentTime();
+        return;
+      }
       if (
         this.selectedEmbeddedSubtitleTrackIndex < 0 ||
         typeof PlayerController.setWebOsEmbeddedSubtitleTrack !== "function"
@@ -8657,6 +8805,7 @@ export const PlayerScreen = {
       }
       this.markPlaybackProgress();
       this.attemptPendingPlaybackRestore();
+      this.renderWebOsEmbeddedTextSubtitleAtCurrentTime();
       this.refreshWebOsEmbeddedHtmlSubtitleOverlayIfNeeded();
       this.renderHtmlSubtitleOverlayAtCurrentTime();
       this.updateUiTick();
@@ -8721,6 +8870,7 @@ export const PlayerScreen = {
       this.attemptPendingPlaybackRestore();
       this.completeSeekLoadingIfReady();
       this.markPlaybackProgress();
+      this.renderWebOsEmbeddedTextSubtitleAtCurrentTime();
       this.renderBitmapSubtitleAtCurrentTime({ force: true });
       this.updateUiTick();
     };
@@ -9233,7 +9383,7 @@ export const PlayerScreen = {
       ) {
         focusedButton.focus();
       }
-    } else if (this.controlFocusZone === "skipIntro") {
+    } else if (this.controlFocusZone === "skipIntro" || this.controlFocusZone === "nextEpisode") {
       buttons.forEach((button) => {
         if (typeof button.blur === "function") {
           button.blur();
@@ -9249,6 +9399,7 @@ export const PlayerScreen = {
     }
     this.syncSkipIntroFocusState();
     this.renderNextEpisodeCard();
+    this.syncNextEpisodeCardFocusState();
     this.syncPlayerOverlayLayoutState();
     this.renderBitmapSubtitleAtCurrentTime();
   },
@@ -9303,7 +9454,7 @@ export const PlayerScreen = {
       if (focusedButton && document.activeElement !== focusedButton) {
         focusedButton.focus?.();
       }
-    } else if (this.controlFocusZone === "skipIntro") {
+    } else if (this.controlFocusZone === "skipIntro" || this.controlFocusZone === "nextEpisode") {
       buttons.forEach((button) => button.blur?.());
       if (progressShell && document.activeElement === progressShell) {
         progressShell.blur?.();
@@ -9313,6 +9464,7 @@ export const PlayerScreen = {
     // Preserve the non-markup side effects of renderControlButtons().
     this.syncSkipIntroFocusState();
     this.renderNextEpisodeCard();
+    this.syncNextEpisodeCardFocusState();
     this.syncPlayerOverlayLayoutState();
     this.renderBitmapSubtitleAtCurrentTime();
   },
@@ -9908,6 +10060,15 @@ export const PlayerScreen = {
   },
 
   seekPlaybackSeconds(seconds, { preserveSkipIntroSuppression = false } = {}) {
+    const currentSeconds = Number(this.getPlaybackCurrentSeconds());
+    const targetSeconds = Number(seconds);
+    if (
+      Number.isFinite(currentSeconds) &&
+      Number.isFinite(targetSeconds) &&
+      targetSeconds < currentSeconds - 0.5
+    ) {
+      this.resetNextEpisodeCardAfterBackwardSeek(targetSeconds);
+    }
     if (!preserveSkipIntroSuppression) {
       this.clearSkipIntroSeekSuppression();
     }
@@ -9917,6 +10078,7 @@ export const PlayerScreen = {
     this.seekLoading = true;
     this.updateLoadingVisibility();
     this.prepareBitmapSubtitleForSeek(this.seekLoadingTargetSeconds);
+    this.prepareWebOsEmbeddedTextSubtitleForSeek(this.seekLoadingTargetSeconds);
     if (typeof PlayerController.seekToSeconds === "function") {
       const didSeek = Boolean(PlayerController.seekToSeconds(seconds));
       if (!didSeek) {
@@ -10106,6 +10268,7 @@ export const PlayerScreen = {
     card.classList.toggle("hidden", hidden);
     if (hidden) {
       card.innerHTML = "";
+      this.nextEpisodeCardRenderedKey = "";
       return;
     }
 
@@ -10129,23 +10292,39 @@ export const PlayerScreen = {
       this.episodes.find((entry) => String(entry?.id || "") === String(nextEpisode.videoId || ""))
         ?.thumbnail || "";
 
-    card.innerHTML = `
-      <div class="player-next-episode-card-inner${nextEpisode.hasAired ? " focusable is-playable" : ""}${!this.controlsVisible ? " is-selected" : ""}"${nextEpisode.hasAired ? ' data-player-pointer-action="nextEpisode"' : ""}>
-        <div class="player-next-episode-thumb-wrap">
-          ${thumb ? `<img class="player-next-episode-thumb" src="${escapeHtml(thumb)}" alt="" aria-hidden="true" />` : `<div class="player-next-episode-thumb player-next-episode-thumb-fallback"></div>`}
-          <div class="player-next-episode-thumb-shade"></div>
+    const renderKey = JSON.stringify([
+      nextEpisode.videoId,
+      titleLine,
+      statusText,
+      progressText,
+      thumb,
+      Boolean(nextEpisode.hasAired),
+      Boolean(this.controlsVisible)
+    ]);
+    if (
+      this.nextEpisodeCardRenderedKey !== renderKey ||
+      !card.querySelector(".player-next-episode-card-inner")
+    ) {
+      card.innerHTML = `
+        <div class="player-next-episode-card-inner${nextEpisode.hasAired ? " focusable is-playable" : ""}${!this.controlsVisible ? " is-selected" : ""}"${nextEpisode.hasAired ? ' tabindex="-1" role="button" data-player-pointer-action="nextEpisode"' : ""}>
+          <div class="player-next-episode-thumb-wrap">
+            ${thumb ? `<img class="player-next-episode-thumb" src="${escapeHtml(thumb)}" alt="" aria-hidden="true" />` : `<div class="player-next-episode-thumb player-next-episode-thumb-fallback"></div>`}
+            <div class="player-next-episode-thumb-shade"></div>
+          </div>
+          <div class="player-next-episode-copy">
+            <div class="player-next-episode-kicker">${escapeHtml(t("next_episode_label", {}, "Next episode"))}</div>
+            <div class="player-next-episode-title">${escapeHtml(titleLine || t("next_episode_label", {}, "Next episode"))}</div>
+            ${progressText ? `<div class="player-next-episode-status">${escapeHtml(progressText)}</div>` : ""}
+          </div>
+          <div class="player-next-episode-pill${nextEpisode.hasAired ? " is-playable" : ""}">
+            <span class="player-next-episode-pill-icon">&#9654;</span>
+            <span class="player-next-episode-pill-text">${escapeHtml(statusText)}</span>
+          </div>
         </div>
-        <div class="player-next-episode-copy">
-          <div class="player-next-episode-kicker">${escapeHtml(t("next_episode_label", {}, "Next episode"))}</div>
-          <div class="player-next-episode-title">${escapeHtml(titleLine || t("next_episode_label", {}, "Next episode"))}</div>
-          ${progressText ? `<div class="player-next-episode-status">${escapeHtml(progressText)}</div>` : ""}
-        </div>
-        <div class="player-next-episode-pill${nextEpisode.hasAired ? " is-playable" : ""}">
-          <span class="player-next-episode-pill-icon">&#9654;</span>
-          <span class="player-next-episode-pill-text">${escapeHtml(statusText)}</span>
-        </div>
-      </div>
-    `;
+      `;
+      this.nextEpisodeCardRenderedKey = renderKey;
+    }
+    this.syncNextEpisodeCardFocusState();
   },
 
   updateUiTick() {
@@ -12041,6 +12220,7 @@ export const PlayerScreen = {
 
   disableEmbeddedSubtitleSelection() {
     this.clearEmbeddedSubtitleCueRefreshTimers();
+    this.clearWebOsEmbeddedTextSubtitleOverlay({ dispose: true });
     const hadBitmapSelection = Boolean(this.bitmapSubtitleTrack);
     this.clearBitmapSubtitleOverlay({ dispose: true });
     if (this.selectedEmbeddedSubtitleTrackIndex < 0) {
@@ -12799,8 +12979,10 @@ export const PlayerScreen = {
    * caller must fall back, using the returned fallbackVtt (plain-text VTT
    * converted from Dialogue events, never raw ASS text).
    */
-  async applyAssSubtitleBody({ body, selectionToken }) {
-    const isCurrentSelection = () => Number(selectionToken) === Number(this.subtitleSelectionToken);
+  async applyAssSubtitleBody({ body, selectionToken, isCurrent = null }) {
+    const isCurrentSelection = () =>
+      Number(selectionToken) === Number(this.subtitleSelectionToken) &&
+      (typeof isCurrent !== "function" || isCurrent());
     this.destroyAssSubtitleRenderer();
     const container = this.getAssSubtitleContainer();
     const video = PlayerController.video;
@@ -12919,6 +13101,223 @@ export const PlayerScreen = {
       this.bitmapSubtitleTrack = null;
       this.bitmapSubtitleScratchCanvas = null;
     }
+  },
+
+  clearWebOsEmbeddedTextSubtitleOverlay({ dispose = false } = {}) {
+    const overlayActive =
+      this.webOsEmbeddedTextSubtitleUsingHtml ||
+      String(this.htmlSubtitleSelectedId || "").startsWith("webos-embedded-text-");
+    if (this.webOsEmbeddedTextSubtitleUsingAss) {
+      this.destroyAssSubtitleRenderer();
+    }
+    this.webOsEmbeddedTextSubtitleLoadToken =
+      Number(this.webOsEmbeddedTextSubtitleLoadToken || 0) + 1;
+    this.webOsEmbeddedTextSubtitleLoading = false;
+    this.webOsEmbeddedTextSubtitleWindowStart = 0;
+    this.webOsEmbeddedTextSubtitleWindowEnd = 0;
+    this.webOsEmbeddedTextSubtitleLastErrorAt = 0;
+    if (overlayActive) {
+      this.clearHtmlSubtitleOverlay();
+    }
+    this.webOsEmbeddedTextSubtitleUsingAss = false;
+    if (dispose) {
+      this.webOsEmbeddedTextSubtitleTrack = null;
+      this.webOsEmbeddedTextSubtitleUsingHtml = false;
+    }
+  },
+
+  prepareWebOsEmbeddedTextSubtitleForSeek(timeSeconds) {
+    const track = this.webOsEmbeddedTextSubtitleTrack;
+    if (!track) {
+      return;
+    }
+    this.webOsEmbeddedTextSubtitleLoadToken =
+      Number(this.webOsEmbeddedTextSubtitleLoadToken || 0) + 1;
+    this.webOsEmbeddedTextSubtitleLoading = false;
+    this.webOsEmbeddedTextSubtitleWindowStart = 0;
+    this.webOsEmbeddedTextSubtitleWindowEnd = 0;
+    this.webOsEmbeddedTextSubtitleLastErrorAt = 0;
+    if (this.webOsEmbeddedTextSubtitleUsingHtml) {
+      this.htmlSubtitleCues = [];
+      this.renderHtmlSubtitleOverlayCue([]);
+    }
+    if (this.webOsEmbeddedTextSubtitleUsingAss) {
+      this.destroyAssSubtitleRenderer();
+      this.webOsEmbeddedTextSubtitleUsingAss = false;
+    }
+    void this.loadWebOsEmbeddedTextSubtitleWindow(timeSeconds);
+  },
+
+  async loadWebOsEmbeddedTextSubtitleWindow(timeSeconds) {
+    const track = this.webOsEmbeddedTextSubtitleTrack;
+    const sourceUrl = this.getTrackProbeUrl();
+    const sourceTrackId = Number(track?.sourceTrackId);
+    if (
+      !Environment.isWebOS() ||
+      !track ||
+      !sourceUrl ||
+      !Number.isFinite(sourceTrackId) ||
+      sourceTrackId <= 0 ||
+      this.webOsEmbeddedTextSubtitleLoading
+    ) {
+      return false;
+    }
+    const requestToken = Number(this.webOsEmbeddedTextSubtitleLoadToken || 0) + 1;
+    this.webOsEmbeddedTextSubtitleLoadToken = requestToken;
+    this.webOsEmbeddedTextSubtitleLoading = true;
+    const subtitleTime = Math.max(0, Number(timeSeconds || 0));
+    const startSeconds =
+      Math.floor(subtitleTime / EMBEDDED_TEXT_SUBTITLE_WINDOW_BUCKET_SECONDS) *
+      EMBEDDED_TEXT_SUBTITLE_WINDOW_BUCKET_SECONDS;
+    try {
+      const windowData = await localMediaEmbeddedSubtitleRepository.getWindow({
+        url: sourceUrl,
+        trackNumber: sourceTrackId,
+        startSeconds,
+        endSeconds: startSeconds + EMBEDDED_TEXT_SUBTITLE_WINDOW_SECONDS,
+        includeAssBody:
+          this.webOsEmbeddedTextSubtitleUsingAss ||
+          /^S_TEXT\/(?:ASS|SSA)$/i.test(String(track?.codec || ""))
+      });
+      if (
+        requestToken !== this.webOsEmbeddedTextSubtitleLoadToken ||
+        this.webOsEmbeddedTextSubtitleTrack !== track
+      ) {
+        return false;
+      }
+
+      this.webOsEmbeddedTextSubtitleWindowStart = Number(
+        windowData.windowStartSeconds || startSeconds
+      );
+      this.webOsEmbeddedTextSubtitleWindowEnd = Number(
+        windowData.windowEndSeconds || startSeconds + EMBEDDED_TEXT_SUBTITLE_WINDOW_SECONDS
+      );
+      const assBody = String(windowData.assBody || "");
+      const shouldUseAss =
+        Boolean(assBody) &&
+        (this.webOsEmbeddedTextSubtitleUsingAss ||
+          windowData.hasAdvancedAssOverrideTags ||
+          /^S_TEXT\/(?:ASS|SSA)$/i.test(String(windowData.codecId || track?.codec || "")));
+      if (shouldUseAss) {
+        const assResult = await this.applyAssSubtitleBody({
+          body: assBody,
+          selectionToken: this.subtitleSelectionToken,
+          isCurrent: () =>
+            requestToken === this.webOsEmbeddedTextSubtitleLoadToken &&
+            this.webOsEmbeddedTextSubtitleTrack === track
+        });
+        if (
+          requestToken !== this.webOsEmbeddedTextSubtitleLoadToken ||
+          this.webOsEmbeddedTextSubtitleTrack !== track
+        ) {
+          return false;
+        }
+        if (assResult.applied) {
+          if (typeof PlayerController.setWebOsEmbeddedSubtitleNativeVisibility !== "function") {
+            this.destroyAssSubtitleRenderer();
+            return false;
+          }
+          const nativeRendererHidden = await Promise.resolve(
+            PlayerController.setWebOsEmbeddedSubtitleNativeVisibility(
+              false,
+              this.selectedEmbeddedSubtitleTrackIndex
+            )
+          );
+          if (!nativeRendererHidden) {
+            this.destroyAssSubtitleRenderer();
+            return false;
+          }
+          this.clearHtmlSubtitleOverlay();
+          this.webOsEmbeddedTextSubtitleUsingAss = true;
+          this.webOsEmbeddedTextSubtitleUsingHtml = false;
+          return true;
+        }
+        if (assResult.fallbackVtt) {
+          windowData.body = assResult.fallbackVtt;
+        }
+      }
+
+      if (this.webOsEmbeddedTextSubtitleUsingAss) {
+        this.destroyAssSubtitleRenderer();
+        this.webOsEmbeddedTextSubtitleUsingAss = false;
+      }
+      const cues = this.parseSubtitleCues(windowData.body);
+      const shouldUseHtml =
+        this.webOsEmbeddedTextSubtitleUsingHtml || Boolean(windowData.hasAssOverrideTags);
+      if (!shouldUseHtml || (!cues.length && !this.webOsEmbeddedTextSubtitleUsingHtml)) {
+        return false;
+      }
+
+      if (!this.webOsEmbeddedTextSubtitleUsingHtml) {
+        if (typeof PlayerController.setWebOsEmbeddedSubtitleNativeVisibility !== "function") {
+          return false;
+        }
+        const nativeRendererHidden = await Promise.resolve(
+          PlayerController.setWebOsEmbeddedSubtitleNativeVisibility(
+            false,
+            this.selectedEmbeddedSubtitleTrackIndex
+          )
+        );
+        if (
+          requestToken !== this.webOsEmbeddedTextSubtitleLoadToken ||
+          this.webOsEmbeddedTextSubtitleTrack !== track ||
+          !nativeRendererHidden
+        ) {
+          return false;
+        }
+        this.webOsEmbeddedTextSubtitleUsingHtml = true;
+      }
+
+      this.htmlSubtitleCues = cues;
+      this.htmlSubtitleSelectedId = `webos-embedded-text-${this.selectedEmbeddedSubtitleTrackIndex}`;
+      this.renderHtmlSubtitleOverlayCue([]);
+      this.renderHtmlSubtitleOverlayAtCurrentTime();
+      this.scheduleHtmlSubtitleOverlayRender();
+      return true;
+    } catch (error) {
+      if (
+        requestToken === this.webOsEmbeddedTextSubtitleLoadToken &&
+        this.webOsEmbeddedTextSubtitleTrack === track
+      ) {
+        this.webOsEmbeddedTextSubtitleLastErrorAt = Date.now();
+        console.warn("Embedded text subtitle rendering failed", {
+          trackNumber: sourceTrackId,
+          error: error?.message || String(error || "")
+        });
+      }
+      return false;
+    } finally {
+      if (requestToken === this.webOsEmbeddedTextSubtitleLoadToken) {
+        this.webOsEmbeddedTextSubtitleLoading = false;
+      }
+    }
+  },
+
+  renderWebOsEmbeddedTextSubtitleAtCurrentTime() {
+    const track = this.webOsEmbeddedTextSubtitleTrack;
+    if (!track) {
+      return false;
+    }
+    const currentTime = Number(this.getPlaybackCurrentSeconds() || 0);
+    const subtitleTime = Math.max(0, currentTime - Number(this.subtitleDelayMs || 0) / 1000);
+    const outsideWindow =
+      subtitleTime < this.webOsEmbeddedTextSubtitleWindowStart ||
+      subtitleTime >= this.webOsEmbeddedTextSubtitleWindowEnd;
+    const approachingWindowEnd =
+      this.webOsEmbeddedTextSubtitleWindowEnd > 0 &&
+      subtitleTime >=
+        this.webOsEmbeddedTextSubtitleWindowEnd - EMBEDDED_TEXT_SUBTITLE_PREFETCH_SECONDS;
+    if ((outsideWindow || approachingWindowEnd) && !this.webOsEmbeddedTextSubtitleLoading) {
+      const retryAllowed =
+        !this.webOsEmbeddedTextSubtitleLastErrorAt ||
+        Date.now() - this.webOsEmbeddedTextSubtitleLastErrorAt >= 5000;
+      if (retryAllowed) {
+        void this.loadWebOsEmbeddedTextSubtitleWindow(subtitleTime);
+      }
+    }
+    return this.webOsEmbeddedTextSubtitleUsingHtml
+      ? this.renderHtmlSubtitleOverlayAtCurrentTime()
+      : this.webOsEmbeddedTextSubtitleUsingAss;
   },
 
   prepareBitmapSubtitleForSeek(timeSeconds) {
@@ -15024,9 +15423,11 @@ export const PlayerScreen = {
   getSubtitleStyleControls() {
     const style = this.subtitleStyleSettings || {};
     const htmlRendererActive = Boolean(
-      this.htmlSubtitleSelectedId &&
-      ((Array.isArray(this.htmlSubtitleCues) && this.htmlSubtitleCues.length > 0) ||
-        PlayerController.shouldRenderAvPlaySubtitleCallbacksInHtml?.())
+      this.webOsEmbeddedTextSubtitleUsingAss ||
+      this.isAssAddonSubtitleActive() ||
+      (this.htmlSubtitleSelectedId &&
+        ((Array.isArray(this.htmlSubtitleCues) && this.htmlSubtitleCues.length > 0) ||
+          PlayerController.shouldRenderAvPlaySubtitleCallbacksInHtml?.()))
     );
     const usingTizenAvPlay = Boolean(Environment.isTizen() && PlayerController.isUsingAvPlay?.());
     const rendererMode = htmlRendererActive
@@ -15306,6 +15707,7 @@ export const PlayerScreen = {
     if (this.externalTrackNodes.length) {
       this.clearMountedExternalSubtitleTracks();
     }
+    this.clearWebOsEmbeddedTextSubtitleOverlay({ dispose: true });
     this.clearHtmlSubtitleOverlay();
     this.clearBitmapSubtitleOverlay({ dispose: true });
 
@@ -15350,6 +15752,11 @@ export const PlayerScreen = {
     if (this.refreshSubtitleCueStyles()) {
       this.refreshWebOsEmbeddedSubtitleAfterCueMutation();
     }
+    if (Environment.isWebOS() && embeddedTrack && !embeddedTrack.bitmapSubtitle) {
+      this.webOsEmbeddedTextSubtitleTrack = embeddedTrack;
+      this.webOsEmbeddedTextSubtitleUsingHtml = false;
+      void this.loadWebOsEmbeddedTextSubtitleWindow(this.getPlaybackCurrentSeconds());
+    }
     this.renderControlButtons();
     this.renderSubtitleDialog();
     return true;
@@ -15368,6 +15775,7 @@ export const PlayerScreen = {
     if (this.externalTrackNodes.length) {
       this.clearMountedExternalSubtitleTracks();
     }
+    this.clearWebOsEmbeddedTextSubtitleOverlay({ dispose: true });
     this.clearHtmlSubtitleOverlay();
     this.clearBitmapSubtitleOverlay({ dispose: true });
     PlayerController.setWebOsEmbeddedSubtitleTrack?.(-1);
@@ -18769,6 +19177,10 @@ export const PlayerScreen = {
       this.resetControlsAutoHide();
       return;
     }
+    if (this.controlFocusZone === "nextEpisode") {
+      void this.playNextEpisode({ userInitiated: true });
+      return;
+    }
     const controls = this.getControlDefinitions();
     const current = controls[this.controlFocusIndex] || null;
     if (!current) {
@@ -18872,6 +19284,17 @@ export const PlayerScreen = {
   },
 
   syncPointerFocus(target) {
+    const nextEpisodeNode = target?.closest?.("[data-player-pointer-action='nextEpisode']");
+    if (nextEpisodeNode && this.isNextEpisodeCardFocusable()) {
+      this.stickyProgressFocus = false;
+      this.autoHideControlsAfterSeek = false;
+      this.controlFocusZone = "nextEpisode";
+      this.resetControlsAutoHide();
+      this.renderControlButtons();
+      this.syncNextEpisodeCardFocusState();
+      return;
+    }
+
     const skipIntroNode = target?.closest?.("[data-player-pointer-action='skipIntro']");
     if (skipIntroNode && this.isSkipIntroButtonFocusable()) {
       this.stickyProgressFocus = false;
@@ -19430,6 +19853,33 @@ export const PlayerScreen = {
       return;
     }
 
+    const skipOverlayFocusable = this.isSkipIntroButtonFocusable();
+    const nextOverlayFocusable = this.isNextEpisodeCardFocusable();
+    const activeElement = document.activeElement;
+    const skipOverlayFocused =
+      this.controlFocusZone === "skipIntro" ||
+      Boolean(activeElement?.closest?.("[data-player-pointer-action='skipIntro']"));
+    const nextOverlayFocused =
+      this.controlFocusZone === "nextEpisode" ||
+      Boolean(activeElement?.closest?.("[data-player-pointer-action='nextEpisode']"));
+    const overlayButtonsCoexist = skipOverlayFocusable && nextOverlayFocusable;
+    if (overlayButtonsCoexist && (keyCode === 37 || keyCode === 39)) {
+      if (keyCode === 39 && skipOverlayFocused && this.focusNextEpisodeCard()) {
+        return;
+      }
+      if (keyCode === 37 && nextOverlayFocused && this.focusSkipIntroButton()) {
+        return;
+      }
+      if (skipOverlayFocused || nextOverlayFocused) {
+        this.resetControlsAutoHide();
+        return;
+      }
+    }
+    if (nextOverlayFocused && nextOverlayFocusable && isSelectKeyCode(keyCode)) {
+      await this.playNextEpisode({ userInitiated: true });
+      return;
+    }
+
     if (
       !this.controlsVisible &&
       this.activeSkipInterval &&
@@ -19860,6 +20310,7 @@ export const PlayerScreen = {
       this.trackDiscoveryDeadline = 0;
       this.subtitleLoading = false;
       this.manifestLoading = false;
+      this.clearWebOsEmbeddedTextSubtitleOverlay({ dispose: true });
       this.clearHtmlSubtitleOverlay();
       this.destroyAssSubtitleRenderer();
       this.clearBitmapSubtitleOverlay({ dispose: true });

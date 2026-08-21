@@ -11,6 +11,7 @@ var requestActiveServerPath = serverHost.requestActiveServerPath;
 var SUPABASE_PROXY_PATH = require("./supabaseProxy").SUPABASE_PROXY_PATH;
 var bitmapSubtitles = require("./bitmapSubtitles");
 var getBitmapSubtitleWindow = bitmapSubtitles.getBitmapSubtitleWindow;
+var getEmbeddedTextSubtitleWindow = bitmapSubtitles.getEmbeddedTextSubtitleWindow;
 var prepareBitmapSubtitleSource = bitmapSubtitles.prepareBitmapSubtitleSource;
 
 var RUNTIME_PATH = path.resolve(__dirname, "..", "runtime", "media-http.cjs");
@@ -408,6 +409,33 @@ function registerBitmapSubtitleCommand() {
           buildErrorPayload(error, {
             bitmapSubtitle: true,
             errorCode: String((error && error.code) || "BITMAP_SUBTITLE_FAILED"),
+            errorDetails: (error && error.details) || null
+          })
+        );
+      });
+  });
+}
+
+function registerEmbeddedTextSubtitleCommand() {
+  service.register("embeddedSubtitleTextWindow", function (message) {
+    var payload = getMessagePayload(message);
+    getEmbeddedTextSubtitleWindow({
+      url: payload.url,
+      trackNumber: payload.trackNumber,
+      startSeconds: payload.startSeconds,
+      endSeconds: payload.endSeconds,
+      includeAssBody: payload.includeAssBody
+    })
+      .then(function (result) {
+        respond(message, Object.assign(buildBasePayload(), result, { returnValue: true }));
+      })
+      .catch(function (error) {
+        console.error("[" + SERVICE_ID + "] embedded text subtitle extraction failed:", error);
+        respond(
+          message,
+          buildErrorPayload(error, {
+            embeddedTextSubtitle: true,
+            errorCode: String((error && error.code) || "EMBEDDED_TEXT_SUBTITLE_FAILED"),
             errorDetails: (error && error.details) || null
           })
         );
@@ -1394,5 +1422,6 @@ registerEngineFsKeepAliveCommands();
 registerTracksCommand();
 registerSubtitleTextCommand();
 registerBitmapSubtitleCommand();
+registerEmbeddedTextSubtitleCommand();
 registerTorrentProxyCommands();
 registerEngineFsDiagnosticCommand();
