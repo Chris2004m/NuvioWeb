@@ -5233,11 +5233,15 @@ export const HomeScreen = {
     }
     if (normalized.isNextUp) {
       ContinueWatchingPreferences.addDismissedNextUpKey(normalized.contentId);
-      this.pruneContinueWatchingItem(normalized);
+      // Android dismisses the whole title from Continue Watching, including
+      // any other Next Up entry for the same content.
+      this.pruneContinueWatchingItem({ ...normalized, videoId: null });
       return true;
     }
-    await watchProgressRepository.removeProgress(normalized.contentId, normalized.videoId || null);
-    this.pruneContinueWatchingItem(normalized);
+    // Android removes all progress for an InProgress title, not only the
+    // currently displayed episode. Keep the in-memory projection in sync too.
+    await watchProgressRepository.removeProgress(normalized.contentId);
+    this.pruneContinueWatchingItem({ ...normalized, videoId: null });
     return true;
   },
 
@@ -5507,7 +5511,7 @@ export const HomeScreen = {
       if (buildHeroIdentity(currentHero) !== scheduledHeroIdentity) {
         return;
       }
-      requestAnimationFrame(() => {
+      requestAnimationFrame(async () => {
         if (Number(this.heroFocusToken || 0) !== focusToken) {
           return;
         }
@@ -5519,22 +5523,37 @@ export const HomeScreen = {
         if (!latestHero || buildHeroIdentity(latestHero) !== scheduledHeroIdentity) {
           return;
         }
-        // Keep the hero copy synchronized with the settled focus immediately.
-        // Backdrop/logo swaps already preload and guard their own async work, so
-        // waiting for those assets here leaves the previous movie visible on
-        // slower TV engines. Metadata enrichment can safely refine this item
-        // afterward while its focus token is still current.
-        this.heroItem = latestHero;
+        if (shouldEnrichModernHero(latestHero)) {
+          void this.enrichCurrentHeroAsync(latestHero, focusToken, { deferCommit: true });
+          return;
+        }
+        // Commit the hero as one scene. Updating the copy before the matching
+        // backdrop/logo are ready lets a fast D-pad sequence show new text over
+        // the previous movie's artwork on slower TV engines.
+        await preloadModernHeroAssets(latestHero);
+        if (Number(this.heroFocusToken || 0) !== focusToken) {
+          return;
+        }
+        const settledFocusedNode = this.getCurrentFocusedNode();
+        if (
+          settledFocusedNode !== node ||
+          !node?.isConnected ||
+          !node.classList.contains("focused")
+        ) {
+          return;
+        }
+        const settledHero = this.getNodeHeroSource(node);
+        if (!settledHero || buildHeroIdentity(settledHero) !== scheduledHeroIdentity) {
+          return;
+        }
+        this.heroItem = settledHero;
         const matchedIndex = this.heroCandidates.findIndex(
-          (item) => String(item?.id || "") === String(latestHero.id || "")
+          (item) => String(item?.id || "") === String(settledHero.id || "")
         );
         if (matchedIndex >= 0) {
           this.heroIndex = matchedIndex;
         }
         this.applyHeroToDom();
-        if (shouldEnrichModernHero(latestHero)) {
-          void this.enrichCurrentHeroAsync(latestHero, focusToken, { deferCommit: true });
-        }
       });
     }, delay);
   },
