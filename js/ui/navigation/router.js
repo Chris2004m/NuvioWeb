@@ -63,6 +63,7 @@ const WEBOS_NON_RESTORABLE_ROUTES = new Set([
   "plugin",
   "plugins",
   "catalogOrder",
+  "detail",
   "player",
   "stream"
 ]);
