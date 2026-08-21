@@ -1,6 +1,11 @@
 import { watchProgressRepository } from "../../data/repository/watchProgressRepository.js";
 import { watchedItemsRepository } from "../../data/repository/watchedItemsRepository.js";
 import { watchedSeriesReconciliationService } from "../../data/repository/watchedSeriesReconciliationService.js";
+import {
+  CloudLibraryPlaybackProgressStore,
+  CloudLibraryPlaybackSessionStore,
+  cloudPlaybackFileForSession
+} from "../../data/local/cloudLibraryPlaybackStore.js";
 import { Platform } from "../../platform/index.js";
 import { WatchProgressSyncService } from "../profile/watchProgressSyncService.js";
 import { nativeVideoEngine } from "./engines/nativeVideoEngine.js";
@@ -90,6 +95,7 @@ export const PlayerController = {
   currentVideoId: null,
   currentSeason: null,
   currentEpisode: null,
+  currentCloudSessionToken: null,
   progressSaveTimer: null,
   lastProgressPushAt: 0,
   lifecycleBound: false,
@@ -4461,7 +4467,8 @@ export const PlayerController = {
       requestHeaders = {},
       mediaSourceType = null,
       forceEngine = null,
-      streamIdentity = null
+      streamIdentity = null,
+      cloudSessionToken = null
     } = {}
   ) {
     if (!this.video) return;
@@ -4488,6 +4495,7 @@ export const PlayerController = {
     this.currentVideoId = videoId;
     this.currentSeason = season == null ? null : Number(season);
     this.currentEpisode = episode == null ? null : Number(episode);
+    this.currentCloudSessionToken = String(cloudSessionToken || "").trim() || null;
     this.currentItemTitle = title || null;
     this.currentItemPoster = poster || null;
     this.currentItemBackground = background || null;
@@ -4805,6 +4813,7 @@ export const PlayerController = {
     this.currentVideoId = null;
     this.currentSeason = null;
     this.currentEpisode = null;
+    this.currentCloudSessionToken = null;
     this.currentItemTitle = null;
     this.currentItemPoster = null;
     this.currentItemBackground = null;
@@ -4831,19 +4840,21 @@ export const PlayerController = {
     const itemType = this.currentItemType || "movie";
     const normalizedItemType = String(itemType).trim().toLowerCase();
     const isSeries = normalizedItemType === "series" || normalizedItemType === "tv";
+    const isCloud = normalizedItemType === "cloud";
     return {
       itemId: this.currentItemId,
       itemType,
       // Android stores movie progress at content level and episode progress at
       // the exact season/episode identity. A movie's discovery video ID can
       // vary between addons and must not split resume state by source.
-      videoId: isSeries ? this.currentVideoId || null : null,
+      videoId: isSeries || isCloud ? this.currentVideoId || null : null,
       season: Number.isFinite(this.currentSeason) ? this.currentSeason : null,
       episode: Number.isFinite(this.currentEpisode) ? this.currentEpisode : null,
       title: this.currentItemTitle || null,
       poster: this.currentItemPoster || null,
       background: this.currentItemBackground || null,
       episodeTitle: this.currentEpisodeTitle || null,
+      cloudSessionToken: isCloud ? this.currentCloudSessionToken : null,
       streamIdentity: this.currentStreamIdentity || null
     };
   },
@@ -4912,10 +4923,47 @@ export const PlayerController = {
     await this.flushProgress(positionMs, durationMs, false, context, {
       allowCloudSync: allowCloudSync && !forceCloudSync
     });
-    if (forceCloudSync) {
+    if (forceCloudSync && String(context?.itemType || "").toLowerCase() !== "cloud") {
       await this.pushProgressIfDue(true);
     }
     return true;
+  },
+
+  async flushCloudLibraryProgress(positionMs, durationMs, clear = false, context = null) {
+    const active = context || this.createProgressContext();
+    const session = CloudLibraryPlaybackSessionStore.load(active?.cloudSessionToken);
+    const file = cloudPlaybackFileForSession(session);
+    if (!session?.item || !file) {
+      return false;
+    }
+
+    const safePosition = Number(positionMs || 0);
+    const safeDuration = Number(durationMs || 0);
+    const hasFiniteDuration = Number.isFinite(safeDuration) && safeDuration > 0;
+    const hasReachedMinimumSyncPosition =
+      Number.isFinite(safePosition) && safePosition >= MIN_PROGRESS_SYNC_DURATION_MS;
+    const isCompleted = hasFiniteDuration && safePosition / safeDuration >= 0.9;
+    if (safePosition > 0) {
+      this.recordProgressSnapshot(safePosition, safeDuration, active);
+    }
+    if (!clear && !isCompleted) {
+      if (hasFiniteDuration && safeDuration < MIN_PROGRESS_SYNC_DURATION_MS) {
+        return false;
+      }
+      if (!hasFiniteDuration && !hasReachedMinimumSyncPosition) {
+        return false;
+      }
+    }
+    if (!Number.isFinite(safePosition) || safePosition <= 0) {
+      return false;
+    }
+    return CloudLibraryPlaybackProgressStore.save(
+      session.item,
+      file,
+      safePosition,
+      hasFiniteDuration ? safeDuration : 0,
+      isCompleted
+    );
   },
 
   async flushProgress(
@@ -4928,6 +4976,10 @@ export const PlayerController = {
     const active = context || this.createProgressContext();
     if (!active?.itemId) {
       return;
+    }
+
+    if (String(active.itemType || "").toLowerCase() === "cloud") {
+      return this.flushCloudLibraryProgress(positionMs, durationMs, clear, active);
     }
 
     const safePosition = Number(positionMs || 0);

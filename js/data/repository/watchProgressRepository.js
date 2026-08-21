@@ -105,6 +105,10 @@ function isSeriesType(type) {
   return normalized === "series" || normalized === "tv";
 }
 
+function isCloudProgressItem(item = {}) {
+  return String(item?.contentType || item?.type || "").trim().toLowerCase() === "cloud";
+}
+
 function matchesProgressTarget(item = {}, contentId, videoId = null) {
   const wantedContentId = String(contentId || "").trim();
   if (!wantedContentId || String(item.contentId || "").trim() !== wantedContentId) {
@@ -197,7 +201,9 @@ function selectedLocalProgressSource() {
 
 function filterForSelectedContinueWatchingSource(items = []) {
   const source = selectedContinueWatchingSource();
-  const all = Array.isArray(items) ? items : [];
+  // Cloud Library progress is local to the Cloud file and deliberately does
+  // not enter generic Continue Watching or account sync, matching Android TV.
+  const all = (Array.isArray(items) ? items : []).filter((item) => !isCloudProgressItem(item));
   if (source === WatchProgressSource.TRAKT) {
     return all.filter(
       (item) => isTraktProgressItem(item) || !isTraktCompatibleContentId(item?.contentId)
@@ -565,6 +571,9 @@ async function batchEnrichProgressItems(items) {
 
 class WatchProgressRepository {
   async saveProgress(progress) {
+    if (isCloudProgressItem(progress)) {
+      return;
+    }
     if (isSeriesType(progress?.contentType)) {
       ContinueWatchingPreferences.removeDismissedNextUpKeysForContent(
         progress?.contentId,
@@ -667,7 +676,9 @@ class WatchProgressRepository {
   }
 
   async getAll() {
-    return WatchProgressStore.listForProfile(activeProfileId());
+    return WatchProgressStore.listForProfile(activeProfileId()).filter(
+      (item) => !isCloudProgressItem(item)
+    );
   }
 
   async getAllForContinueWatching() {
@@ -696,7 +707,10 @@ class WatchProgressRepository {
   }
 
   async replaceAll(items) {
-    WatchProgressStore.replaceForProfile(activeProfileId(), items || []);
+    WatchProgressStore.replaceForProfile(
+      activeProfileId(),
+      (Array.isArray(items) ? items : []).filter((item) => !isCloudProgressItem(item))
+    );
     invalidateContinueWatchingDisplaySnapshot();
   }
 }

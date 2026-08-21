@@ -962,8 +962,11 @@ export class LibraryController {
     this.setState({ selectedCloudType: type, expandedPicker: null });
   }
 
-  setCloudSearchQuery(query) {
-    this.setState({ cloudSearchQuery: String(query || "") });
+  setCloudSearchQuery(query, options = {}) {
+    this.setState(
+      { cloudSearchQuery: String(query || "") },
+      { reason: options.reason || "cloudSearch" }
+    );
   }
 
   openCloudFilePicker(item) {

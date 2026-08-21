@@ -1793,7 +1793,9 @@ function readContinueWatchingDisplaySnapshot(scopeKey) {
   if (Date.now() - Number(entry.savedAt || 0) > CW_DISPLAY_SNAPSHOT_MAX_AGE_MS) {
     return [];
   }
-  return entry.items;
+  return entry.items.filter(
+    (item) => String(item?.contentType || item?.type || "").trim().toLowerCase() !== "cloud"
+  );
 }
 
 function writeContinueWatchingDisplaySnapshot(scopeKey, items = []) {

@@ -2734,6 +2734,7 @@ export const PlayerScreen = {
         this.params.playerBackdropUrl || this.params.backdrop || this.params.poster || null,
       logo: this.params.playerLogoUrl || this.params.logo || null,
       episodeTitle: this.params.episodeTitle || this.params.playerSubtitle || null,
+      cloudSessionToken: this.params.cloudSessionToken || null,
       requestHeaders,
       mediaSourceType,
       streamIdentity: streamCandidate
@@ -6967,16 +6968,26 @@ export const PlayerScreen = {
     } catch (_) {
       // Route cleanup will make a second best-effort stop if native teardown throws.
     }
-    const shouldReturnToStream = !forceDetail && this.shouldReturnToStreamOnBack();
+    const shouldReturnToLibrary = !forceDetail && this.params?.returnToLibraryOnBack === true;
+    const shouldReturnToStream =
+      !shouldReturnToLibrary && !forceDetail && this.shouldReturnToStreamOnBack();
     Router.suppressNextPopstate?.(1500);
     Router.ignoreSinglePopstate?.();
-    const targetRoute = shouldReturnToStream ? "stream" : this.params?.itemId ? "detail" : "home";
+    const targetRoute = shouldReturnToLibrary
+      ? "library"
+      : shouldReturnToStream
+        ? "stream"
+        : this.params?.itemId
+          ? "detail"
+          : "home";
     const targetParams =
-      targetRoute === "stream"
-        ? streamParams
-        : targetRoute === "detail"
-          ? this.buildDetailRouteParamsFromPlayer()
-          : {};
+      targetRoute === "library"
+        ? {}
+        : targetRoute === "stream"
+          ? streamParams
+          : targetRoute === "detail"
+            ? this.buildDetailRouteParamsFromPlayer()
+            : {};
     void Router.navigate(targetRoute, targetParams, {
       skipStackPush: true,
       replaceHistory: true,
