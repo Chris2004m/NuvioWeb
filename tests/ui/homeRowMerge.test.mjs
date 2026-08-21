@@ -20,6 +20,14 @@ test("a background refresh keeps rows outside the initial batch", () => {
   assert.equal(merged.find((entry) => entry.homeCatalogKey === "a").marker, "new");
 });
 
+test("freshly fetched rows replace the retained copy", () => {
+  const merged = mergeRefreshedHomeRows([row("a", "old")], [row("a", "new")], new Set(["a"]), {
+    background: true
+  });
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].marker, "new");
+});
+
 test("a row whose catalog is no longer configured is dropped", () => {
   const existing = [row("a"), row("removed")];
   const merged = mergeRefreshedHomeRows(existing, [], new Set(["a"]), { background: true });

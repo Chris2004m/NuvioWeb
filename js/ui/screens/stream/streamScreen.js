@@ -1527,6 +1527,7 @@ export const StreamScreen = {
       return;
     }
     this.errorChipTimer = setTimeout(() => {
+      this.errorChipTimer = null;
       this.sourceChips = this.sourceChips.filter((chip) => chip.status !== "error");
       if (!this.refreshSourceChipsOnly()) {
         this.requestRender();
@@ -1596,7 +1597,11 @@ export const StreamScreen = {
         index: clamp(ordered.indexOf(targetFilter), 0, Math.max(0, ordered.length - 1))
       };
     }
-    this.listScrollTop = 0;
+    // Android's LazyColumn effect is keyed by the selected addon, so
+    // reselecting the active chip does not jump the list back to the top.
+    if (filterChanged) {
+      this.listScrollTop = 0;
+    }
     if (this.applyAddonFilterInPlace({ filterChanged })) {
       return;
     }
@@ -2316,6 +2321,18 @@ export const StreamScreen = {
   // Clearing an error status changes only the source-chip row. Keep the stream
   // cards and their scroll/focus state intact instead of rebuilding the route.
   refreshSourceChipsOnly() {
+    const selectedFilter = String(this.addonFilter || "all");
+    const availableFilters = this.getOrderedFilterNames();
+    if (selectedFilter !== "all" && !availableFilters.includes(selectedFilter)) {
+      // An error chip can disappear after the user selected it. Do not leave
+      // the state pointing at a filter that no longer has a chip or rows.
+      this.addonFilter = "all";
+      this.listScrollTop = 0;
+      const allStreams = this.getFilteredStreams("all");
+      this.focusState = allStreams.length
+        ? { zone: "card", row: 0, action: "play" }
+        : { zone: "filter", index: 0 };
+    }
     const track = this.container?.querySelector?.(".stream-route-chip-track");
     if (!track) {
       return false;
