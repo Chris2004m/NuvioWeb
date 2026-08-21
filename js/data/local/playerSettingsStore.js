@@ -4,6 +4,10 @@ import {
   SUBTITLE_VERTICAL_OFFSET_DEFAULT,
   normalizeSubtitleVerticalOffset
 } from "../../core/player/subtitleVerticalOffset.js";
+import {
+  SUBTITLE_TEXT_OPACITY_DEFAULT,
+  normalizeSubtitleTextOpacity
+} from "../../core/player/subtitleTextOpacity.js";
 
 const KEY = "playerSettings";
 
@@ -36,6 +40,7 @@ const DEFAULTS = {
   subtitleStyle: {
     fontSize: 100,
     textColor: "#FFFFFF",
+    textOpacity: SUBTITLE_TEXT_OPACITY_DEFAULT,
     bold: false,
     outlineEnabled: true,
     outlineColor: "#000000",
@@ -219,6 +224,7 @@ export function normalizePlayerSettings(settings = {}) {
         : storedOffset
   );
   subtitleStyle.verticalOffsetContract = SUBTITLE_VERTICAL_OFFSET_CONTRACT;
+  subtitleStyle.textOpacity = normalizeSubtitleTextOpacity(subtitleStyle.textOpacity);
   let preferredLanguage = normalizeSelectableSubtitleLanguageCode(
     subtitleStyle.preferredLanguage ?? persistentSettings.subtitleLanguage,
     DEFAULTS.subtitleStyle.preferredLanguage

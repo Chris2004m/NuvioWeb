@@ -81,6 +81,11 @@ import {
   splitSubtitleVerticalOffset
 } from "../../../core/player/subtitleVerticalOffset.js";
 import {
+  SUBTITLE_TEXT_OPACITY_STEP,
+  normalizeSubtitleTextOpacity,
+  subtitleTextColorWithOpacity
+} from "../../../core/player/subtitleTextOpacity.js";
+import {
   BitmapSubtitleDecoder,
   normalizeBitmapSubtitleFormat,
   supportsBitmapSubtitleDecoding,
@@ -7800,7 +7805,11 @@ export const PlayerScreen = {
     }
     const style = this.subtitleStyleSettings || {};
     const verticalOffset = splitSubtitleVerticalOffset(style.verticalOffset);
-    const subtitleColor = String(style.textColor || "#FFFFFF");
+    const subtitleTextOpacity = normalizeSubtitleTextOpacity(style.textOpacity);
+    const subtitleColor = subtitleTextColorWithOpacity(
+      style.textColor || "#FFFFFF",
+      subtitleTextOpacity
+    );
     const outlineColor = String(style.outlineColor || "#000000");
     const subtitleFontWeight = style.bold ? "800" : Environment.isWebOS() ? "400" : "500";
     const boldShadow = style.bold
@@ -7818,7 +7827,7 @@ export const PlayerScreen = {
     if (Environment.isTizen() && PlayerController.isUsingAvPlay?.()) {
       PlayerController.setAvPlayExternalSubtitleDelay?.(this.subtitleDelayMs);
     }
-    uiRoot.style.setProperty("--player-subtitle-color", String(style.textColor || "#FFFFFF"));
+    uiRoot.style.setProperty("--player-subtitle-color", subtitleColor);
     uiRoot.style.setProperty(
       "--player-subtitle-background",
       String(style.backgroundColor || "#00000000")
@@ -7832,7 +7841,7 @@ export const PlayerScreen = {
       "--player-subtitle-offset",
       `${(verticalOffset.value * -2).toFixed(2)}vh`
     );
-    video.style.setProperty("--player-subtitle-color", String(style.textColor || "#FFFFFF"));
+    video.style.setProperty("--player-subtitle-color", subtitleColor);
     video.style.setProperty(
       "--player-subtitle-background",
       String(style.backgroundColor || "#00000000")
@@ -15008,8 +15017,14 @@ export const PlayerScreen = {
     const rendererMode = htmlRendererActive
       ? "html"
       : PlayerController.getAvPlaySubtitleOutputMode?.() || "none";
+    const usingWebOsNative = Boolean(
+      Environment.isWebOS() &&
+        PlayerController.isUsingNativePlayback?.() &&
+        !htmlRendererActive
+    );
     const availability = resolveSubtitleStyleControlAvailability({
       isTizenAvPlay: usingTizenAvPlay,
+      isWebOsNative: usingWebOsNative,
       rendererMode,
       supportsExternalDelay: PlayerController.supportsAvPlayExternalSubtitleDelay?.() === true
     });
@@ -15043,6 +15058,11 @@ export const PlayerScreen = {
         id: "textColor",
         label: t("subtitle_style_text_color", {}, "Text Color"),
         value: styleChipLabel(style.textColor || "#FFFFFF")
+      },
+      {
+        id: "textOpacity",
+        label: t("subtitle_style_text_opacity", {}, "Text Opacity"),
+        value: `${normalizeSubtitleTextOpacity(style.textOpacity)}%`
       },
       {
         id: "outlineEnabled",
@@ -15131,6 +15151,10 @@ export const PlayerScreen = {
       );
       style.textColor =
         SUBTITLE_TEXT_COLORS[clamp(currentIndex + delta, 0, SUBTITLE_TEXT_COLORS.length - 1)];
+    } else if (controlId === "textOpacity") {
+      style.textOpacity = normalizeSubtitleTextOpacity(
+        Number(style.textOpacity ?? 100) + delta * SUBTITLE_TEXT_OPACITY_STEP
+      );
     } else if (controlId === "outlineEnabled" && delta !== 0) {
       style.outlineEnabled = !style.outlineEnabled;
     } else if (controlId === "outlineColor" && delta !== 0) {
@@ -15152,6 +15176,7 @@ export const PlayerScreen = {
         ...style,
         fontSize: defaults.fontSize,
         textColor: defaults.textColor,
+        textOpacity: defaults.textOpacity,
         bold: defaults.bold,
         outlineEnabled: defaults.outlineEnabled,
         outlineColor: defaults.outlineColor,

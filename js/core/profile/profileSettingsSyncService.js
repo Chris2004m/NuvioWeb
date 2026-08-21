@@ -30,6 +30,10 @@ import {
   hasProfileSettingsCloudSyncPending
 } from "../../data/local/profileScopedStore.js";
 import { normalizeSubtitleVerticalOffset } from "../player/subtitleVerticalOffset.js";
+import {
+  androidColorIntToSubtitleTextOpacity,
+  normalizeSubtitleTextOpacity
+} from "../player/subtitleTextOpacity.js";
 import { isFastHorizontalNavigationEnabled } from "../../platform/sharedKeys.js";
 
 const PULL_RPC = "sync_pull_profile_settings_blob";
@@ -578,7 +582,7 @@ function normalizeTmdbLanguageForWeb(value) {
   }
 }
 
-function hexToAndroidColorInt(value, fallback = "#ffffff") {
+function hexToAndroidColorInt(value, fallback = "#ffffff", alphaPercent = 100) {
   const match = String(value || fallback)
     .trim()
     .match(/^#([0-9a-f]{6})$/i);
@@ -586,7 +590,8 @@ function hexToAndroidColorInt(value, fallback = "#ffffff") {
   const red = parseInt(hex.slice(0, 2), 16);
   const green = parseInt(hex.slice(2, 4), 16);
   const blue = parseInt(hex.slice(4, 6), 16);
-  return (0xff << 24) | (red << 16) | (green << 8) | blue;
+  const alpha = Math.round((normalizeSubtitleTextOpacity(alphaPercent) / 100) * 0xff);
+  return (alpha << 24) | (red << 16) | (green << 8) | blue;
 }
 
 function androidColorIntToHex(value, fallback = "#ffffff") {
@@ -1055,7 +1060,11 @@ const FEATURE_ADAPTERS = {
           settings.subtitleStyle?.verticalOffset
         ),
         subtitle_bold: Boolean(settings.subtitleStyle?.bold),
-        subtitle_text_color: hexToAndroidColorInt(settings.subtitleStyle?.textColor, "#ffffff"),
+        subtitle_text_color: hexToAndroidColorInt(
+          settings.subtitleStyle?.textColor,
+          "#ffffff",
+          settings.subtitleStyle?.textOpacity
+        ),
         subtitle_background_color: cssColorToAndroidColorInt(
           settings.subtitleStyle?.backgroundColor
         ),
@@ -1318,6 +1327,7 @@ const FEATURE_ADAPTERS = {
       }
       if (numberOrNull(raw.subtitle_text_color) != null) {
         subtitleStyle.textColor = androidColorIntToHex(raw.subtitle_text_color, "#ffffff");
+        subtitleStyle.textOpacity = androidColorIntToSubtitleTextOpacity(raw.subtitle_text_color);
       }
       if (numberOrNull(raw.subtitle_background_color) != null) {
         subtitleStyle.backgroundColor = androidColorIntToCss(raw.subtitle_background_color);

@@ -18,6 +18,12 @@ import {
   SUBTITLE_VERTICAL_OFFSET_MIN,
   normalizeSubtitleVerticalOffset
 } from "../../../core/player/subtitleVerticalOffset.js";
+import {
+  SUBTITLE_TEXT_OPACITY_MAX,
+  SUBTITLE_TEXT_OPACITY_MIN,
+  SUBTITLE_TEXT_OPACITY_STEP,
+  normalizeSubtitleTextOpacity
+} from "../../../core/player/subtitleTextOpacity.js";
 import { TorrentSettingsStore } from "../../../data/local/torrentSettingsStore.js";
 import { WebOsAudioCompatibilityStore } from "../../../data/local/webOsAudioCompatibilityStore.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
@@ -470,6 +476,17 @@ const SUBTITLE_TEXT_COLOR_OPTIONS = [
   { id: "#00FF88", label: "Green" }
 ];
 
+const SUBTITLE_TEXT_OPACITY_OPTIONS = Array.from(
+  {
+    length:
+      (SUBTITLE_TEXT_OPACITY_MAX - SUBTITLE_TEXT_OPACITY_MIN) / SUBTITLE_TEXT_OPACITY_STEP + 1
+  },
+  (_, index) => {
+    const value = SUBTITLE_TEXT_OPACITY_MIN + index * SUBTITLE_TEXT_OPACITY_STEP;
+    return { id: value, label: `${value}%` };
+  }
+);
+
 const SUBTITLE_OUTLINE_COLOR_OPTIONS = [
   { id: "#000000", label: "Black" },
   { id: "#FFFFFF", label: "White" },
@@ -490,6 +507,10 @@ function clampSubtitleSize(value) {
     return 120;
   }
   return Math.min(200, Math.max(50, parsed));
+}
+
+function clampSubtitleTextOpacity(value) {
+  return normalizeSubtitleTextOpacity(value);
 }
 
 function clampSubtitleOffset(value) {
@@ -6001,6 +6022,19 @@ export const SettingsScreen = {
         }
       });
     });
+    this.actionMap.set("playback:subtitleTextOpacity", () => {
+      this.openOptionDialog({
+        title: t("subtitle_style_text_opacity", {}, "Text Opacity"),
+        options: SUBTITLE_TEXT_OPACITY_OPTIONS,
+        selectedId: clampSubtitleTextOpacity(
+          PlayerSettingsStore.get().subtitleStyle?.textOpacity
+        ),
+        returnFocusKey: "playback:subtitleTextOpacity",
+        onSelect: (option) => {
+          updateSubtitleStyle({ textOpacity: clampSubtitleTextOpacity(option.id) });
+        }
+      });
+    });
     this.actionMap.set("playback:subtitleBackgroundColor", () =>
       this.openOptionDialog({
         title: t("sub_bg_color", {}, "Subtitle background color"),
@@ -6545,6 +6579,16 @@ export const SettingsScreen = {
             SUBTITLE_TEXT_COLOR_OPTIONS,
             normalizeSubtitleStyleHex(model.player.subtitleStyle?.textColor, "#FFFFFF"),
             normalizeSubtitleStyleHex(model.player.subtitleStyle?.textColor, "#FFFFFF")
+          )
+        })}
+        ${this.renderActionRow({
+          focusKey: "playback:subtitleTextOpacity",
+          title: t("subtitle_style_text_opacity", {}, "Text Opacity"),
+          subtitle: "Opacity applied to subtitle text independently of its color and background.",
+          value: labelForOptionId(
+            SUBTITLE_TEXT_OPACITY_OPTIONS,
+            clampSubtitleTextOpacity(model.player.subtitleStyle?.textOpacity),
+            `${clampSubtitleTextOpacity(model.player.subtitleStyle?.textOpacity)}%`
           )
         })}
         ${this.renderActionRow({ focusKey: "playback:subtitleBackgroundColor", title: t("sub_bg_color", {}, "Subtitle background color"), subtitle: t("sub_bg_color", {}, "Background behind subtitle text"), value: String(model.player.subtitleStyle?.backgroundColor || "#00000000") })}
