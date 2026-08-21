@@ -5009,7 +5009,8 @@ export const PlayerController = {
       file,
       safePosition,
       hasFiniteDuration ? safeDuration : 0,
-      isCompleted
+      isCompleted,
+      active?.cloudSessionToken || null
     );
   },
 

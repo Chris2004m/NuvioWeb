@@ -3,6 +3,11 @@ import { ScreenUtils } from "../../navigation/screen.js";
 import { addonRepository } from "../../../data/repository/addonRepository.js";
 import { catalogRepository } from "../../../data/repository/catalogRepository.js";
 import { watchProgressRepository } from "../../../data/repository/watchProgressRepository.js";
+import {
+  CloudLibraryPlaybackProgressStore,
+  CloudLibraryPlaybackSessionStore
+} from "../../../data/local/cloudLibraryPlaybackStore.js";
+import { cloudLibraryRepository } from "../../../data/repository/cloudLibraryRepository.js";
 import { watchedItemsRepository } from "../../../data/repository/watchedItemsRepository.js";
 import { watchedSeriesReconciliationService } from "../../../data/repository/watchedSeriesReconciliationService.js";
 import { savedLibraryRepository } from "../../../data/repository/savedLibraryRepository.js";
@@ -1589,6 +1594,10 @@ function normalizeContinueWatchingItem(item) {
   };
 }
 
+function isCloudContinueWatchingItem(item = {}) {
+  return String(item?.contentType || item?.type || "").trim().toLowerCase() === "cloud";
+}
+
 function isRawContinueWatchingTitle(item) {
   const contentId = String(item?.contentId || item?.id || "").trim();
   const title = firstNonEmpty(item?.title, item?.name);
@@ -1805,9 +1814,17 @@ function readContinueWatchingDisplaySnapshot(scopeKey) {
   if (Date.now() - Number(entry.savedAt || 0) > CW_DISPLAY_SNAPSHOT_MAX_AGE_MS) {
     return [];
   }
-  return entry.items.filter(
-    (item) => String(item?.contentType || item?.type || "").trim().toLowerCase() !== "cloud"
-  );
+  return entry.items.filter((item) => {
+    if (!isCloudContinueWatchingItem(item)) {
+      return true;
+    }
+    return Boolean(
+      CloudLibraryPlaybackProgressStore.findForContinueWatching(
+        item.contentId,
+        item.videoId
+      )
+    );
+  });
 }
 
 function writeContinueWatchingDisplaySnapshot(scopeKey, items = []) {
@@ -4330,10 +4347,12 @@ export const HomeScreen = {
     if (!item) {
       return [];
     }
-    const options = [
-      { action: "details", label: t("cw_action_go_to_details", {}, "Go to details") }
-    ];
-    if (this.showContinueWatchingManualPlayOption) {
+    const isCloud = isCloudContinueWatchingItem(item);
+    const options = [];
+    if (!isCloud) {
+      options.push({ action: "details", label: t("cw_action_go_to_details", {}, "Go to details") });
+    }
+    if (!isCloud && this.showContinueWatchingManualPlayOption) {
       options.push({ action: "playManually", label: t("play_manually", {}, "Play manually") });
     }
     if (!item.isNextUp) {
@@ -5090,11 +5109,10 @@ export const HomeScreen = {
   },
 
   openContinueWatchingFromItem(item, options = {}) {
-    const params = continueWatchingStreamParams(item, options);
-    if (!params) {
+    const normalized = normalizeContinueWatchingItem(item);
+    if (!normalized?.contentId) {
       return false;
     }
-    const normalized = normalizeContinueWatchingItem(item);
     const anchorIndex = Number(this.continueWatchingMenu?.index);
     const anchorRowKey = String(this.continueWatchingMenu?.rowKey || "");
     this.cancelPendingContinueWatchingEnter();
@@ -5102,6 +5120,18 @@ export const HomeScreen = {
     this.rememberContinueWatchingReturnFocus(anchorIndex, anchorRowKey);
     this.continueWatchingMenu = null;
     this.holdMenuScrollState = null;
+
+    if (isCloudContinueWatchingItem(normalized)) {
+      void this.openCloudContinueWatchingFromItem(normalized, options).catch((error) => {
+        console.warn("Cloud Continue Watching playback failed", error);
+      });
+      return true;
+    }
+
+    const params = continueWatchingStreamParams(normalized, options);
+    if (!params) {
+      return false;
+    }
 
     Router.navigate("detail", {
       itemId: normalized.contentId,
@@ -5126,9 +5156,71 @@ export const HomeScreen = {
     return true;
   },
 
+  async openCloudContinueWatchingFromItem(item, options = {}) {
+    const normalized = normalizeContinueWatchingItem(item);
+    const target = CloudLibraryPlaybackProgressStore.findForContinueWatching(
+      normalized?.contentId,
+      normalized?.videoId
+    );
+    if (!target?.item || !target.file) {
+      return false;
+    }
+    const result = await cloudLibraryRepository.resolvePlayback(target.item, target.file);
+    if (result?.status !== "success" || !result.url) {
+      return false;
+    }
+    const cloudSessionToken =
+      target.sessionToken ||
+      CloudLibraryPlaybackSessionStore.create({
+        item: target.item,
+        currentFileKey: target.file.stableKey
+      });
+    if (!cloudSessionToken) {
+      return false;
+    }
+    const filename = result.filename || target.file.name || target.item.name;
+    const streamId = `${target.item.stableKey}:${target.file.stableKey}`;
+    const startFromBeginning = Boolean(options?.startOver);
+    Router.navigate("player", {
+      streamUrl: result.url,
+      itemId: target.item.stableKey,
+      itemType: "cloud",
+      videoId: streamId,
+      playerTitle: filename,
+      playerSubtitle: target.item.name,
+      episodeTitle: filename,
+      cloudSessionToken,
+      resumePositionMs: startFromBeginning
+        ? 0
+        : Number(normalized?.positionMs || target.progress?.positionMs || 0) || 0,
+      resumeDurationMs: startFromBeginning
+        ? 0
+        : Number(normalized?.durationMs || target.progress?.durationMs || 0) || 0,
+      startFromBeginning,
+      returnToStreamOnBack: false,
+      returnToHomeOnBack: true,
+      streamCandidates: [
+        {
+          id: streamId,
+          url: result.url,
+          name: filename,
+          title: filename,
+          description: target.item.name,
+          addonName: target.item.providerName,
+          behaviorHints: {
+            filename,
+            videoSize: result.videoSizeBytes || target.file.sizeBytes || null
+          }
+        }
+      ],
+      preferredStreamId: streamId
+    });
+    return true;
+  },
+
   openContinueWatchingDetails(item) {
     const normalized = normalizeContinueWatchingItem(item);
-    if (!normalized?.contentId) {
+    if (!normalized?.contentId || isCloudContinueWatchingItem(normalized)) {
       return false;
     }
     const anchorIndex = Number(this.continueWatchingMenu?.index);
@@ -5251,6 +5343,11 @@ export const HomeScreen = {
       ContinueWatchingPreferences.addDismissedNextUpKey(normalized.contentId);
       // Android dismisses the whole title from Continue Watching, including
       // any other Next Up entry for the same content.
+      this.pruneContinueWatchingItem({ ...normalized, videoId: null });
+      return true;
+    }
+    if (isCloudContinueWatchingItem(normalized)) {
+      CloudLibraryPlaybackProgressStore.removeForContinueWatching(normalized.contentId);
       this.pruneContinueWatchingItem({ ...normalized, videoId: null });
       return true;
     }
@@ -10155,6 +10252,14 @@ export const HomeScreen = {
   async enrichContinueWatching(items = [], options = {}) {
     const [inProgressItems, nextUpItems] = await Promise.all([
       mapWithConcurrency(items || [], CW_MAX_ENRICHMENT_CONCURRENCY, async (item) => {
+        if (isCloudContinueWatchingItem(item)) {
+          return {
+            ...item,
+            title: firstNonEmpty(item.title, item.name, item.contentId),
+            description: firstNonEmpty(item.description),
+            continueWatchingMetaResolved: true
+          };
+        }
         const cachedItem = applyCachedContinueWatchingEnrichment(item);
         if (!options?.forceRefreshMetadata && !needsContinueWatchingMetadataRefresh([cachedItem])) {
           return cachedItem;

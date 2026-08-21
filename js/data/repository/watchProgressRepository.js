@@ -1,4 +1,5 @@
 import { WatchProgressStore } from "../local/watchProgressStore.js";
+import { CloudLibraryPlaybackProgressStore } from "../local/cloudLibraryPlaybackStore.js";
 import { ProfileManager } from "../../core/profile/profileManager.js";
 import { LocalStore } from "../../core/storage/localStore.js";
 import { ContinueWatchingPreferences } from "../local/continueWatchingPreferences.js";
@@ -202,7 +203,8 @@ function selectedLocalProgressSource() {
 function filterForSelectedContinueWatchingSource(items = []) {
   const source = selectedContinueWatchingSource();
   // Cloud Library progress is local to the Cloud file and deliberately does
-  // not enter generic Continue Watching or account sync, matching Android TV.
+  // not enter generic account sync. The Home Continue Watching projection
+  // appends it explicitly from CloudLibraryPlaybackProgressStore below.
   const all = (Array.isArray(items) ? items : []).filter((item) => !isCloudProgressItem(item));
   if (source === WatchProgressSource.TRAKT) {
     return all.filter(
@@ -664,8 +666,14 @@ class WatchProgressRepository {
       ...watchedShowSeedItems
     ];
 
-    const recentItems = filterForSelectedContinueWatchingSource(allItems)
-      .filter((item) => cutoffMs === 0 || Number(item?.updatedAt || 0) >= cutoffMs)
+    const recentItems = [
+      ...filterForSelectedContinueWatchingSource(allItems).filter(
+        (item) => cutoffMs === 0 || Number(item?.updatedAt || 0) >= cutoffMs
+      ),
+      // Cloud progress is device-local and must remain visible independently
+      // of the selected Trakt/Simkl history window, just like Android.
+      ...CloudLibraryPlaybackProgressStore.listForContinueWatching()
+    ]
       .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0))
       .slice(0, 300);
 
@@ -683,19 +691,23 @@ class WatchProgressRepository {
 
   async getAllForContinueWatching() {
     const localItems = WatchProgressStore.listForProfile(activeProfileId());
+    const cloudItems = CloudLibraryPlaybackProgressStore.listForContinueWatching();
     if (selectedContinueWatchingSource() === WatchProgressSource.NUVIO_SYNC) {
-      return filterForSelectedContinueWatchingSource(localItems);
+      return [...filterForSelectedContinueWatchingSource(localItems), ...cloudItems];
     }
     const snapshot =
       selectedContinueWatchingSource() === WatchProgressSource.TRAKT
         ? await fetchTraktProgressSnapshot()
         : await fetchSimklProgressSnapshot();
-    return filterForSelectedContinueWatchingSource([
-      ...localItems,
-      ...snapshot.historyItems,
-      ...snapshot.playbackItems,
-      ...snapshot.watchedShowSeedItems
-    ]);
+    return [
+      ...filterForSelectedContinueWatchingSource([
+        ...localItems,
+        ...snapshot.historyItems,
+        ...snapshot.playbackItems,
+        ...snapshot.watchedShowSeedItems
+      ]),
+      ...cloudItems
+    ];
   }
 
   getContinueWatchingSourceKey() {

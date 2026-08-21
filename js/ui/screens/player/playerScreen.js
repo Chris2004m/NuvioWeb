@@ -6987,17 +6987,20 @@ export const PlayerScreen = {
       // Route cleanup will make a second best-effort stop if native teardown throws.
     }
     const shouldReturnToLibrary = !forceDetail && this.params?.returnToLibraryOnBack === true;
+    const shouldReturnToHome = !forceDetail && this.params?.returnToHomeOnBack === true;
     const shouldReturnToStream =
-      !shouldReturnToLibrary && !forceDetail && this.shouldReturnToStreamOnBack();
+      !shouldReturnToLibrary && !shouldReturnToHome && !forceDetail && this.shouldReturnToStreamOnBack();
     Router.suppressNextPopstate?.(1500);
     Router.ignoreSinglePopstate?.();
-    const targetRoute = shouldReturnToLibrary
-      ? "library"
-      : shouldReturnToStream
-        ? "stream"
-        : this.params?.itemId
-          ? "detail"
-          : "home";
+    const targetRoute = shouldReturnToHome
+      ? "home"
+      : shouldReturnToLibrary
+        ? "library"
+        : shouldReturnToStream
+          ? "stream"
+          : this.params?.itemId
+            ? "detail"
+            : "home";
     const targetParams =
       targetRoute === "library"
         ? {}
