@@ -1528,7 +1528,9 @@ export const StreamScreen = {
     }
     this.errorChipTimer = setTimeout(() => {
       this.sourceChips = this.sourceChips.filter((chip) => chip.status !== "error");
-      this.requestRender();
+      if (!this.refreshSourceChipsOnly()) {
+        this.requestRender();
+      }
     }, 1600);
   },
 
@@ -1582,7 +1584,9 @@ export const StreamScreen = {
     if (preferredZone === "card" && filtered.length) {
       this.focusState = {
         zone: "card",
-        row: clamp(preferredIndex, 0, filtered.length - 1),
+        // Carrying the previous row index into a different source's list picks
+        // an unrelated stream. Each tab is its own list, so start at the top.
+        row: filterChanged ? 0 : clamp(preferredIndex, 0, filtered.length - 1),
         action: "play"
       };
     } else {
@@ -1813,7 +1817,10 @@ export const StreamScreen = {
   },
 
   shouldUseManualListScroll(listNode) {
-    if (!listNode || !Environment.isWebOS()) {
+    // The manual transform path is needed only by legacy webOS, matching the
+    // `.legacy-webos` CSS scope and the platform classification in app.js.
+    // Modern webOS and Tizen use the native scroller without touching every row.
+    if (!listNode || !Environment.isWebOS() || !this.isLegacyWebOsRoute()) {
       return false;
     }
     return Number(listNode.scrollHeight || 0) > Number(listNode.clientHeight || 0);
@@ -1863,38 +1870,53 @@ export const StreamScreen = {
     if (!listNode) {
       return;
     }
-    const maxScrollTop = Math.max(
-      0,
-      Number(listNode.scrollHeight || 0) - Number(listNode.clientHeight || 0)
-    );
-    const normalized = clamp(Number(nextScrollTop || 0), 0, maxScrollTop);
-    if (listNode.classList?.contains("manual-scroll")) {
-      this.applyManualListScroll(listNode, normalized);
+    const usesManualScroll =
+      Boolean(listNode.classList?.contains("manual-scroll")) ||
+      this.shouldUseManualListScroll(listNode);
+    if (usesManualScroll) {
+      const maxScrollTop = Math.max(
+        0,
+        Number(listNode.scrollHeight || 0) - Number(listNode.clientHeight || 0)
+      );
+      this.applyManualListScroll(listNode, clamp(Number(nextScrollTop || 0), 0, maxScrollTop));
       return;
     }
-    if (this.shouldUseManualListScroll(listNode)) {
-      this.applyManualListScroll(listNode, normalized);
-      return;
-    }
-    listNode.scrollTop = normalized;
-    if (typeof listNode.scrollTo === "function") {
-      try {
-        listNode.scrollTo(0, normalized);
-      } catch (_) {
-        listNode.scrollTop = normalized;
+
+    const isModernWebOsNativeScroll = Environment.isWebOS() && !this.isLegacyWebOsRoute();
+    if (!isModernWebOsNativeScroll) {
+      const maxScrollTop = Math.max(
+        0,
+        Number(listNode.scrollHeight || 0) - Number(listNode.clientHeight || 0)
+      );
+      const normalized = clamp(Number(nextScrollTop || 0), 0, maxScrollTop);
+      listNode.scrollTop = normalized;
+      if (typeof listNode.scrollTo === "function") {
+        try {
+          listNode.scrollTo(0, normalized);
+        } catch (_) {
+          listNode.scrollTop = normalized;
+        }
       }
-    }
-    const applied = Number(listNode.scrollTop || 0);
-    if (
-      this.isLegacyWebOsRoute() &&
-      maxScrollTop > 0 &&
-      normalized > 0 &&
-      Math.abs(applied - normalized) > 2
-    ) {
-      this.applyManualListScroll(listNode, normalized);
+      const applied = Number(listNode.scrollTop || 0);
+      if (
+        this.isLegacyWebOsRoute() &&
+        maxScrollTop > 0 &&
+        normalized > 0 &&
+        Math.abs(applied - normalized) > 2
+      ) {
+        this.applyManualListScroll(listNode, normalized);
+        return;
+      }
+      this.listScrollTop = Number(applied || normalized || 0);
       return;
     }
-    this.listScrollTop = Number(applied || normalized || 0);
+
+    // Native scrollers clamp the assignment themselves. Avoid the extra
+    // scrollTo call and layout-forcing readback on long modern-TV lists.
+    const requestedValue = Number(nextScrollTop || 0);
+    const requested = Number.isFinite(requestedValue) ? Math.max(0, requestedValue) : 0;
+    listNode.scrollTop = requested;
+    this.listScrollTop = requested;
   },
 
   ensureListItemVisible(listNode, target) {
@@ -2278,6 +2300,43 @@ export const StreamScreen = {
     }
   },
 
+  buildSourceChipMarkup() {
+    return [
+      this.renderChip("all", this.addonFilter === "all", "success"),
+      ...this.getOrderedFilterNames().map((name) => {
+        const chip = this.sourceChips.find((entry) => entry.name === name) || {
+          name,
+          status: "success"
+        };
+        return this.renderChip(name, this.addonFilter === name, chip.status);
+      })
+    ].join("");
+  },
+
+  // Clearing an error status changes only the source-chip row. Keep the stream
+  // cards and their scroll/focus state intact instead of rebuilding the route.
+  refreshSourceChipsOnly() {
+    const track = this.container?.querySelector?.(".stream-route-chip-track");
+    if (!track) {
+      return false;
+    }
+    const markup = this.buildSourceChipMarkup();
+    if (track.innerHTML === markup) {
+      return true;
+    }
+    track.innerHTML = markup;
+    this.renderedMarkup = null;
+    this._filteredStreamsCache = null;
+    this.streamFocusDomCache = null;
+    // New chip nodes need the same indexes assigned during a full render for
+    // generic focus helpers; StreamScreen's own focus state is then reapplied.
+    ScreenUtils.indexFocusables(this.container, ".focusable:not([hidden])");
+    if (this.focusState?.zone === "filter") {
+      this.applyFocus();
+    }
+    return true;
+  },
+
   renderChip(name, selected, status) {
     const chipStatus = String(status || "success");
     const classes = [
@@ -2402,17 +2461,7 @@ export const StreamScreen = {
     const backdrop = this.getBackdropUrl();
     const logo = this.params?.logo || "";
     const shellStableClass = this.hasRenderedStreamRouteShell ? " stable" : "";
-    const orderedFilters = this.getOrderedFilterNames();
-    const chips = [
-      this.renderChip("all", this.addonFilter === "all", "success"),
-      ...orderedFilters.map((name) => {
-        const chip = this.sourceChips.find((entry) => entry.name === name) || {
-          name,
-          status: "success"
-        };
-        return this.renderChip(name, this.addonFilter === name, chip.status);
-      })
-    ].join("");
+    const chips = this.buildSourceChipMarkup();
     const filtered = this.getFilteredStreams();
     const allStreams = this.getFilteredStreams("all");
     const hasPendingForFilter = this.hasPendingSourceLoads();

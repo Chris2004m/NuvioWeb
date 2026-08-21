@@ -106,6 +106,7 @@ import {
   HOME_ROW_RETRY_TIMEOUT_MS,
   HOME_ROW_TIMEOUT_MS
 } from "./homeConstants.js";
+import { mergeRefreshedHomeRows } from "./homeRowMerge.js";
 import { resolveNextUpCandidates } from "./nextUpCandidateResolver.js";
 import {
   getContinueWatchingRenderItems,
@@ -8395,7 +8396,10 @@ export const HomeScreen = {
         if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
           return;
         }
-        if (preserveHomeReturnState) {
+        // Progressive first paint exists for a cold load with nothing on screen.
+        // During a background refresh a full Home is already rendered, so
+        // painting one-to-six rows over it is a regression, not progress.
+        if (background) {
           return;
         }
         progressiveInitialRows.set(row.homeCatalogKey, row);
@@ -8417,13 +8421,17 @@ export const HomeScreen = {
     if (token !== this.homeLoadToken) {
       return;
     }
-    const nextInitialRows = preserveHomeReturnState
-      ? Array.from(
-          new Map(
-            [...(this.rows || []), ...initialRows].map((row) => [row.homeCatalogKey, row])
-          ).values()
-        )
-      : initialRows;
+    // A background refresh resolves only the initial catalog batch first, so
+    // assigning it directly discards every already-rendered row outside that
+    // batch. Merge the configured rows and let fresh data replace duplicates.
+    const configuredCatalogKeys = new Set(
+      uniqueCatalogDescriptors.map((catalog) =>
+        buildCatalogOrderKey(catalog.addonId, catalog.type, catalog.catalogId)
+      )
+    );
+    const nextInitialRows = mergeRefreshedHomeRows(this.rows, initialRows, configuredCatalogKeys, {
+      background
+    });
     this.rows = this.sortAndFilterRows(nextInitialRows, this.collections);
     if (preserveContinueWatching) {
       this.continueWatchingLoading = false;
