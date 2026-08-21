@@ -2685,4 +2685,7 @@
     <string name="cloud_library_error_disabled">Bulut kütüphanesi kapalı.</string>
     <string name="cloud_library_search_clear">Aramayı temizle</string>
     <string name="upcoming_section_title">Yaklaşanlar</string>
+    <string name="layout_overall_ratings">Genel Puanlar</string>
+    <string name="layout_overall_ratings_sub_on">Standart ve TMDB puanları gösterilir.</string>
+    <string name="layout_overall_ratings_sub_off">Standart ve TMDB puanları gizlenir. Ayrıntı sayfalarında MDBList sağlayıcısının ayarları önceliklidir.</string>
 </resources>

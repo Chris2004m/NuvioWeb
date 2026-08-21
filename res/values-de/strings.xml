@@ -2333,4 +2333,7 @@
     <string name="cloud_library_error_provider_unavailable">Die Cloud-Bibliothek ist für %1$s nicht verfügbar.</string>
     <string name="cloud_library_error_disabled">Die Cloud-Bibliothek ist deaktiviert.</string>
     <string name="cloud_library_search_clear">Suche löschen</string>
+    <string name="layout_overall_ratings">Gesamtbewertungen</string>
+    <string name="layout_overall_ratings_sub_on">Standard- und TMDB-Bewertungen werden angezeigt.</string>
+    <string name="layout_overall_ratings_sub_off">Standard- und TMDB-Bewertungen sind ausgeblendet. Die Einstellungen des MDBList-Anbieters haben auf Detailseiten Vorrang.</string>
 </resources>

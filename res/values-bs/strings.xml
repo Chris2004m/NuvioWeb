@@ -1629,4 +1629,7 @@
     <string name="cloud_library_error_provider_unavailable">Cloud biblioteka nije dostupna za %1$s.</string>
     <string name="cloud_library_error_disabled">Cloud biblioteka je onemogućena.</string>
     <string name="cloud_library_search_clear">Obriši pretragu</string>
+    <string name="layout_overall_ratings">Ukupne ocjene</string>
+    <string name="layout_overall_ratings_sub_on">Standardne i TMDB ocjene su prikazane.</string>
+    <string name="layout_overall_ratings_sub_off">Standardne i TMDB ocjene su skrivene. Postavke provajdera MDBList imaju prednost na stranicama s detaljima.</string>
 </resources>

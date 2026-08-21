@@ -850,9 +850,7 @@ const FEATURE_ADAPTERS = {
         );
       }
       if (stringOrNull(raw.home_imdb_ratings_visibility)) {
-        projected.home_imdb_ratings_visibility = String(
-          raw.home_imdb_ratings_visibility
-        )
+        projected.home_imdb_ratings_visibility = String(raw.home_imdb_ratings_visibility)
           .trim()
           .toUpperCase();
       }

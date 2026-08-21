@@ -1180,4 +1180,7 @@ Klaida: Bandomoji simuliuojama klaida — tai nėra tikras gedimas. Šaltinis gr
     <string name="cloud_library_error_provider_unavailable">Debesų biblioteka nepasiekiama %1$s.</string>
     <string name="cloud_library_error_disabled">Debesų biblioteka išjungta.</string>
     <string name="cloud_library_search_clear">Išvalyti paiešką</string>
+    <string name="layout_overall_ratings">Bendri įvertinimai</string>
+    <string name="layout_overall_ratings_sub_on">Rodomi standartiniai ir TMDB įvertinimai.</string>
+    <string name="layout_overall_ratings_sub_off">Standartiniai ir TMDB įvertinimai paslėpti. Išsamios informacijos puslapiuose pirmenybė teikiama MDBList teikėjo nustatymams.</string>
 </resources>

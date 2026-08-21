@@ -2562,4 +2562,7 @@
     <string name="cloud_library_error_disabled">Η cloud βιβλιοθήκη είναι απενεργοποιημένη.</string>
     <string name="cloud_library_search_clear">Εκκαθάριση αναζήτησης</string>
     <string name="upcoming_section_title">Επόμενα</string>
+    <string name="layout_overall_ratings">Συνολικές βαθμολογίες</string>
+    <string name="layout_overall_ratings_sub_on">Οι τυπικές βαθμολογίες και οι βαθμολογίες TMDB εμφανίζονται.</string>
+    <string name="layout_overall_ratings_sub_off">Οι τυπικές βαθμολογίες και οι βαθμολογίες TMDB είναι κρυφές. Οι ρυθμίσεις παρόχου MDBList έχουν προτεραιότητα στις σελίδες λεπτομερειών.</string>
 </resources>

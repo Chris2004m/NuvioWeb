@@ -1351,4 +1351,7 @@
     <string name="cloud_library_error_provider_unavailable">La biblioteca en la nube no está disponible para %1$s.</string>
     <string name="cloud_library_error_disabled">La biblioteca en la nube está deshabilitada.</string>
     <string name="cloud_library_search_clear">Borrar búsqueda</string>
+    <string name="layout_overall_ratings">Calificaciones generales</string>
+    <string name="layout_overall_ratings_sub_on">Se muestran las calificaciones estándar y de TMDB.</string>
+    <string name="layout_overall_ratings_sub_off">Las calificaciones estándar y de TMDB están ocultas. La configuración del proveedor MDBList tiene prioridad en las páginas de detalles.</string>
 </resources>

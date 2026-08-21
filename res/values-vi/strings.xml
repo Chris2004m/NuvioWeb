@@ -1196,4 +1196,7 @@
     <string name="cloud_library_error_provider_unavailable">Thư viện đám mây không có sẵn cho %1$s.</string>
     <string name="cloud_library_error_disabled">Thư viện đám mây bị vô hiệu hóa.</string>
     <string name="cloud_library_search_clear">Xóa tìm kiếm</string>
+    <string name="layout_overall_ratings">Xếp hạng tổng thể</string>
+    <string name="layout_overall_ratings_sub_on">Xếp hạng tiêu chuẩn và TMDB được hiển thị.</string>
+    <string name="layout_overall_ratings_sub_off">Xếp hạng tiêu chuẩn và TMDB bị ẩn. Trên các trang chi tiết, cài đặt nhà cung cấp MDBList được ưu tiên.</string>
 </resources>

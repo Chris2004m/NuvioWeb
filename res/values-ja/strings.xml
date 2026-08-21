@@ -1774,4 +1774,7 @@
     <string name="cloud_library_error_provider_unavailable">%1$sのクラウドライブラリは利用できません。</string>
     <string name="cloud_library_error_disabled">クラウドライブラリは無効です。</string>
     <string name="cloud_library_search_clear">検索をクリア</string>
+    <string name="layout_overall_ratings">総合評価</string>
+    <string name="layout_overall_ratings_sub_on">標準評価とTMDBの評価を表示します。</string>
+    <string name="layout_overall_ratings_sub_off">標準評価とTMDBの評価は非表示です。詳細ページではMDBListプロバイダーの設定が優先されます。</string>
 </resources>

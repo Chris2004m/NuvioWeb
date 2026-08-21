@@ -2453,4 +2453,7 @@
     <string name="cloud_library_error_provider_unavailable">%1$s 的云媒体库不可用。</string>
     <string name="cloud_library_error_disabled">云媒体库已禁用。</string>
     <string name="cloud_library_search_clear">清除搜索</string>
+    <string name="layout_overall_ratings">总体评分</string>
+    <string name="layout_overall_ratings_sub_on">显示标准评分和 TMDB 评分。</string>
+    <string name="layout_overall_ratings_sub_off">标准评分和 TMDB 评分已隐藏。在详情页面上，MDBList 提供商设置优先。</string>
 </resources>

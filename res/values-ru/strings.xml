@@ -2387,4 +2387,7 @@
     <string name="cloud_library_search_label">Поиск в облачной библиотеке</string>
     <string name="cloud_library_search_placeholder">Поиск файлов</string>
     <string name="cloud_library_search_clear">Очистить поиск</string>
+    <string name="layout_overall_ratings">Общие оценки</string>
+    <string name="layout_overall_ratings_sub_on">Стандартные оценки и оценки TMDB отображаются.</string>
+    <string name="layout_overall_ratings_sub_off">Стандартные оценки и оценки TMDB скрыты. На страницах сведений приоритет имеют настройки провайдера MDBList.</string>
 </resources>

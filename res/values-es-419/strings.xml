@@ -2458,4 +2458,7 @@
     <string name="layout_cw_sort_split_upcoming">Separar fila de próximos</string>
     <string name="layout_cw_sort_split_upcoming_desc">Mueve los episodios que aún no se han emitido a una fila separada de Próximos</string>
     <string name="upcoming_section_title">Próximos</string>
+    <string name="layout_overall_ratings">Calificaciones generales</string>
+    <string name="layout_overall_ratings_sub_on">Se muestran las calificaciones estándar y de TMDB.</string>
+    <string name="layout_overall_ratings_sub_off">Las calificaciones estándar y de TMDB están ocultas. La configuración del proveedor MDBList tiene prioridad en las páginas de detalles.</string>
 </resources>

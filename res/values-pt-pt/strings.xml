@@ -2648,4 +2648,7 @@
     <string name="cloud_library_search_label">Pesquisar biblioteca na nuvem</string>
     <string name="cloud_library_search_placeholder">Pesquisar arquivos</string>
     <string name="cloud_library_search_clear">Limpar pesquisa</string>
+    <string name="layout_overall_ratings">Avaliações gerais</string>
+    <string name="layout_overall_ratings_sub_on">As avaliações padrão e do TMDB são apresentadas.</string>
+    <string name="layout_overall_ratings_sub_off">As avaliações padrão e do TMDB estão ocultas. As definições do fornecedor MDBList têm prioridade nas páginas de detalhes.</string>
 </resources>

@@ -1022,4 +1022,7 @@
     <string name="cloud_library_error_provider_unavailable">Biblioteca cloud nu este disponibilă pentru %1$s.</string>
     <string name="cloud_library_error_disabled">Biblioteca cloud este dezactivată.</string>
     <string name="cloud_library_search_clear">Ștergeți căutarea</string>
+    <string name="layout_overall_ratings">Evaluări generale</string>
+    <string name="layout_overall_ratings_sub_on">Evaluările standard și TMDB sunt afișate.</string>
+    <string name="layout_overall_ratings_sub_off">Evaluările standard și TMDB sunt ascunse. Setările furnizorului MDBList au prioritate pe paginile de detalii.</string>
 </resources>

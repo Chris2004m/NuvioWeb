@@ -2607,4 +2607,7 @@
     <string name="cloud_library_search_label">Rechercher dans la bibliothèque cloud</string>
     <string name="cloud_library_search_placeholder">Rechercher des fichiers</string>
     <string name="cloud_library_search_clear">Effacer la recherche</string>
+    <string name="layout_overall_ratings">Notes globales</string>
+    <string name="layout_overall_ratings_sub_on">Les notes standard et TMDB sont affichées.</string>
+    <string name="layout_overall_ratings_sub_off">Les notes standard et TMDB sont masquées. Les paramètres du fournisseur MDBList sont prioritaires sur les pages de détails.</string>
 </resources>

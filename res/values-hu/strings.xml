@@ -1267,4 +1267,7 @@
     <string name="layout_cw_sort_split_upcoming">Külön Hamarosan sor</string>
     <string name="layout_cw_sort_split_upcoming_desc">A még le nem adott epizódok áthelyezése külön Hamarosan sorba</string>
     <string name="upcoming_section_title">Hamarosan</string>
+    <string name="layout_overall_ratings">Összesített értékelések</string>
+    <string name="layout_overall_ratings_sub_on">A standard és TMDB-értékelések megjelennek.</string>
+    <string name="layout_overall_ratings_sub_off">A standard és TMDB-értékelések rejtve vannak. A részletező oldalakon az MDBList-szolgáltató beállításai élveznek elsőbbséget.</string>
 </resources>
