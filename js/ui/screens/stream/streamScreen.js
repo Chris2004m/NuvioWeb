@@ -938,6 +938,9 @@ export const StreamScreen = {
     this.addonLogoLookup = {};
     this.addonFilter = "all";
     this.hasRenderedStreamRouteShell = false;
+    this.renderedStreamListStable = false;
+    this.renderedStreamListStreams = null;
+    this.renderedStreamListSourceChips = null;
     // Returning here from the player is a back navigation, not a fresh open, so
     // do not auto-resume or auto-play again. Otherwise exiting the player drops
     // back onto the stream list and immediately relaunches, looping forever.
@@ -1573,6 +1576,7 @@ export const StreamScreen = {
 
   setAddonFilter(nextFilter, preferredZone = "filter", preferredIndex = 0) {
     const targetFilter = String(nextFilter || "all");
+    const filterChanged = targetFilter !== this.addonFilter;
     this.addonFilter = targetFilter;
     const filtered = this.getFilteredStreams(targetFilter);
     if (preferredZone === "card" && filtered.length) {
@@ -1589,7 +1593,127 @@ export const StreamScreen = {
       };
     }
     this.listScrollTop = 0;
+    if (this.applyAddonFilterInPlace({ filterChanged })) {
+      return;
+    }
     this.render();
+  },
+
+  applyAddonFilterDomState(filtered = [], allStreams = []) {
+    const list = this.container?.querySelector(".stream-route-list");
+    if (!list || !Array.isArray(filtered) || !Array.isArray(allStreams)) {
+      return false;
+    }
+
+    const rows = Array.from(list.querySelectorAll(".stream-route-card-row[data-stream-key]"));
+    if (rows.length !== allStreams.length) {
+      return false;
+    }
+
+    const rowsByKey = new Map(rows.map((row) => [String(row.dataset.streamKey || ""), row]));
+    const streamIndices = new Map();
+    allStreams.forEach((stream, index) => {
+      const indices = streamIndices.get(stream) || [];
+      indices.push(index);
+      streamIndices.set(stream, indices);
+    });
+    const streamOccurrences = new Map();
+    const visibleRows = [];
+    for (const stream of filtered) {
+      const indices = streamIndices.get(stream) || [];
+      const occurrence = Number(streamOccurrences.get(stream) || 0);
+      const row = rowsByKey.get(String(indices[occurrence] ?? ""));
+      if (!row) {
+        return false;
+      }
+      streamOccurrences.set(stream, occurrence + 1);
+      visibleRows.push(row);
+    }
+
+    const visibleRowIndexes = new Map(visibleRows.map((row, index) => [row, index]));
+    rows.forEach((row) => {
+      const rowIndex = visibleRowIndexes.get(row);
+      const visible = rowIndex != null;
+      row.hidden = !visible;
+      row.style.display = visible ? "" : "none";
+      row.dataset.streamRow = String(visible ? rowIndex : -1);
+      const card = row.querySelector("[data-card-action]");
+      if (card) {
+        card.hidden = !visible;
+        card.style.display = visible ? "" : "none";
+        card.dataset.streamRow = String(visible ? rowIndex : -1);
+      }
+      row.querySelectorAll("[data-lazy-stream-badges]").forEach((placeholder) => {
+        placeholder.dataset.streamBadgeRow = String(visible ? rowIndex : -1);
+      });
+    });
+
+    // Appending existing keyed rows changes only their order; it does not
+    // reparse the card markup. This is the Web equivalent of Android's
+    // LazyColumn retaining keyed items while the filtered state changes.
+    visibleRows.forEach((row) => list.appendChild(row));
+
+    const targetFilter = String(this.addonFilter || "all");
+    this.container?.querySelectorAll(".stream-route-chip[data-addon]").forEach((chip) => {
+      const selected = String(chip.dataset.addon || "all") === targetFilter;
+      chip.classList.toggle("selected", selected);
+      chip.setAttribute("aria-selected", selected ? "true" : "false");
+    });
+
+    const loadingRow = list.querySelector("[data-stream-loading-row]");
+    if (loadingRow) {
+      const visible = this.hasPendingSourceLoads(targetFilter);
+      loadingRow.hidden = !visible;
+      loadingRow.style.display = visible ? "" : "none";
+    }
+    const emptyState = list.querySelector("[data-stream-empty]");
+    if (emptyState) {
+      const visible = !filtered.length && !this.hasPendingSourceLoads(targetFilter);
+      emptyState.hidden = !visible;
+      emptyState.style.display = visible ? "" : "none";
+    }
+    if (loadingRow) {
+      list.appendChild(loadingRow);
+    }
+    if (emptyState) {
+      list.appendChild(emptyState);
+    }
+    return true;
+  },
+
+  applyAddonFilterInPlace({ filterChanged = true } = {}) {
+    if (
+      !this.renderedStreamListStable ||
+      this.renderedStreamListStreams !== this.streams ||
+      this.renderedStreamListSourceChips !== this.sourceChips ||
+      this.renderFrame ||
+      this.renderDelayTimer
+    ) {
+      return false;
+    }
+    if (!filterChanged) {
+      this.streamFocusDomCache = null;
+      this.hydrateVisibleStreamBadges();
+      this.restoreScrollPosition();
+      this.applyFocus();
+      return true;
+    }
+    const allStreams = this.getFilteredStreams("all");
+    const filtered = this.getFilteredStreams();
+    if (!this.applyAddonFilterDomState(filtered, allStreams)) {
+      return false;
+    }
+
+    this.renderedMarkup = null;
+    this.streamFocusDomCache = null;
+    this.restoreScrollPosition();
+    this.hydrateVisibleStreamBadges();
+    this.bindAddonLogoFallbacks();
+    ScreenUtils.indexFocusables(this.container, ".focusable:not([hidden])");
+    this.restoreScrollPosition();
+    this.applyFocus();
+    this.bindListScrollState();
+    return true;
   },
 
   resolveCardActionForRow(row = null, preferredAction = "play") {
@@ -1604,7 +1728,8 @@ export const StreamScreen = {
 
   getCardRows() {
     return Array.from(
-      this.container?.querySelectorAll(".stream-route-card-row[data-stream-row]") || []
+      this.container?.querySelectorAll(".stream-route-card-row[data-stream-row]:not([hidden])") ||
+        []
     )
       .map((rowNode) => ({
         row: Number(rowNode.dataset.streamRow || 0),
@@ -2168,7 +2293,7 @@ export const StreamScreen = {
         ? renderLoadingIndicator({ className: "stream-route-chip-spinner" })
         : "";
     return `
-      <button class="${classes}" data-action="setFilter" data-addon="${escapeHtml(name)}">
+      <button class="${classes}" data-action="setFilter" data-addon="${escapeHtml(name)}" aria-selected="${selected ? "true" : "false"}">
         ${spinner}
         <span>${escapeHtml(name === "all" ? t("common.all", {}, "All") : name)}</span>
       </button>
@@ -2216,7 +2341,7 @@ export const StreamScreen = {
     }
 
     return `
-      <div class="stream-route-card-row" data-stream-row="${index}">
+      <div class="stream-route-card-row" data-stream-key="${index}" data-stream-row="${index}">
         <article class="stream-route-card stream-route-card-action focusable${this.isCardActionFocused(index, "play") ? " focused" : ""}"
                  data-action="playStream"
                  data-card-action="play"
@@ -2250,6 +2375,25 @@ export const StreamScreen = {
     `.repeat(count);
   },
 
+  renderStableStreamLoadingRow() {
+    return `
+      <div class="stream-route-card-row" data-stream-loading-row hidden>
+        <div class="stream-route-card skeleton">
+          <div class="stream-route-card-copy">
+            <div class="stream-route-skeleton-line"></div>
+            <div class="stream-route-skeleton-line"></div>
+            <div class="stream-route-skeleton-line"></div>
+            <div class="stream-route-skeleton-line"></div>
+          </div>
+        </div>
+      </div>
+    `;
+  },
+
+  renderStableStreamEmptyState() {
+    return `<div class="stream-route-empty" data-stream-empty hidden>No sources found for this filter.</div>`;
+  },
+
   render() {
     this.cancelScheduledRender();
     // Rebuilt markup means the memoised filtered-stream list may be stale.
@@ -2270,15 +2414,33 @@ export const StreamScreen = {
       })
     ].join("");
     const filtered = this.getFilteredStreams();
+    const allStreams = this.getFilteredStreams("all");
     const hasPendingForFilter = this.hasPendingSourceLoads();
     const hasAnyStreams = this.streams.length > 0;
     const streamBadgesEnabled = DebridSettingsStore.get().streamBadgesEnabled !== false;
     const badgeSettings = StreamBadgeSettingsStore.snapshot();
     const showAddonLogo = badgeSettings.showAddonLogo === true;
     const addonLogosReady = !showAddonLogo || !filtered.length || this.areAddonLogosReady(filtered);
+    const stableStreamList = Boolean(
+      (Environment.isWebOS() || Environment.isTizen()) &&
+      filtered.length &&
+      addonLogosReady &&
+      allStreams.length &&
+      (!showAddonLogo || this.areAddonLogosReady(allStreams))
+    );
 
     let body = "";
-    if (filtered.length && addonLogosReady) {
+    if (stableStreamList) {
+      body = allStreams
+        .map((stream, index) =>
+          this.renderStreamCard(stream, index, streamBadgesEnabled, badgeSettings)
+        )
+        .join("");
+      if (this.loading || this.sourceChips.some((chip) => chip.status === "loading")) {
+        body += this.renderStableStreamLoadingRow();
+      }
+      body += this.renderStableStreamEmptyState();
+    } else if (filtered.length && addonLogosReady) {
       body = filtered
         .map((stream, index) =>
           this.renderStreamCard(stream, index, streamBadgesEnabled, badgeSettings)
@@ -2351,10 +2513,17 @@ export const StreamScreen = {
       this.focusedElement = null;
     }
 
+    this.renderedStreamListStable = stableStreamList;
+    this.renderedStreamListStreams = this.streams;
+    this.renderedStreamListSourceChips = this.sourceChips;
+    if (stableStreamList) {
+      this.applyAddonFilterDomState(filtered, allStreams);
+    }
+
     this.restoreScrollPosition();
     this.hydrateVisibleStreamBadges();
     this.bindAddonLogoFallbacks();
-    ScreenUtils.indexFocusables(this.container);
+    ScreenUtils.indexFocusables(this.container, ".focusable:not([hidden])");
     this.restoreScrollPosition();
     this.applyFocus();
     this.bindListScrollState();
@@ -2423,7 +2592,12 @@ export const StreamScreen = {
       return;
     }
     const list = this.container.querySelector(".stream-route-list");
-    const placeholders = Array.from(this.container.querySelectorAll("[data-lazy-stream-badges]"));
+    const placeholders = Array.from(
+      this.container.querySelectorAll("[data-lazy-stream-badges]")
+    ).filter((placeholder) => {
+      const row = placeholder.closest(".stream-route-card-row");
+      return !row || !row.hidden;
+    });
     if (!list || !placeholders.length) {
       return;
     }
@@ -2812,6 +2986,9 @@ export const StreamScreen = {
       this.releaseImageProxyReadyListener = null;
     }
     this.renderedMarkup = null;
+    this.renderedStreamListStable = false;
+    this.renderedStreamListStreams = null;
+    this.renderedStreamListSourceChips = null;
     this.boundStreamListNode = null;
     this.streamFocusDomCache = null;
     this.focusedElement = null;
