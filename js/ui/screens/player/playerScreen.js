@@ -4122,7 +4122,7 @@ export const PlayerScreen = {
         : null;
     return Boolean(
       isLikelyHlsMimeType.call(PlayerController, declaredSourceType) ||
-        isLikelyHlsMimeType.call(PlayerController, inferredSourceType)
+      isLikelyHlsMimeType.call(PlayerController, inferredSourceType)
     );
   },
 
