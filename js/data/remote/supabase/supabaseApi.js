@@ -53,5 +53,27 @@ export const SupabaseApi = {
       headers: buildHeaders({ Prefer: "return=representation" }, useSession),
       includeSessionAuth: useSession
     });
+  },
+
+  downloadStorageObject(bucket, storagePath, useSession = true) {
+    const normalizedBucket = encodeURIComponent(String(bucket || "").trim());
+    const normalizedPath = String(storagePath || "")
+      .trim()
+      .replace(/^\/+/, "")
+      .split("/")
+      .map((segment) => encodeURIComponent(segment))
+      .join("/");
+    if (!normalizedBucket || !normalizedPath) {
+      return Promise.resolve(null);
+    }
+    return httpRequest(
+      `${SUPABASE_URL}/storage/v1/object/authenticated/${normalizedBucket}/${normalizedPath}`,
+      {
+        method: "GET",
+        headers: buildHeaders({}, useSession),
+        includeSessionAuth: useSession,
+        responseType: "blob"
+      }
+    );
   }
 };

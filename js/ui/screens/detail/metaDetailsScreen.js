@@ -4,7 +4,10 @@ import { metaRepository } from "../../../data/repository/metaRepository.js";
 import { watchProgressRepository } from "../../../data/repository/watchProgressRepository.js";
 import { savedLibraryRepository } from "../../../data/repository/savedLibraryRepository.js";
 import { watchedItemsRepository } from "../../../data/repository/watchedItemsRepository.js";
-import { libraryRepository } from "../../../data/repository/libraryRepository.js";
+import {
+  libraryRepository,
+  LibrarySourceMode
+} from "../../../data/repository/libraryRepository.js";
 import { detailWatchedEnrichmentService } from "../../../data/repository/detailWatchedEnrichmentService.js";
 import { watchedSeriesReconciliationService } from "../../../data/repository/watchedSeriesReconciliationService.js";
 import { TmdbService } from "../../../core/tmdb/tmdbService.js";
@@ -67,42 +70,10 @@ const EPISODE_VIRTUALIZATION_MIN_WINDOW = 20;
 const EPISODE_VIRTUALIZATION_OVERSCAN = 8;
 const EPISODE_VIRTUALIZATION_DEFAULT_CARD_WIDTH = 540;
 const EPISODE_VIRTUALIZATION_DEFAULT_GAP = 34;
-const EPISODE_HOLD_REPEAT_INITIAL_DELAY_MS = 170;
-const EPISODE_HOLD_REPEAT_MIN_INTERVAL_MS = 24;
-const EPISODE_HOLD_REPEAT_MAX_INTERVAL_MS = 140;
-const EPISODE_HOLD_REPEAT_STEP_MULTIPLIER_MAX = 50;
-const EPISODE_HOLD_REPEAT_PROFILE = [
-  {
-    elapsedMs: 5000,
-    stepCount: 40,
-    intervalMs: EPISODE_HOLD_REPEAT_MIN_INTERVAL_MS,
-    stepSize: EPISODE_HOLD_REPEAT_STEP_MULTIPLIER_MAX
-  },
-  {
-    elapsedMs: 3200,
-    stepCount: 28,
-    intervalMs: 28,
-    stepSize: 24
-  },
-  {
-    elapsedMs: 2000,
-    stepCount: 18,
-    intervalMs: 42,
-    stepSize: 16
-  },
-  {
-    elapsedMs: 1200,
-    stepCount: 10,
-    intervalMs: 60,
-    stepSize: 10
-  },
-  {
-    elapsedMs: 650,
-    stepCount: 5,
-    intervalMs: 86,
-    stepSize: 6
-  }
-];
+// Match Android TV's LazyRow behavior: one focus step per key event and only
+// throttle native repeat events. Do not schedule a second move after keydown;
+// Samsung remotes can deliver keyup late or not at all.
+const EPISODE_SCROLL_REPEAT_THROTTLE_MS = 80;
 const LOCAL_YOUTUBE_PROXY_URL = "youtube-proxy.html";
 
 function t(key, params = {}, fallback = key) {
@@ -215,21 +186,50 @@ function toEpisodeEntry(video = {}) {
   };
 }
 
-function normalizeEpisodes(videos = []) {
-  return videos
-    .map((video) => toEpisodeEntry(video))
-    .filter((video) => video.id && video.season >= 0 && video.episode > 0)
-    .sort((left, right) => {
-      if (left.season === 0 || right.season === 0) {
-        if (left.season !== right.season) {
-          return left.season === 0 ? 1 : -1;
-        }
-      }
+function shouldSynthesizeAddonVideoEpisodes(contentType = "") {
+  const normalizedType = String(contentType || "")
+    .trim()
+    .toLowerCase();
+  return (
+    normalizedType !== "" &&
+    !["movie", "film", "series", "tv", "show", "tvshow", "channel"].includes(normalizedType)
+  );
+}
+
+function sortEpisodeEntries(episodes = []) {
+  return episodes.sort((left, right) => {
+    if (left.season === 0 || right.season === 0) {
       if (left.season !== right.season) {
-        return left.season - right.season;
+        return left.season === 0 ? 1 : -1;
       }
-      return left.episode - right.episode;
-    });
+    }
+    if (left.season !== right.season) {
+      return left.season - right.season;
+    }
+    return left.episode - right.episode;
+  });
+}
+
+function normalizeEpisodes(videos = [], contentType = "") {
+  const normalizedVideos = videos
+    .map((video) => toEpisodeEntry(video))
+    .filter((video) => video.id && video.season >= 0);
+  const explicitEpisodes = normalizedVideos.filter((video) => video.episode > 0);
+  if (explicitEpisodes.length > 0 || !shouldSynthesizeAddonVideoEpisodes(contentType)) {
+    return sortEpisodeEntries(explicitEpisodes);
+  }
+
+  // Android TV treats videos from addon-defined types such as `other` and
+  // `library` as a virtual single season when the addon omits season/episode
+  // numbers. DMM Cast uses exactly this shape: the playable file ID is in
+  // videos[].id and its inline stream belongs to that video, not to meta.id.
+  return sortEpisodeEntries(
+    normalizedVideos.map((video, index) => ({
+      ...video,
+      season: 1,
+      episode: index + 1
+    }))
+  );
 }
 
 function detailProgressFraction(progress = {}) {
@@ -288,14 +288,14 @@ function isSeriesDetailMeta(meta = {}, episodes = null) {
   const normalizedType = String(meta?.type || "")
     .trim()
     .toLowerCase();
-  if (normalizedType === "series") {
+  if (normalizedType === "series" || normalizedType === "tv") {
     return true;
   }
   const resolvedEpisodes = Array.isArray(episodes)
     ? episodes
-    : normalizeEpisodes(meta?.videos || []);
+    : normalizeEpisodes(meta?.videos || [], normalizedType);
   // Match Android TV: addon-defined types such as `other` are episodic when
-  // their full meta contains valid season/episode videos.
+  // their full meta contains videos, even if the addon omitted episode fields.
   return resolvedEpisodes.length > 0;
 }
 
@@ -613,17 +613,6 @@ function getTrailerMediaAction(event) {
   if (keyCode === 415) return "play";
   if (keyCode === 19) return "pause";
   return "";
-}
-
-function resolveEpisodeHoldRepeatProfile(stepCount = 0, elapsedMs = 0) {
-  return (
-    EPISODE_HOLD_REPEAT_PROFILE.find(
-      (entry) => elapsedMs >= entry.elapsedMs || stepCount >= entry.stepCount
-    ) || {
-      intervalMs: EPISODE_HOLD_REPEAT_MAX_INTERVAL_MS,
-      stepSize: 1
-    }
-  );
 }
 
 async function withTimeout(promise, ms, fallbackValue) {
@@ -1638,10 +1627,7 @@ export const MetaDetailsScreen = {
     this.episodeTrackScrollHandler = null;
     this.episodeTrackScrollNode = null;
     this.episodeVirtualSyncRaf = null;
-    this.episodeHoldRepeatTimer = null;
-    this.episodeHoldRepeatDirection = "";
-    this.episodeHoldRepeatStartedAt = 0;
-    this.episodeHoldRepeatStepCount = 0;
+    this.lastEpisodeHorizontalKeyRepeatAt = 0;
     this.episodeThumbnailPrefetchCache = new Set();
     this.selectedSeasonEpisodeState = null;
     this.railFocusIndexByKey = {};
@@ -1838,7 +1824,7 @@ export const MetaDetailsScreen = {
 
     // Fast first paint with base metadata.
     this.meta = meta;
-    this.episodes = normalizeEpisodes(meta?.videos || []);
+    this.episodes = normalizeEpisodes(meta?.videos || [], meta?.type || itemType);
     this.castItems = extractCast(meta);
     const progressItemsForDetail = this.resumeProgress
       ? [this.resumeProgress, ...allProgressItems]
@@ -1890,7 +1876,10 @@ export const MetaDetailsScreen = {
       }
 
       this.meta = enrichedMeta || meta;
-      this.episodes = normalizeEpisodes(this.meta?.videos || []);
+      this.episodes = normalizeEpisodes(
+        this.meta?.videos || [],
+        this.meta?.type || this.params?.itemType
+      );
       this.castItems = extractCast(this.meta);
       this.buildEpisodeState(progressItemsForDetail, allWatchedItems);
       this.trailerSource = resolveTrailerSource(this.meta);
@@ -4896,25 +4885,7 @@ export const MetaDetailsScreen = {
     });
   },
 
-  stopEpisodeHoldRepeat() {
-    if (this.episodeHoldRepeatTimer) {
-      clearTimeout(this.episodeHoldRepeatTimer);
-      this.episodeHoldRepeatTimer = null;
-    }
-    this.episodeHoldRepeatDirection = "";
-    this.episodeHoldRepeatStartedAt = 0;
-    this.episodeHoldRepeatStepCount = 0;
-  },
-
-  getEpisodeHoldRepeatInterval(stepCount = 0, elapsedMs = 0) {
-    return resolveEpisodeHoldRepeatProfile(stepCount, elapsedMs).intervalMs;
-  },
-
-  getEpisodeRepeatStepSize(stepCount = 0, elapsedMs = 0) {
-    return resolveEpisodeHoldRepeatProfile(stepCount, elapsedMs).stepSize;
-  },
-
-  moveEpisodeFocusWithAcceleration(direction) {
+  moveEpisodeFocus(direction) {
     if (direction !== "left" && direction !== "right") {
       return false;
     }
@@ -4928,56 +4899,6 @@ export const MetaDetailsScreen = {
     }
     const nextIndex = currentIndex + (direction === "left" ? -1 : 1);
     return this.focusEpisodeByIndex(nextIndex, { preserveVerticalScroll: true });
-  },
-
-  startEpisodeHoldRepeat(direction, node) {
-    if (direction !== "left" && direction !== "right") {
-      return false;
-    }
-    const videoId = String(node?.dataset?.videoId || "").trim();
-    if (!videoId) {
-      return false;
-    }
-    const now = Date.now();
-    this.stopEpisodeHoldRepeat();
-    this.episodeHoldRepeatDirection = direction;
-    this.episodeHoldRepeatStartedAt = now;
-    this.episodeHoldRepeatStepCount = 0;
-    const tick = () => {
-      if (!this.episodeHoldRepeatDirection) {
-        return;
-      }
-      const current = this.getFocusedEpisodeCard();
-      if (!current) {
-        this.stopEpisodeHoldRepeat();
-        return;
-      }
-      if (!current.matches?.(".series-episode-card")) {
-        this.stopEpisodeHoldRepeat();
-        return;
-      }
-      const elapsedMs = Date.now() - this.episodeHoldRepeatStartedAt;
-      const stepSize = this.getEpisodeRepeatStepSize(this.episodeHoldRepeatStepCount, elapsedMs);
-      const moveCount = Math.max(1, stepSize);
-      this.episodeHoldRepeatStepCount += 1;
-      const step = this.episodeHoldRepeatDirection === "left" ? -moveCount : moveCount;
-      const currentIndex = this.getEpisodeAbsoluteIndex(current);
-      const didMove = this.focusEpisodeByIndex((currentIndex >= 0 ? currentIndex : 0) + step, {
-        preserveVerticalScroll: true,
-        animated: false
-      });
-      if (!didMove) {
-        this.stopEpisodeHoldRepeat();
-        return;
-      }
-      const nextInterval = this.getEpisodeHoldRepeatInterval(
-        this.episodeHoldRepeatStepCount,
-        elapsedMs
-      );
-      this.episodeHoldRepeatTimer = setTimeout(tick, nextInterval);
-    };
-    this.episodeHoldRepeatTimer = setTimeout(tick, EPISODE_HOLD_REPEAT_INITIAL_DELAY_MS);
-    return true;
   },
 
   cancelPendingEpisodeHold() {
@@ -7223,6 +7144,7 @@ export const MetaDetailsScreen = {
       return;
     }
     const nextEpisode = this.getNextEpisodeAfter(pending.episode);
+    const itemType = resolvePlayableDetailType(this.params?.itemType || this.meta?.type, this.meta);
     const imdbId = resolveMetaImdbId(this.meta, this.params);
     const tmdbId = resolveMetaTmdbId(this.meta, this.params);
     const traktId = resolveMetaTraktId(this.meta, this.params);
@@ -7235,7 +7157,7 @@ export const MetaDetailsScreen = {
     Router.navigate("player", {
       streamUrl: selectedStream.url,
       itemId: this.params?.itemId,
-      itemType: this.params?.itemType || "series",
+      itemType,
       imdbId,
       tmdbId,
       traktId,
@@ -7293,6 +7215,7 @@ export const MetaDetailsScreen = {
     const nextEpisode = this.getNextEpisodeAfter(episode);
     const streamBackdrop =
       this.meta?.background || this.meta?.landscapePoster || this.meta?.poster || null;
+    const itemType = resolvePlayableDetailType(this.params?.itemType || this.meta?.type, this.meta);
     const imdbId = resolveMetaImdbId(this.meta, this.params);
     const tmdbId = resolveMetaTmdbId(this.meta, this.params);
     const traktId = resolveMetaTraktId(this.meta, this.params);
@@ -7311,7 +7234,7 @@ export const MetaDetailsScreen = {
       "stream",
       {
         itemId: this.params?.itemId || null,
-        itemType: "series",
+        itemType,
         imdbId,
         tmdbId,
         traktId,
@@ -8825,18 +8748,16 @@ export const MetaDetailsScreen = {
     if (isEpisodeDirectionKey) {
       event?.preventDefault?.();
       if (event?.repeat) {
-        if (this.episodeHoldRepeatDirection === direction) {
+        const now = Date.now();
+        const elapsedSinceRepeat = now - Number(this.lastEpisodeHorizontalKeyRepeatAt || 0);
+        if (elapsedSinceRepeat < EPISODE_SCROLL_REPEAT_THROTTLE_MS) {
           return;
         }
-      } else {
-        this.stopEpisodeHoldRepeat();
-        if (this.moveEpisodeFocusWithAcceleration(direction)) {
-          this.startEpisodeHoldRepeat(direction, currentFocusedNode);
-          return;
-        }
+        this.lastEpisodeHorizontalKeyRepeatAt = now;
       }
-    } else if (this.episodeHoldRepeatDirection) {
-      this.stopEpisodeHoldRepeat();
+      if (this.moveEpisodeFocus(direction)) {
+        return;
+      }
     }
 
     if (this.handleSeriesDpad(event)) {
@@ -9181,10 +9102,6 @@ export const MetaDetailsScreen = {
   },
 
   async onKeyUp(event) {
-    const direction = getDpadDirection(event);
-    if (direction === "left" || direction === "right") {
-      this.stopEpisodeHoldRepeat();
-    }
     if (Number(event?.keyCode || 0) !== 13) {
       return;
     }
@@ -9227,7 +9144,6 @@ export const MetaDetailsScreen = {
       cancelAnimationFrame(this.episodeVirtualSyncRaf);
       this.episodeVirtualSyncRaf = null;
     }
-    this.stopEpisodeHoldRepeat();
     this.episodeThumbnailPrefetchCache = new Set();
     if (this.episodeThumbObserver) {
       try {

@@ -40,7 +40,11 @@ export async function httpRequest(url, options = {}) {
     headers["Content-Type"] = "application/json";
   }
 
-  const { includeSessionAuth: _ignoredIncludeSessionAuth, ...fetchOptions } = options;
+  const {
+    includeSessionAuth: _ignoredIncludeSessionAuth,
+    responseType: requestedResponseType,
+    ...fetchOptions
+  } = options;
   const fetchInit = {
     ...fetchOptions,
     method,
@@ -81,7 +85,7 @@ export async function httpRequest(url, options = {}) {
           error.detail = parsed.message;
         }
       }
-    } catch (parseError) {
+    } catch (_parseError) {
       // Keep raw response text in error.message when payload is not JSON.
     }
     throw error;
@@ -89,6 +93,19 @@ export async function httpRequest(url, options = {}) {
 
   if (response.status === 204) {
     return null;
+  }
+  const responseType = String(requestedResponseType || "json").trim().toLowerCase();
+  if (responseType === "response") {
+    return response;
+  }
+  if (responseType === "blob") {
+    return response.blob();
+  }
+  if (responseType === "arraybuffer" || responseType === "array_buffer") {
+    return response.arrayBuffer();
+  }
+  if (responseType === "text") {
+    return response.text();
   }
   const text = await response.text();
   const normalized = typeof text === "string" ? text.trim() : "";

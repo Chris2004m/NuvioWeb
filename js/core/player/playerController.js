@@ -1,6 +1,11 @@
 import { watchProgressRepository } from "../../data/repository/watchProgressRepository.js";
 import { watchedItemsRepository } from "../../data/repository/watchedItemsRepository.js";
 import { watchedSeriesReconciliationService } from "../../data/repository/watchedSeriesReconciliationService.js";
+import {
+  CloudLibraryPlaybackProgressStore,
+  CloudLibraryPlaybackSessionStore,
+  cloudPlaybackFileForSession
+} from "../../data/local/cloudLibraryPlaybackStore.js";
 import { Platform } from "../../platform/index.js";
 import { WatchProgressSyncService } from "../profile/watchProgressSyncService.js";
 import { nativeVideoEngine } from "./engines/nativeVideoEngine.js";
@@ -62,6 +67,47 @@ function isAbsoluteLocalAvPlaySubtitlePath(value) {
   return path.startsWith("/") || /^file:\/\//i.test(path);
 }
 
+function normalizeTizenAvPlayDisplayRect(rect, viewport) {
+  const viewportWidth = Math.max(1, Math.round(Number(viewport?.width || 1920)));
+  const viewportHeight = Math.max(1, Math.round(Number(viewport?.height || 1080)));
+  const rawWidth = Math.max(1, Math.round(Number(rect?.width || viewportWidth)));
+  const rawHeight = Math.max(1, Math.round(Number(rect?.height || viewportHeight)));
+  const width = Math.min(viewportWidth, rawWidth);
+  const height = Math.min(viewportHeight, rawHeight);
+  const maxX = Math.max(0, viewportWidth - width);
+  const maxY = Math.max(0, viewportHeight - height);
+  const rawX = Math.round(Number(rect?.x || 0));
+  const rawY = Math.round(Number(rect?.y || 0));
+
+  return {
+    x: Math.min(maxX, Math.max(0, rawX)),
+    y: Math.min(maxY, Math.max(0, rawY)),
+    width,
+    height
+  };
+}
+
+function syncTizenAvPlayObjectStyle(rect) {
+  const object = globalThis.document?.getElementById?.("avPlayerObject");
+  if (!object?.style || !rect) {
+    return;
+  }
+
+  // Samsung renders AVPlay in the application/avplayer object, not in the
+  // HTML video element. Keep the object CSS rectangle in lockstep with the
+  // native display rectangle as required by the AVPlay API.
+  object.style.position = "fixed";
+  object.style.left = `${rect.x}px`;
+  object.style.top = `${rect.y}px`;
+  object.style.right = "auto";
+  object.style.bottom = "auto";
+  object.style.width = `${rect.width}px`;
+  object.style.height = `${rect.height}px`;
+  object.style.maxWidth = "none";
+  object.style.maxHeight = "none";
+  object.style.transform = "none";
+}
+
 // com.webos.media exposes five discrete subtitle sizes (0=tiny, 4=largest).
 function resolveWebOsSubtitleFontSizeLevel(value) {
   const size = Number(value);
@@ -91,6 +137,7 @@ export const PlayerController = {
   currentVideoId: null,
   currentSeason: null,
   currentEpisode: null,
+  currentCloudSessionToken: null,
   progressSaveTimer: null,
   lastProgressPushAt: 0,
   lifecycleBound: false,
@@ -2224,12 +2271,17 @@ export const PlayerController = {
     if (displayMethod) {
       this.avplayDisplayMethod = String(displayMethod);
     }
-    const targetRect = this.avplayDisplayRect || {
+    let targetRect = this.avplayDisplayRect || {
       x: 0,
       y: 0,
       width: viewport.width,
       height: viewport.height
     };
+    if (Platform.isTizen()) {
+      targetRect = normalizeTizenAvPlayDisplayRect(targetRect, viewport);
+      this.avplayDisplayRect = targetRect;
+      syncTizenAvPlayObjectStyle(targetRect);
+    }
     try {
       avplay.setDisplayRect?.(targetRect.x, targetRect.y, targetRect.width, targetRect.height);
     } catch (_) {
@@ -4462,7 +4514,8 @@ export const PlayerController = {
       requestHeaders = {},
       mediaSourceType = null,
       forceEngine = null,
-      streamIdentity = null
+      streamIdentity = null,
+      cloudSessionToken = null
     } = {}
   ) {
     if (!this.video) return;
@@ -4489,6 +4542,7 @@ export const PlayerController = {
     this.currentVideoId = videoId;
     this.currentSeason = season == null ? null : Number(season);
     this.currentEpisode = episode == null ? null : Number(episode);
+    this.currentCloudSessionToken = String(cloudSessionToken || "").trim() || null;
     this.currentItemTitle = title || null;
     this.currentItemPoster = poster || null;
     this.currentItemBackground = background || null;
@@ -4806,6 +4860,7 @@ export const PlayerController = {
     this.currentVideoId = null;
     this.currentSeason = null;
     this.currentEpisode = null;
+    this.currentCloudSessionToken = null;
     this.currentItemTitle = null;
     this.currentItemPoster = null;
     this.currentItemBackground = null;
@@ -4832,19 +4887,21 @@ export const PlayerController = {
     const itemType = this.currentItemType || "movie";
     const normalizedItemType = String(itemType).trim().toLowerCase();
     const isSeries = normalizedItemType === "series" || normalizedItemType === "tv";
+    const isCloud = normalizedItemType === "cloud";
     return {
       itemId: this.currentItemId,
       itemType,
       // Android stores movie progress at content level and episode progress at
       // the exact season/episode identity. A movie's discovery video ID can
       // vary between addons and must not split resume state by source.
-      videoId: isSeries ? this.currentVideoId || null : null,
+      videoId: isSeries || isCloud ? this.currentVideoId || null : null,
       season: Number.isFinite(this.currentSeason) ? this.currentSeason : null,
       episode: Number.isFinite(this.currentEpisode) ? this.currentEpisode : null,
       title: this.currentItemTitle || null,
       poster: this.currentItemPoster || null,
       background: this.currentItemBackground || null,
       episodeTitle: this.currentEpisodeTitle || null,
+      cloudSessionToken: isCloud ? this.currentCloudSessionToken : null,
       streamIdentity: this.currentStreamIdentity || null
     };
   },
@@ -4913,10 +4970,47 @@ export const PlayerController = {
     await this.flushProgress(positionMs, durationMs, false, context, {
       allowCloudSync: allowCloudSync && !forceCloudSync
     });
-    if (forceCloudSync) {
+    if (forceCloudSync && String(context?.itemType || "").toLowerCase() !== "cloud") {
       await this.pushProgressIfDue(true);
     }
     return true;
+  },
+
+  async flushCloudLibraryProgress(positionMs, durationMs, clear = false, context = null) {
+    const active = context || this.createProgressContext();
+    const session = CloudLibraryPlaybackSessionStore.load(active?.cloudSessionToken);
+    const file = cloudPlaybackFileForSession(session);
+    if (!session?.item || !file) {
+      return false;
+    }
+
+    const safePosition = Number(positionMs || 0);
+    const safeDuration = Number(durationMs || 0);
+    const hasFiniteDuration = Number.isFinite(safeDuration) && safeDuration > 0;
+    const hasReachedMinimumSyncPosition =
+      Number.isFinite(safePosition) && safePosition >= MIN_PROGRESS_SYNC_DURATION_MS;
+    const isCompleted = hasFiniteDuration && safePosition / safeDuration >= 0.9;
+    if (safePosition > 0) {
+      this.recordProgressSnapshot(safePosition, safeDuration, active);
+    }
+    if (!clear && !isCompleted) {
+      if (hasFiniteDuration && safeDuration < MIN_PROGRESS_SYNC_DURATION_MS) {
+        return false;
+      }
+      if (!hasFiniteDuration && !hasReachedMinimumSyncPosition) {
+        return false;
+      }
+    }
+    if (!Number.isFinite(safePosition) || safePosition <= 0) {
+      return false;
+    }
+    return CloudLibraryPlaybackProgressStore.save(
+      session.item,
+      file,
+      safePosition,
+      hasFiniteDuration ? safeDuration : 0,
+      isCompleted
+    );
   },
 
   async flushProgress(
@@ -4929,6 +5023,10 @@ export const PlayerController = {
     const active = context || this.createProgressContext();
     if (!active?.itemId) {
       return;
+    }
+
+    if (String(active.itemType || "").toLowerCase() === "cloud") {
+      return this.flushCloudLibraryProgress(positionMs, durationMs, clear, active);
     }
 
     const safePosition = Number(positionMs || 0);

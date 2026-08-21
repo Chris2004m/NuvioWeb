@@ -1,6 +1,7 @@
 import { Router } from "../navigation/router.js";
 import { ProfileManager } from "../../core/profile/profileManager.js";
 import { AvatarRepository } from "../../data/remote/supabase/avatarRepository.js";
+import { MemberAccessRepository } from "../../data/remote/supabase/memberAccessRepository.js";
 import { I18n } from "../../i18n/index.js";
 import { Platform } from "../../platform/index.js";
 
@@ -58,7 +59,7 @@ function sidebarItems(layout = {}) {
   return [ROOT_SIDEBAR_ITEMS[0], ROOT_SIDEBAR_ITEMS[1], DISCOVER_SIDEBAR_ITEM, ...ROOT_SIDEBAR_ITEMS.slice(2)];
 }
 
-let sidebarAvatarCatalogPromise = null;
+const sidebarAvatarCatalogPromises = new Map();
 
 function profileInitial(name) {
   const raw = String(name || "").trim();
@@ -235,21 +236,30 @@ function getModernSidebarPresentation(selectedRoute = "") {
   };
 }
 
-function getSidebarAvatarCatalog() {
-  if (!sidebarAvatarCatalogPromise) {
-    sidebarAvatarCatalogPromise = AvatarRepository.getAvatarCatalog().catch(() => {
-      sidebarAvatarCatalogPromise = null;
-      return [];
-    });
+function getSidebarAvatarCatalog(hasMemberAccess = false) {
+  const cacheKey = hasMemberAccess ? "member" : "standard";
+  if (!sidebarAvatarCatalogPromises.has(cacheKey)) {
+    sidebarAvatarCatalogPromises.set(
+      cacheKey,
+      AvatarRepository.getAvatarCatalog(hasMemberAccess).catch(() => {
+        sidebarAvatarCatalogPromises.delete(cacheKey);
+        return [];
+      })
+    );
   }
-  return sidebarAvatarCatalogPromise;
+  return sidebarAvatarCatalogPromises.get(cacheKey);
 }
 
 export async function getSidebarProfileState() {
   const activeProfileId = String(ProfileManager.getActiveProfileId() || "");
+  const memberAccess = await MemberAccessRepository.getAccess().catch(() => null);
+  const hasMemberAvatarAccess = MemberAccessRepository.hasEntitlement(
+    memberAccess,
+    "PROFILE_AVATARS"
+  );
   const [profiles, avatarCatalog] = await Promise.all([
     ProfileManager.getProfiles(),
-    getSidebarAvatarCatalog()
+    getSidebarAvatarCatalog(hasMemberAvatarAccess)
   ]);
   const activeProfile =
     profiles.find(

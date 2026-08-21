@@ -23,7 +23,9 @@ import { TmdbSettingsStore } from "../../../data/local/tmdbSettingsStore.js";
 import { metaRepository } from "../../../data/repository/metaRepository.js";
 import { mdbListRepository } from "../../../data/repository/mdbListRepository.js";
 import { ProfileManager } from "../../../core/profile/profileManager.js";
+import { StartupSyncService } from "../../../core/profile/startupSyncService.js";
 import { AvatarRepository } from "../../../data/remote/supabase/avatarRepository.js";
+import { MemberAccessRepository } from "../../../data/remote/supabase/memberAccessRepository.js";
 import { Platform } from "../../../platform/index.js";
 import { isFastHorizontalNavigationEnabled } from "../../../platform/sharedKeys.js";
 import { LocalStore } from "../../../core/storage/localStore.js";
@@ -71,6 +73,7 @@ import {
   CW_ENTER_DELAY_MS,
   CW_HOLD_DELAY_MS,
   CW_INITIAL_RESOLVE_BUDGET_MS,
+  CW_INITIAL_RESOLVE_BUDGET_TV_MS,
   CW_MAX_ENRICHMENT_CONCURRENCY,
   CW_MAX_NEXT_UP_CONCURRENCY,
   CW_MAX_NEXT_UP_LOOKUPS,
@@ -174,7 +177,14 @@ function getDirectionFromKeyCode(keyCode) {
 async function getLocalSidebarProfileState() {
   const activeProfileId = String(ProfileManager.getActiveProfileId() || "");
   const profiles = await ProfileManager.getProfiles();
-  const avatarCatalog = await AvatarRepository.getAvatarCatalog().catch(() => []);
+  const memberAccess = await MemberAccessRepository.getAccess().catch(() => null);
+  const hasMemberAvatarAccess = MemberAccessRepository.hasEntitlement(
+    memberAccess,
+    "PROFILE_AVATARS"
+  );
+  const avatarCatalog = await AvatarRepository.getAvatarCatalog(hasMemberAvatarAccess).catch(
+    () => []
+  );
   const activeProfile =
     profiles.find(
       (profile) => String(profile.id || profile.profileIndex || "1") === activeProfileId
@@ -1794,7 +1804,9 @@ function readContinueWatchingDisplaySnapshot(scopeKey) {
   if (Date.now() - Number(entry.savedAt || 0) > CW_DISPLAY_SNAPSHOT_MAX_AGE_MS) {
     return [];
   }
-  return entry.items;
+  return entry.items.filter(
+    (item) => String(item?.contentType || item?.type || "").trim().toLowerCase() !== "cloud"
+  );
 }
 
 function writeContinueWatchingDisplaySnapshot(scopeKey, items = []) {
@@ -5236,11 +5248,15 @@ export const HomeScreen = {
     }
     if (normalized.isNextUp) {
       ContinueWatchingPreferences.addDismissedNextUpKey(normalized.contentId);
-      this.pruneContinueWatchingItem(normalized);
+      // Android dismisses the whole title from Continue Watching, including
+      // any other Next Up entry for the same content.
+      this.pruneContinueWatchingItem({ ...normalized, videoId: null });
       return true;
     }
-    await watchProgressRepository.removeProgress(normalized.contentId, normalized.videoId || null);
-    this.pruneContinueWatchingItem(normalized);
+    // Android removes all progress for an InProgress title, not only the
+    // currently displayed episode. Keep the in-memory projection in sync too.
+    await watchProgressRepository.removeProgress(normalized.contentId);
+    this.pruneContinueWatchingItem({ ...normalized, videoId: null });
     return true;
   },
 
@@ -5510,7 +5526,7 @@ export const HomeScreen = {
       if (buildHeroIdentity(currentHero) !== scheduledHeroIdentity) {
         return;
       }
-      requestAnimationFrame(() => {
+      requestAnimationFrame(async () => {
         if (Number(this.heroFocusToken || 0) !== focusToken) {
           return;
         }
@@ -5522,22 +5538,37 @@ export const HomeScreen = {
         if (!latestHero || buildHeroIdentity(latestHero) !== scheduledHeroIdentity) {
           return;
         }
-        // Keep the hero copy synchronized with the settled focus immediately.
-        // Backdrop/logo swaps already preload and guard their own async work, so
-        // waiting for those assets here leaves the previous movie visible on
-        // slower TV engines. Metadata enrichment can safely refine this item
-        // afterward while its focus token is still current.
-        this.heroItem = latestHero;
+        if (shouldEnrichModernHero(latestHero)) {
+          void this.enrichCurrentHeroAsync(latestHero, focusToken, { deferCommit: true });
+          return;
+        }
+        // Commit the hero as one scene. Updating the copy before the matching
+        // backdrop/logo are ready lets a fast D-pad sequence show new text over
+        // the previous movie's artwork on slower TV engines.
+        await preloadModernHeroAssets(latestHero);
+        if (Number(this.heroFocusToken || 0) !== focusToken) {
+          return;
+        }
+        const settledFocusedNode = this.getCurrentFocusedNode();
+        if (
+          settledFocusedNode !== node ||
+          !node?.isConnected ||
+          !node.classList.contains("focused")
+        ) {
+          return;
+        }
+        const settledHero = this.getNodeHeroSource(node);
+        if (!settledHero || buildHeroIdentity(settledHero) !== scheduledHeroIdentity) {
+          return;
+        }
+        this.heroItem = settledHero;
         const matchedIndex = this.heroCandidates.findIndex(
-          (item) => String(item?.id || "") === String(latestHero.id || "")
+          (item) => String(item?.id || "") === String(settledHero.id || "")
         );
         if (matchedIndex >= 0) {
           this.heroIndex = matchedIndex;
         }
         this.applyHeroToDom();
-        if (shouldEnrichModernHero(latestHero)) {
-          void this.enrichCurrentHeroAsync(latestHero, focusToken, { deferCommit: true });
-        }
       });
     }, delay);
   },
@@ -8018,6 +8049,7 @@ export const HomeScreen = {
 
   async mount(params = {}, navigationContext = {}) {
     const mountStart = HOME_PERF_DEBUG ? homePerfNow() : 0;
+    const waitForFreshContinueWatching = Boolean(params?.waitForFreshContinueWatching);
     this.container = document.getElementById("home");
     const restoredRouteFocusState =
       navigationContext?.isBackNavigation && navigationContext?.restoredState?.layoutMode
@@ -8192,16 +8224,18 @@ export const HomeScreen = {
     this.rows = [];
     this.watchedItems = [];
     this.watchedTitleIds = new Set();
-    this.continueWatchingDisplay = readContinueWatchingDisplaySnapshot(
-      watchProgressRepository.getContinueWatchingSourceKey()
+    this.continueWatchingDisplay = waitForFreshContinueWatching
+      ? []
+      : readContinueWatchingDisplaySnapshot(watchProgressRepository.getContinueWatchingSourceKey());
+    this.continueWatchingHydratedFromSnapshot = Boolean(
+      !waitForFreshContinueWatching && this.continueWatchingDisplay.length
     );
-    this.continueWatchingHydratedFromSnapshot = Boolean(this.continueWatchingDisplay.length);
     this.continueWatchingLoading = false;
     this.heroCandidates = [];
     this.heroItem = null;
     this.sidebarProfile = await getLocalSidebarProfileState().catch(() => null);
     this.render();
-    await this.loadData({ background: false });
+    await this.loadData({ background: false, waitForFreshContinueWatching });
     logHomePerf("mount", {
       ms: Number((homePerfNow() - mountStart).toFixed(2)),
       route: "home",
@@ -8210,9 +8244,19 @@ export const HomeScreen = {
     });
   },
 
-  async loadData({ background = false, preserveReturnState = false } = {}) {
+  async loadData({
+    background = false,
+    preserveReturnState = false,
+    waitForFreshContinueWatching = false
+  } = {}) {
     const loadStart = HOME_PERF_DEBUG ? homePerfNow() : 0;
     const token = this.homeLoadToken;
+    if (!background && waitForFreshContinueWatching && StartupSyncService.started) {
+      globalThis.NuvioBootGuard?.stage?.("Synchronizing Continue Watching");
+      await StartupSyncService.requestHomeSyncNow().catch((error) => {
+        console.warn("Initial Continue Watching sync failed", error);
+      });
+    }
     const preserveHomeReturnState = Boolean(background && preserveReturnState);
     const preservedHeroItem = preserveHomeReturnState ? this.heroItem : null;
     const preservedHeroIdentity = preserveHomeReturnState ? buildHeroIdentity(this.heroItem) : "";
@@ -8243,6 +8287,10 @@ export const HomeScreen = {
       ? buildContinueWatchingSignature(this.continueWatchingDisplay)
       : "";
     const waitForInitialContinueWatching = Boolean(!background && !hydratedFromSnapshot);
+    const initialContinueWatchingBudgetMs =
+      Platform.isWebOS() || Platform.isTizen()
+        ? CW_INITIAL_RESOLVE_BUDGET_TV_MS
+        : CW_INITIAL_RESOLVE_BUDGET_MS;
     let initialContinueWatchingReleased = false;
     const releaseInitialHomeAfterContinueWatching = () => {
       if (!waitForInitialContinueWatching || initialContinueWatchingReleased) {
@@ -8509,7 +8557,7 @@ export const HomeScreen = {
           return;
         }
         releaseInitialHomeAfterContinueWatching();
-      }, CW_INITIAL_RESOLVE_BUDGET_MS);
+      }, initialContinueWatchingBudgetMs);
     }
 
     {

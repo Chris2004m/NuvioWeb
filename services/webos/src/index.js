@@ -158,7 +158,8 @@ function registerSafeHttpProxyCommand(commandName) {
         },
         body: JSON.stringify(proxyRequest),
         timeoutMs: 20000,
-        maxBodyBytes: 10 * 1024 * 1024
+        maxBodyBytes: 10 * 1024 * 1024,
+        encoding: null
       },
       function (error, result) {
         if (error) {
@@ -177,7 +178,8 @@ function registerSafeHttpProxyCommand(commandName) {
             supabaseProxy: true,
             statusCode: result ? result.statusCode || 0 : 0,
             headers: result ? result.headers || {} : {},
-            body: result ? result.body || "" : ""
+            body: result && Buffer.isBuffer(result.body) ? result.body.toString("base64") : result ? result.body || "" : "",
+            bodyEncoding: result && Buffer.isBuffer(result.body) ? "base64" : "utf8"
           })
         );
       }

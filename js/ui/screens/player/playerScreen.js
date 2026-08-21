@@ -2514,6 +2514,7 @@ export const PlayerScreen = {
     this.paused = false;
     this.controlsVisible = true;
     this.loadingVisible = true;
+    this.bufferingActive = false;
     this.loadingProgress = null;
     this.loadingLogoFillActive = false;
     this.loadingLogoFillProgress = 0;
@@ -2739,6 +2740,7 @@ export const PlayerScreen = {
         this.params.playerBackdropUrl || this.params.backdrop || this.params.poster || null,
       logo: this.params.playerLogoUrl || this.params.logo || null,
       episodeTitle: this.params.episodeTitle || this.params.playerSubtitle || null,
+      cloudSessionToken: this.params.cloudSessionToken || null,
       requestHeaders,
       mediaSourceType,
       streamIdentity: streamCandidate
@@ -5727,6 +5729,7 @@ export const PlayerScreen = {
         });
     this.lastPlaybackErrorAt = 0;
     this.loadingVisible = false;
+    this.bufferingActive = false;
     this.loadingProgress = null;
     this.loadingTorrentStatus = "";
     this.loadingLogoFillActive = false;
@@ -6974,16 +6977,26 @@ export const PlayerScreen = {
     } catch (_) {
       // Route cleanup will make a second best-effort stop if native teardown throws.
     }
-    const shouldReturnToStream = !forceDetail && this.shouldReturnToStreamOnBack();
+    const shouldReturnToLibrary = !forceDetail && this.params?.returnToLibraryOnBack === true;
+    const shouldReturnToStream =
+      !shouldReturnToLibrary && !forceDetail && this.shouldReturnToStreamOnBack();
     Router.suppressNextPopstate?.(1500);
     Router.ignoreSinglePopstate?.();
-    const targetRoute = shouldReturnToStream ? "stream" : this.params?.itemId ? "detail" : "home";
+    const targetRoute = shouldReturnToLibrary
+      ? "library"
+      : shouldReturnToStream
+        ? "stream"
+        : this.params?.itemId
+          ? "detail"
+          : "home";
     const targetParams =
-      targetRoute === "stream"
-        ? streamParams
-        : targetRoute === "detail"
-          ? this.buildDetailRouteParamsFromPlayer()
-          : {};
+      targetRoute === "library"
+        ? {}
+        : targetRoute === "stream"
+          ? streamParams
+          : targetRoute === "detail"
+            ? this.buildDetailRouteParamsFromPlayer()
+            : {};
     void Router.navigate(targetRoute, targetParams, {
       skipStackPush: true,
       replaceHistory: true,
@@ -8440,15 +8453,20 @@ export const PlayerScreen = {
       if (this.isStartupErrorVisible()) {
         return;
       }
-      if (
-        isTizenAvPlayPlayback() &&
-        this.hasPresentedPlaybackFrame &&
-        this.getPlaybackCurrentSeconds() > 0
-      ) {
+      const currentSeconds = this.getPlaybackCurrentSeconds();
+      // AVPlay does not provide a browser-native buffering UI. Keep the
+      // startup overlay hidden after the first frame, but expose the same
+      // centered transient indicator that Android TV shows while rebuffering.
+      if (isTizenAvPlayPlayback() && this.hasPresentedPlaybackFrame && currentSeconds > 0) {
+        this.bufferingActive = true;
+        this.bufferingSpinnerBaselineSeconds = currentSeconds;
+        this.lastPlaybackProgressAt = Date.now();
         this.loadingVisible = false;
         this.updateLoadingVisibility();
+        this.scheduleBufferingSpinnerRefresh();
         return;
       }
+      this.bufferingActive = false;
       this.dismissPauseOverlay();
       this.loadingVisible = true;
       this.updateLoadingVisibility();
@@ -8475,6 +8493,8 @@ export const PlayerScreen = {
         }
         this.loadingVisible = true;
       }
+      this.bufferingActive = false;
+      this.clearBufferingSpinnerTimer();
       if (this.seekLoading) {
         this.seekLoading = false;
         this.seekLoadingBaselineSeconds = null;
@@ -8658,6 +8678,16 @@ export const PlayerScreen = {
       if (this.isStartupErrorVisible()) {
         return;
       }
+      if (
+        this.bufferingActive &&
+        isTizenAvPlayPlayback() &&
+        this.hasPresentedPlaybackFrame &&
+        this.getPlaybackCurrentSeconds() > 0
+      ) {
+        this.bufferingActive = false;
+        this.clearBufferingSpinnerTimer();
+        this.updateLoadingVisibility();
+      }
       this.attemptPendingPlaybackRestore();
       this.completeSeekLoadingIfReady();
       this.startupTrackPreferenceReady = true;
@@ -8780,6 +8810,7 @@ export const PlayerScreen = {
         return;
       }
       this.seekLoading = false;
+      this.bufferingActive = false;
       this.seekLoadingBaselineSeconds = null;
       this.seekLoadingTargetSeconds = null;
       const now = Date.now();
@@ -8927,6 +8958,7 @@ export const PlayerScreen = {
       this.clearPlaybackStallGuard();
       this.releaseStartupAudioGate({ resume: false });
       this.loadingVisible = false;
+      this.bufferingActive = false;
       this.paused = true;
       this.dismissPauseOverlay();
       this.updateLoadingVisibility();
@@ -9461,7 +9493,7 @@ export const PlayerScreen = {
       return !this.isExternalFrameMode() && !this.isStartupErrorVisible();
     }
     if (
-      !this.loadingVisible ||
+      (!this.loadingVisible && !this.bufferingActive) ||
       !this.hasPresentedPlaybackFrame ||
       this.isExternalFrameMode() ||
       this.isStartupErrorVisible()
@@ -9514,7 +9546,7 @@ export const PlayerScreen = {
   scheduleBufferingSpinnerRefresh(delayMs = BUFFERING_SPINNER_STALL_MS) {
     this.clearBufferingSpinnerTimer();
     if (
-      !this.loadingVisible ||
+      (!this.loadingVisible && !this.bufferingActive) ||
       !this.hasPresentedPlaybackFrame ||
       this.isExternalFrameMode() ||
       this.isStartupErrorVisible()
@@ -9525,7 +9557,7 @@ export const PlayerScreen = {
       () => {
         this.bufferingSpinnerTimer = null;
         if (
-          !this.loadingVisible ||
+          (!this.loadingVisible && !this.bufferingActive) ||
           !this.hasPresentedPlaybackFrame ||
           this.isExternalFrameMode() ||
           this.isStartupErrorVisible()
@@ -9822,6 +9854,7 @@ export const PlayerScreen = {
       return false;
     }
     this.seekLoading = false;
+    this.bufferingActive = false;
     this.seekLoadingBaselineSeconds = null;
     this.seekLoadingTargetSeconds = null;
     if (hideBuffering && this.hasPresentedPlaybackFrame) {
@@ -10006,7 +10039,7 @@ export const PlayerScreen = {
       this.loadingTorrentStatus = "";
       this.syncLoadingOverlayStatus();
     }
-    if (!this.loadingVisible && !this.seekLoading) {
+    if (!this.loadingVisible && !this.seekLoading && !this.bufferingActive) {
       this.clearBufferingSpinnerTimer();
     }
     if (showStartupOverlay) {
@@ -10031,7 +10064,7 @@ export const PlayerScreen = {
         this.renderSeekOverlay();
       }
     } else if (!showBufferingSpinner) {
-      if (!this.loadingVisible) {
+      if (!this.loadingVisible && !this.bufferingActive) {
         this.clearBufferingSpinnerTimer();
       }
       if (this.isStartupGateReleaseReady()) {
@@ -10642,6 +10675,7 @@ export const PlayerScreen = {
     }
     this.startupPlaybackBaselineSeconds = null;
     this.startupPlaybackHasAdvanced = false;
+    this.bufferingActive = false;
     this.bufferingSpinnerBaselineSeconds = null;
     this.clearStartupError();
     this.loadingVisible = true;
@@ -11090,6 +11124,16 @@ export const PlayerScreen = {
 
   markPlaybackProgress() {
     const currentSeconds = this.getPlaybackCurrentSeconds();
+    const bufferingBaselineSeconds = Number(this.bufferingSpinnerBaselineSeconds);
+    const bufferingRecovered =
+      this.bufferingActive &&
+      Number.isFinite(currentSeconds) &&
+      Number.isFinite(bufferingBaselineSeconds) &&
+      currentSeconds > bufferingBaselineSeconds + STARTUP_PLAYBACK_ADVANCE_EPSILON_SECONDS;
+    if (bufferingRecovered) {
+      this.bufferingActive = false;
+      this.clearBufferingSpinnerTimer();
+    }
     if (typeof PlayerController.recordProgressSnapshot === "function") {
       PlayerController.recordProgressSnapshot(
         Math.floor(currentSeconds * 1000),
@@ -11119,6 +11163,9 @@ export const PlayerScreen = {
     this.lastPlaybackProgressAt = Date.now();
     this.engineFsStallExtensions = 0;
     this.lastEngineFsStallStats = null;
+    if (bufferingRecovered) {
+      this.updateLoadingVisibility();
+    }
     this.scheduleBufferingSpinnerRefresh();
   },
 
@@ -19670,6 +19717,7 @@ export const PlayerScreen = {
     }
 
     this.loadingVisible = false;
+    this.bufferingActive = false;
     this.paused = true;
     this.dismissPauseOverlay();
     this.updateLoadingVisibility();
@@ -19738,6 +19786,8 @@ export const PlayerScreen = {
       this.clearTrackDiscoveryTimer();
       this.stopLoadingLogoFillAnimation();
       this.clearPlaybackStallGuard();
+      this.bufferingActive = false;
+      this.clearBufferingSpinnerTimer();
       if (this.engineFsStartupRetryTimer) {
         clearTimeout(this.engineFsStartupRetryTimer);
         this.engineFsStartupRetryTimer = null;

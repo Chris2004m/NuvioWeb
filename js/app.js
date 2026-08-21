@@ -234,19 +234,39 @@ async function enterWithLastProfile({ restoreWebOsRoute = false } = {}) {
     restoreWebOsRoute && typeof Router.consumeWebOsResumeRoute === "function"
       ? Router.consumeWebOsResumeRoute()
       : null;
+  const isHomeResumeRoute = resumeRoute?.route === "home";
+
+  const shouldWaitForHomeSync =
+    experienceRoute === "home" &&
+    (!resumeRoute?.route || isHomeResumeRoute) &&
+    StartupSyncService.started;
+
   if (experienceRoute !== "home") {
     await Router.navigate(experienceRoute, {}, { replaceHistory: true, skipStackPush: true });
-  } else if (resumeRoute?.route) {
+  } else if (resumeRoute?.route && !isHomeResumeRoute) {
     await Router.navigate(resumeRoute.route, resumeRoute.params || {}, {
       replaceHistory: true,
       skipStackPush: true
     });
   } else {
-    await Router.navigate("home");
+    await Router.navigate(
+      "home",
+      shouldWaitForHomeSync || isHomeResumeRoute
+        ? {
+            ...(isHomeResumeRoute ? resumeRoute.params || {} : {}),
+            ...(shouldWaitForHomeSync
+              ? { forceReload: true, waitForFreshContinueWatching: true }
+              : {})
+          }
+        : {}
+    );
   }
-  void StartupSyncService.requestSyncNow().catch((error) => {
-    console.warn("Profile background sync failed", error);
-  });
+
+  if (!shouldWaitForHomeSync) {
+    void StartupSyncService.requestSyncNow().catch((error) => {
+      console.warn("Profile background sync failed", error);
+    });
+  }
 }
 
 async function routeAfterAuthentication() {
