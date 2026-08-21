@@ -7,6 +7,7 @@ import { AvatarRepository } from "../../data/remote/supabase/avatarRepository.js
 import { MemberAccessRepository } from "../../data/remote/supabase/memberAccessRepository.js";
 import { ProfileBackgroundRepository } from "../../data/remote/supabase/profileBackgroundRepository.js";
 import { ThemeManager } from "../../ui/theme/themeManager.js";
+import { renderMemberBrandWordmark } from "../../ui/components/memberBrandWordmark.js";
 import { I18n } from "../../i18n/index.js";
 import { NuvioDialog } from "../../ui/components/nuvioDialog.js";
 import { detailWatchedEnrichmentService } from "../../data/repository/detailWatchedEnrichmentService.js";
@@ -565,7 +566,11 @@ export const ProfileSelectionScreen = {
       <div class="profile-screen${pinScreenPhaseClass}${compactGridScreenClass}">
         <div class="profile-screen-background" data-role="profile-screen-background" aria-hidden="true"></div>
         <div class="profile-main-layer"${isPinActive ? ' aria-hidden="true"' : ""}>
-          <img src="assets/brand/app_logo_wordmark.png" class="profile-logo" alt="Nuvio"/>
+          ${renderMemberBrandWordmark({
+            access: this.memberAccess,
+            imageClass: "profile-logo",
+            wrapperClass: "profile-brand-lockup"
+          })}
 
           <h1 class="profile-title">${escapeHtml(title)}</h1>
           <p class="profile-subtitle">${escapeHtml(subtitle)}</p>
@@ -2460,7 +2465,10 @@ export const ProfileSelectionScreen = {
       StartupSyncService.enableProfileScopedSync();
       detailWatchedEnrichmentService.invalidateAllCache();
       await I18n.init();
-      ThemeManager.apply();
+      const memberAccess = await MemberAccessRepository.getAccess().catch(() =>
+        MemberAccessRepository.getCurrentAccess()
+      );
+      ThemeManager.apply({ enforceAccess: true, access: memberAccess });
       I18n.apply();
       const experienceRoute = await resolveExperienceRoute(profileId);
       const shouldWaitForHomeSync = experienceRoute === "home" && StartupSyncService.started;

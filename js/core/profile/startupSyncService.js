@@ -16,6 +16,7 @@ import { watchProgressRepository } from "../../data/repository/watchProgressRepo
 import { CollectionSyncService } from "./collectionSyncService.js";
 import { HomeCatalogSettingsSyncService } from "./homeCatalogSettingsSyncService.js";
 import { ThemeManager } from "../../ui/theme/themeManager.js";
+import { MemberAccessRepository } from "../../data/remote/supabase/memberAccessRepository.js";
 import { I18n } from "../../i18n/index.js";
 
 const SYNC_INTERVAL_MS = 120000;
@@ -166,7 +167,10 @@ export const StartupSyncService = {
         }
         if (didApplyProfileSettings) {
           await I18n.init();
-          ThemeManager.apply();
+          const memberAccess = await MemberAccessRepository.getAccess().catch(() =>
+            MemberAccessRepository.getCurrentAccess()
+          );
+          ThemeManager.apply({ enforceAccess: true, access: memberAccess });
           I18n.apply();
         }
         await TraktCredentialSyncService.pullFromRemote(ProfileManager.getActiveProfileId());

@@ -6,8 +6,11 @@ import { LocalStore } from "../../../core/storage/localStore.js";
 import { SessionStore } from "../../../core/storage/sessionStore.js";
 import { TmdbSettingsStore } from "../../../data/local/tmdbSettingsStore.js";
 import { HomeCatalogStore } from "../../../data/local/homeCatalogStore.js";
-import { ThemeStore } from "../../../data/local/themeStore.js";
+import { accentColorForTheme, ThemeStore } from "../../../data/local/themeStore.js";
+import { MemberAccessRepository } from "../../../data/remote/supabase/memberAccessRepository.js";
 import { ThemeManager } from "../../theme/themeManager.js";
+import { availableThemeIds, resolveThemeName } from "../../theme/themeAccess.js";
+import { renderMemberBrandWordmark } from "../../components/memberBrandWordmark.js";
 import { PlayerSettingsStore } from "../../../data/local/playerSettingsStore.js";
 import {
   SUBTITLE_VERTICAL_OFFSET_DEFAULT,
@@ -118,6 +121,36 @@ const STILL_WATCHING_THRESHOLD_OPTIONS = [2, 3, 4, 5, 6].map((value) => ({
 }));
 
 const THEME_OPTIONS = [
+  {
+    id: "GOLD",
+    labelKey: "settings.appearance.themes.gold",
+    color: "#e8a91c",
+    onColor: "#111111"
+  },
+  {
+    id: "JADE",
+    labelKey: "settings.appearance.themes.jade",
+    color: "#22d37c",
+    onColor: "#111111"
+  },
+  {
+    id: "ROSE_GOLD",
+    labelKey: "settings.appearance.themes.roseGold",
+    color: "#ec70a9",
+    onColor: "#111111"
+  },
+  {
+    id: "ARCTIC_BLUE",
+    labelKey: "settings.appearance.themes.arcticBlue",
+    color: "#3185f5",
+    onColor: "#ffffff"
+  },
+  {
+    id: "GRAPHITE",
+    labelKey: "settings.appearance.themes.graphite",
+    color: "#aab2be",
+    onColor: "#111111"
+  },
   {
     id: "WHITE",
     labelKey: "settings.appearance.themes.white",
@@ -2144,6 +2177,18 @@ export const SettingsScreen = {
     this.sidebarProfile = sidebarProfile;
     this.model = initialModel;
     await this.render({ refreshModel: false });
+    this.isMounted = true;
+    this.memberAccessUnsubscribe = MemberAccessRepository.subscribe((access) => {
+      if (!this.isMounted || !this.model) return;
+      const previous = this.model.memberAccess || {};
+      if (
+        String(previous.tier || "") === String(access?.tier || "") &&
+        JSON.stringify(previous.entitlements || []) === JSON.stringify(access?.entitlements || [])
+      ) {
+        return;
+      }
+      void this.render({ refreshModel: true });
+    });
   },
 
   ensureExpandedState(sectionId) {
@@ -2177,7 +2222,7 @@ export const SettingsScreen = {
   },
 
   getAppearanceThemeFocusKey() {
-    return this.appearanceThemeFocusKey || `appearance:theme:${THEME_OPTIONS[0]?.id || "WHITE"}`;
+    return this.appearanceThemeFocusKey || "appearance:theme:WHITE";
   },
 
   collapseExpandedSection(sectionId) {
@@ -2213,12 +2258,16 @@ export const SettingsScreen = {
   async collectModel() {
     const authState = AuthManager.getAuthState();
     this.ensureAccountSyncOverview(authState);
-    const [addons, profiles] = await Promise.all([
+    const [addons, profiles, memberAccess] = await Promise.all([
       addonRepository.getInstalledAddons(),
-      ProfileManager.getProfiles()
+      ProfileManager.getProfiles(),
+      MemberAccessRepository.getAccess().catch(() => MemberAccessRepository.getCurrentAccess())
     ]);
     const activeProfileId = ProfileManager.getActiveProfileId();
     const pluginSources = PluginManager.listPluginSources();
+    const storedTheme = ThemeStore.get();
+    const resolvedThemeName = resolveThemeName(storedTheme.themeName, memberAccess);
+    ThemeManager.apply({ enforceAccess: true, access: memberAccess });
 
     return {
       addons,
@@ -2227,7 +2276,12 @@ export const SettingsScreen = {
       accountEmail: getSessionEmail(),
       pluginSources,
       pluginsEnabled: PluginManager.pluginsEnabled,
-      theme: ThemeStore.get(),
+      theme: {
+        ...storedTheme,
+        themeName: resolvedThemeName,
+        accentColor: accentColorForTheme(resolvedThemeName)
+      },
+      memberAccess,
       player: PlayerSettingsStore.get(),
       webOsAudioCompatibility: Platform.isWebOS()
         ? WebOsAudioCompatibilityStore.get({
@@ -3367,10 +3421,12 @@ export const SettingsScreen = {
   },
 
   renderAppearanceSection(model) {
-    THEME_OPTIONS.forEach((theme) => {
+    const availableIds = new Set(availableThemeIds(model?.memberAccess));
+    const themeOptions = THEME_OPTIONS.filter((theme) => availableIds.has(theme.id));
+    themeOptions.forEach((theme) => {
       this.actionMap.set(`appearance:theme:${theme.id}`, () => {
         ThemeStore.set({ themeName: theme.id, accentColor: theme.color });
-        ThemeManager.apply();
+        ThemeManager.apply({ enforceAccess: true, access: model?.memberAccess });
       });
     });
 
@@ -3383,7 +3439,7 @@ export const SettingsScreen = {
         dialogClassName: "settings-appearance-dialog",
         onSelect: (option) => {
           ThemeStore.set({ fontFamily: option.id });
-          ThemeManager.apply();
+          ThemeManager.apply({ enforceAccess: true, access: model?.memberAccess });
         }
       });
     });
@@ -3398,7 +3454,7 @@ export const SettingsScreen = {
         onSelect: async (option) => {
           ThemeStore.set({ language: option.id });
           await I18n.init();
-          ThemeManager.apply();
+          ThemeManager.apply({ enforceAccess: true, access: model?.memberAccess });
           I18n.apply();
         }
       });
@@ -3409,11 +3465,11 @@ export const SettingsScreen = {
         amoledMode: nextAmoled,
         amoledSurfacesMode: nextAmoled ? Boolean(ThemeStore.get().amoledSurfacesMode) : false
       });
-      ThemeManager.apply();
+      ThemeManager.apply({ enforceAccess: true, access: model?.memberAccess });
     });
     this.actionMap.set("appearance:amoledSurfaces", () => {
       ThemeStore.set({ amoledSurfacesMode: !ThemeStore.get().amoledSurfacesMode });
-      ThemeManager.apply();
+      ThemeManager.apply({ enforceAccess: true, access: model?.memberAccess });
     });
     this.actionMap.set("appearance:settingsUiStyle", () => {
       const options = ["CLASSIC", "HORIZON", "ZEN"].map((id) => ({
@@ -3438,7 +3494,7 @@ export const SettingsScreen = {
         </div>
         <div class="settings-horizontal-scroll-frame">
           <div class="settings-theme-row">
-            ${THEME_OPTIONS.map((theme) =>
+            ${themeOptions.map((theme) =>
               this.renderThemeCard(
                 theme,
                 String(model.theme.themeName).toUpperCase() === theme.id,
@@ -7024,7 +7080,7 @@ export const SettingsScreen = {
     `;
   },
 
-  renderAboutSection() {
+  renderAboutSection(model = this.model) {
     this.actionMap.set("about:privacy", () => {
       window.open?.(PRIVACY_URL, "_blank");
     });
@@ -7050,7 +7106,11 @@ export const SettingsScreen = {
       ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "about"))}
       <div class="settings-group-card settings-group-card-fill">
         <div class="settings-about-brand">
-          <img class="settings-about-logo" src="assets/brand/app_logo_wordmark.png" alt="Nuvio" />
+          ${renderMemberBrandWordmark({
+            access: model?.memberAccess,
+            imageClass: "settings-about-logo",
+            wrapperClass: "settings-about-wordmark"
+          })}
           <p class="settings-about-copy">${t("settings.about.madeWithLove")}</p>
           <p class="settings-about-copy">${t("settings.about.version", { version: SETTINGS_VERSION_LABEL })}</p>
           <p class="settings-about-copy">${t("settings.about.portedBy")}</p>
@@ -7914,6 +7974,9 @@ export const SettingsScreen = {
   },
 
   cleanup() {
+    this.isMounted = false;
+    this.memberAccessUnsubscribe?.();
+    this.memberAccessUnsubscribe = null;
     this.persistUiState();
     this.stopTraktPolling?.();
     this.stopDebridDeviceAuth();

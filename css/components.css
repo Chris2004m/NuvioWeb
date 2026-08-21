@@ -512,9 +512,72 @@ button:focus-visible {
 .profile-logo {
   width: 380px;
   height: 88px;
-  margin: 0 auto 56px;
   display: block;
   object-fit: contain;
+}
+
+.profile-brand-lockup {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  margin: 0 auto 56px;
+}
+
+.member-brand-wordmark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+.member-brand-logo {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.member-brand-suffix {
+  flex: 0 0 auto;
+  margin-left: min(0.73vw, 14px);
+  color: #d4843d;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  background-size: 240% 100%;
+  animation: memberBrandGradientSweep 5.5s ease-in-out infinite alternate;
+}
+
+.member-brand-suffix-supporter {
+  background-image: linear-gradient(100deg, #d4843d 0%, #ffde90 52%, #d4843d 100%);
+}
+
+.member-brand-suffix-supporter-plus {
+  background-image: linear-gradient(100deg, #91a8ff 0%, #f08bd8 52%, #ff9b8e 78%, #91a8ff 100%);
+}
+
+@supports (-webkit-background-clip: text) {
+  .member-brand-suffix {
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+}
+
+@keyframes memberBrandGradientSweep {
+  from {
+    background-position: 0% 50%;
+  }
+  to {
+    background-position: 100% 50%;
+  }
+}
+
+.profile-brand-lockup .profile-logo {
+  margin: 0;
+}
+
+.profile-brand-lockup .member-brand-suffix {
+  font-size: 32px;
 }
 
 .profile-title {
@@ -7856,49 +7919,6 @@ button:focus-visible {
   color: var(--text-secondary);
 }
 
-.supporters-donation-progress {
-  display: flex;
-  flex-direction: column;
-  gap: min(1.04vw, 20px); /* ATV 10dp -> 20px */
-}
-
-.supporters-donation-progress h2,
-.supporters-donation-progress p {
-  margin: 0;
-}
-
-.supporters-donation-progress h2 {
-  color: var(--text-color);
-  font-size: min(1.46vw, 28px); /* ATV titleSmall 14sp -> 28px */
-  line-height: min(2.08vw, 40px);
-  font-weight: 600;
-}
-
-.supporters-donation-progress p {
-  color: var(--text-secondary);
-  font-size: min(1.25vw, 24px); /* ATV bodySmall 12sp -> 24px */
-  line-height: min(1.67vw, 32px);
-}
-
-.supporters-donation-progress.has-error p {
-  color: var(--error-color, #cf6679);
-}
-
-.supporters-donation-progress-track {
-  width: 100%;
-  height: min(0.83vw, 16px); /* ATV 8dp -> 16px */
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--card-bg);
-}
-
-.supporters-donation-progress-track span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--focus-color);
-}
-
 .supporters-donate-button,
 .supporters-back-button,
 .supporters-retry-button,
@@ -10410,6 +10430,14 @@ button:focus-visible {
   align-items: center;
   justify-content: center;
   gap: 14px;
+}
+
+.settings-about-wordmark .settings-about-logo {
+  margin: 0;
+}
+
+.settings-about-wordmark .member-brand-suffix {
+  font-size: 26px;
 }
 
 .settings-about-logo {

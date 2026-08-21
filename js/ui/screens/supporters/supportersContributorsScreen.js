@@ -3,18 +3,17 @@ import { Router } from "../../navigation/router.js";
 import { Platform } from "../../../platform/index.js";
 import { I18n } from "../../../i18n/index.js";
 import {
-  DONATIONS_BASE_URL,
-  DONATIONS_DONATE_URL,
+  SUPPORTERS_API_BASE_URL,
+  SUPPORT_URL,
   SPONSOR_NAMES,
   UNIQUE_CONTRIBUTIONS_BASE_URL
 } from "../../../config.js";
 import { QrCodeGenerator } from "../../../core/qr/qrCodeGenerator.js";
+import { renderBrandWordmarkImage } from "../../components/brandWordmark.js";
 import {
-  normalizeDonationProgress,
   normalizeContributors,
-  normalizeSupporterDonations,
-  parseSponsorNames,
-  parseTimestamp
+  normalizeSupporterMembers,
+  parseSponsorNames
 } from "./supportersData.js";
 import {
   bindSettingsScrollIndicators,
@@ -24,8 +23,6 @@ import {
 
 const TABS = ["supporters", "sponsors", "contributors"];
 const DEFAULT_TAB = "contributors";
-const DEFAULT_DONATE_URL = "https://ko-fi.com/tapframe";
-
 const CONTRIBUTOR_SUPPORT_LINKS = {
   skoruppa: { kofiUrl: "https://ko-fi.com/skoruppa" },
   crisszollo: { kofiUrl: "https://ko-fi.com/crisszollo" },
@@ -67,8 +64,8 @@ async function requestJson(url, errorMessage) {
   return await response.json();
 }
 
-function formatDonationDate(rawDate) {
-  const timestamp = parseTimestamp(rawDate);
+function formatSupporterDate(rawDate) {
+  const timestamp = Date.parse(String(rawDate || ""));
   if (!Number.isFinite(timestamp)) {
     return String(rawDate || "");
   }
@@ -90,6 +87,12 @@ function initialsForName(name) {
       .charAt(0)
       .toUpperCase() || "?"
   );
+}
+
+function supporterTierLabel(level) {
+  return String(level || "").trim() === "SUPPORTER_PLUS"
+    ? t("supporters_level_supporter_plus", {}, "Supporter+")
+    : t("supporters_level_supporter", {}, "Supporter");
 }
 
 function contributorLogin(contributor) {
@@ -174,18 +177,15 @@ function sortedTabListItems(container, tab) {
 }
 
 async function loadSupporters() {
-  const baseUrl = normalizeBaseUrl(DONATIONS_BASE_URL);
+  const baseUrl = normalizeBaseUrl(SUPPORTERS_API_BASE_URL);
   if (!baseUrl) {
     throw new Error(t("supporters_error_load", {}, "Unable to load supporters."));
   }
   const data = await requestJson(
-    `${baseUrl}/api/donations?view=recent`,
-    t("supporters_error_api_http", {}, "Donations API error")
+    `${baseUrl}/api/supporters/wall`,
+    t("supporters_error_api_http", {}, "Supporters API error")
   );
-  return {
-    items: normalizeSupporterDonations(data?.donations),
-    donationProgress: normalizeDonationProgress(data?.monthlyGoal?.progressPercent)
-  };
+  return normalizeSupporterMembers(data?.top?.members);
 }
 
 async function loadSponsors() {
@@ -226,8 +226,7 @@ export const SupportersContributorsScreen = {
     this.state = {
       supporters: { loading: false, loaded: false, items: [], error: null },
       sponsors: { loading: false, loaded: false, items: [], error: null },
-      contributors: { loading: false, loaded: false, items: [], error: null },
-      donationProgress: null
+      contributors: { loading: false, loaded: false, items: [], error: null }
     };
   },
 
@@ -284,19 +283,13 @@ export const SupportersContributorsScreen = {
           : tab === "sponsors"
             ? await loadSponsors()
             : await loadContributors();
-      tabState.items = tab === "supporters" ? result.items : result;
-      if (tab === "supporters") {
-        this.state.donationProgress = result.donationProgress;
-      }
+      tabState.items = result;
       tabState.loaded = true;
       tabState.error = null;
     } catch (error) {
       tabState.items = [];
       tabState.loaded = false;
       tabState.error = error?.message || String(error || "");
-      if (tab === "supporters") {
-        this.state.donationProgress = null;
-      }
       if (this.selectedTab === tab) {
         this.focusKey = `retry:${tab}`;
       }
@@ -317,61 +310,30 @@ export const SupportersContributorsScreen = {
   },
 
   renderBrand() {
-    const donateUrl = String(DONATIONS_DONATE_URL || DEFAULT_DONATE_URL).trim();
+    const supportUrl = normalizeBaseUrl(SUPPORT_URL);
     return `
-      <section class="supporters-brand-card${this.showDonateQr ? " is-flipped" : ""}" aria-label="${escapeHtml(t("supporters_contributors_title", {}, "Supporters & Contributors"))}">
+      <section class="supporters-brand-card${this.showDonateQr ? " is-flipped" : ""}" aria-label="${escapeHtml(t("supporters_contributors_title", {}, "Support Nuvio"))}">
         <div class="supporters-brand-face supporters-brand-front">
           <div class="supporters-brand-copy">
-            <img class="supporters-brand-logo" src="assets/brand/app_logo_wordmark.png" alt="Nuvio" />
-            <h1 class="supporters-title">${escapeHtml(t("supporters_contributors_title", {}, "Supporters & Contributors"))}</h1>
+            ${renderBrandWordmarkImage({ className: "supporters-brand-logo" })}
+            <h1 class="supporters-title">${escapeHtml(t("supporters_contributors_title", {}, "Support Nuvio"))}</h1>
             <p class="supporters-secondary-copy">${escapeHtml(t("supporters_contributors_donate_copy", {}, "Nuvio will stay free and open source. If you want to support the project, you can help cover the time and infrastructure behind it."))}</p>
-            ${this.renderDonationProgress()}
           </div>
           <button class="supporters-donate-button supporters-focusable focusable" data-focus-key="brand:donate" data-action="showDonateQr">
-            ${escapeHtml(t("supporters_contributors_donate_button", {}, "Donate to Nuvio"))}
+            ${escapeHtml(t("supporters_contributors_donate_button", {}, "Support Nuvio"))}
           </button>
         </div>
         <div class="supporters-brand-face supporters-brand-back" aria-hidden="${this.showDonateQr ? "false" : "true"}">
           <div class="supporters-qr-copy">
-            <h2>${escapeHtml(t("supporters_contributors_qr_title", {}, "Scan to donate"))}</h2>
+            <h2>${escapeHtml(t("supporters_contributors_qr_title", {}, "Scan to support"))}</h2>
             <p>${escapeHtml(t("supporters_contributors_qr_subtitle", {}, "Open the link on your phone and support Nuvio through Ko-fi."))}</p>
           </div>
-          <canvas class="supporters-donate-qr" data-qr-content="${escapeHtml(donateUrl)}" aria-label="${escapeHtml(t("cd_donation_qr", {}, "Donation QR code"))}"></canvas>
+          <canvas class="supporters-donate-qr" data-qr-content="${escapeHtml(supportUrl)}" aria-label="${escapeHtml(t("cd_donation_qr", {}, "Support QR code"))}"></canvas>
           <button class="supporters-back-button supporters-focusable focusable" data-focus-key="brand:back" data-action="hideDonateQr">
             ${escapeHtml(t("supporters_contributors_back_button", {}, "Back to details"))}
           </button>
         </div>
       </section>
-    `;
-  },
-
-  renderDonationProgress() {
-    const supportersState = this.state?.supporters || {};
-    const progress = this.state?.donationProgress;
-    const percent = Number.isFinite(progress) ? progress : 0;
-    const message = supportersState.error
-      ? supportersState.error
-      : supportersState.loading && progress == null
-        ? t("supporters_contributors_loading_donation_progress", {}, "Loading funding progress...")
-        : percent >= 100
-          ? t(
-              "supporters_contributors_donation_progress_complete",
-              {},
-              "Covered. Additional support now goes to development."
-            )
-          : t(
-              "supporters_contributors_donation_progress_remaining",
-              {},
-              "After 100%, additional support goes to development."
-            );
-    return `
-      <div class="supporters-donation-progress${supportersState.error ? " has-error" : ""}">
-        <h2>${escapeHtml(t("supporters_contributors_donation_progress_title", {}, "This month’s server & maintenance"))}</h2>
-        <div class="supporters-donation-progress-track" aria-hidden="true">
-          <span style="width: ${supportersState.loading && progress == null ? 0 : percent}%"></span>
-        </div>
-        <p>${escapeHtml(message)}</p>
-      </div>
     `;
   },
 
@@ -465,22 +427,31 @@ export const SupportersContributorsScreen = {
     return `<span class="supporters-avatar supporters-avatar-initials">${escapeHtml(initialsForName(name))}</span>`;
   },
 
+  renderPersonAvatar(name, avatarUrl, { large = false } = {}) {
+    const url = String(avatarUrl || "").trim();
+    return `<span class="supporters-avatar supporters-avatar-image${large ? " large" : ""}">
+      ${url ? `<img src="${escapeHtml(url)}" alt="${escapeHtml(name)}" loading="lazy" decoding="async" onerror="this.hidden=true;this.nextElementSibling.hidden=false;" />` : ""}
+      <span${url ? " hidden" : ""}>${escapeHtml(initialsForName(name))}</span>
+    </span>`;
+  },
+
   renderExternalIcon() {
     return `<svg class="supporters-card-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v10M9 15 17 7M17 7h-5M17 7v5" /></svg>`;
   },
 
   renderSupporterCard(supporter, index) {
+    const since = formatSupporterDate(supporter.supporterSince);
     return `
       <article class="supporters-person-card supporters-focusable focusable"
                data-focus-key="item:supporters:${index}"
                data-action="openItem"
                data-tab="supporters"
                data-item-index="${index}">
-        ${this.renderNameAvatar(supporter.name)}
+        ${this.renderPersonAvatar(supporter.name, supporter.avatarUrl)}
         <div class="supporters-card-copy">
           <h3>${escapeHtml(supporter.name)}</h3>
-          <p>${escapeHtml(formatDonationDate(supporter.date))}</p>
-          ${supporter.message ? `<p class="supporters-card-message">${escapeHtml(supporter.message)}</p>` : ""}
+          <p>${escapeHtml(supporterTierLabel(supporter.membershipLevel))}</p>
+          ${since ? `<p>${escapeHtml(t("supporters_since", { date: since }, `Supporting Nuvio since ${since}`))}</p>` : ""}
         </div>
         ${this.renderExternalIcon()}
       </article>
@@ -555,17 +526,22 @@ export const SupportersContributorsScreen = {
   },
 
   renderSupporterDialog(supporter) {
+    const since = formatSupporterDate(supporter.supporterSince);
     return this.renderDialogShell({
       title: supporter.name,
-      subtitle: formatDonationDate(supporter.date),
+      subtitle: supporterTierLabel(supporter.membershipLevel),
       body: `
         <div class="supporters-dialog-person-row">
-          ${this.renderNameAvatar(supporter.name)}
-          <p>${escapeHtml(supporter.message || t("supporters_no_message", {}, "No message shared."))}</p>
+          ${this.renderPersonAvatar(supporter.name, supporter.avatarUrl, { large: true })}
+          <p>${escapeHtml(
+            since
+              ? t("supporters_since", { date: since }, `Supporting Nuvio since ${since}`)
+              : t("supporters_since_unknown", {}, "Proudly supporting Nuvio")
+          )}</p>
         </div>
       `,
       actions: `
-        <button class="supporters-dialog-button primary focusable" data-focus-key="dialog:primary" data-action="openDonations">${escapeHtml(t("supporters_open_donations", {}, "Open donations page"))}</button>
+        <button class="supporters-dialog-button primary focusable" data-focus-key="dialog:primary" data-action="openSupport">${escapeHtml(t("supporters_open_donations", {}, "Open support page"))}</button>
         <button class="supporters-dialog-button focusable" data-focus-key="dialog:close" data-action="closeDialog">${escapeHtml(t("action_close", {}, "Close"))}</button>
       `
     });
@@ -834,8 +810,8 @@ export const SupportersContributorsScreen = {
       }
       return true;
     }
-    if (action === "openDonations") {
-      window.open?.(normalizeBaseUrl(DONATIONS_BASE_URL), "_blank");
+    if (action === "openSupport") {
+      window.open?.(normalizeBaseUrl(SUPPORT_URL), "_blank");
       return true;
     }
     if (action === "openSponsor") {

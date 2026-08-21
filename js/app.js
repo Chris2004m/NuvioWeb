@@ -9,6 +9,7 @@ import { AuthManager } from "./core/auth/authManager.js";
 import { AuthState } from "./core/auth/authState.js";
 import { DeviceSessionRegistration } from "./core/auth/deviceSessionRegistration.js";
 import { ProfileManager } from "./core/profile/profileManager.js";
+import { MemberAccessRepository } from "./data/remote/supabase/memberAccessRepository.js";
 import { ProfileSyncService } from "./core/profile/profileSyncService.js";
 import { StartupSyncService } from "./core/profile/startupSyncService.js";
 import { ProviderCredentialSyncService } from "./core/profile/providerCredentialSyncService.js";
@@ -221,7 +222,10 @@ async function enterWithLastProfile({ restoreWebOsRoute = false } = {}) {
     StartupSyncService.enableProfileScopedSync();
     detailWatchedEnrichmentService.invalidateAllCache();
     await I18n.init();
-    ThemeManager.apply();
+    const memberAccess = await MemberAccessRepository.getAccess().catch(() =>
+      MemberAccessRepository.getCurrentAccess()
+    );
+    ThemeManager.apply({ enforceAccess: true, access: memberAccess });
     I18n.apply();
     void preloadStreamBadgeImages().catch((error) => {
       console.warn("Stream badge image prerender failed", error);

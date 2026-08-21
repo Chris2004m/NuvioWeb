@@ -8,6 +8,16 @@ import { ProfileBackgroundRepository } from "./profileBackgroundRepository.js";
 const CACHE_KEY = "memberAccessCache";
 const STALE_AFTER_MS = 15 * 60 * 1000;
 const NONE_ACCESS = Object.freeze({ tier: null, entitlements: [] });
+const MEMBER_TIERS = new Set(["SUPPORTER", "SUPPORTER_PLUS"]);
+const COSMETIC_ENTITLEMENTS = new Set([
+  "GOLD_THEME",
+  "JADE_THEME",
+  "ROSE_GOLD_THEME",
+  "ARCTIC_BLUE_THEME",
+  "GRAPHITE_THEME",
+  "PROFILE_BACKGROUNDS",
+  "PROFILE_AVATARS"
+]);
 
 let currentAccess = NONE_ACCESS;
 let currentFetchedAt = 0;
@@ -28,10 +38,15 @@ function normalizeAccess(payload) {
     : typeof rawEntitlements === "string"
       ? rawEntitlements.split(",")
       : [];
+  const tier = String(row?.tier || "").trim();
   return {
-    tier: String(row?.tier || "").trim() || null,
+    tier: MEMBER_TIERS.has(tier) ? tier : null,
     entitlements: [
-      ...new Set(entitlements.map((value) => String(value || "").trim()).filter(Boolean))
+      ...new Set(
+        entitlements
+          .map((value) => String(value || "").trim())
+          .filter((value) => COSMETIC_ENTITLEMENTS.has(value))
+      )
     ]
   };
 }

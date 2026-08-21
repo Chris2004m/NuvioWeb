@@ -1,4 +1,7 @@
-import { ThemeStore } from "../../data/local/themeStore.js";
+import { MemberAccessRepository } from "../../data/remote/supabase/memberAccessRepository.js";
+import { accentColorForTheme, ThemeStore } from "../../data/local/themeStore.js";
+import { syncBrandWordmarks } from "../components/brandWordmark.js";
+import { resolveThemeName } from "./themeAccess.js";
 import { ThemeColors } from "./themeColors.js";
 
 const FONT_STACKS = {
@@ -107,6 +110,22 @@ export function buildLegacyThemeCss(colorMap) {
 }
 
 const LEGACY_STYLE_ID = "nuvio-legacy-theme";
+let memberAccessSubscriptionReady = false;
+let initialMemberAccessObserved = false;
+
+function ensureMemberAccessSubscription() {
+  if (memberAccessSubscriptionReady) return;
+  memberAccessSubscriptionReady = true;
+  MemberAccessRepository.subscribe((access) => {
+    if (!initialMemberAccessObserved) {
+      initialMemberAccessObserved = true;
+      return;
+    }
+    if (typeof document !== "undefined") {
+      ThemeManager.apply({ enforceAccess: true, access });
+    }
+  });
+}
 
 function injectLegacyTheme(css) {
   let el = document.getElementById(LEGACY_STYLE_ID);
@@ -121,8 +140,23 @@ function injectLegacyTheme(css) {
 }
 
 export const ThemeManager = {
-  apply() {
-    const theme = ThemeStore.get();
+  apply({ enforceAccess = false, access = null } = {}) {
+    ensureMemberAccessSubscription();
+    const storedTheme = ThemeStore.get();
+    const themeName = enforceAccess
+      ? resolveThemeName(
+          storedTheme.themeName,
+          access || MemberAccessRepository.getCurrentAccess()
+        )
+      : String(storedTheme.themeName || "WHITE").toUpperCase();
+    const theme =
+      themeName === storedTheme.themeName
+        ? storedTheme
+        : {
+            ...storedTheme,
+            themeName,
+            accentColor: accentColorForTheme(themeName)
+          };
     const colors = {
       ...ThemeColors.getPalette(theme.themeName)
     };
@@ -158,6 +192,8 @@ export const ThemeManager = {
       "--app-font-family",
       FONT_STACKS[String(theme.fontFamily || "INTER").toUpperCase()] || FONT_STACKS.INTER
     );
+    document.documentElement.dataset.nuvioTheme = themeName;
+    syncBrandWordmarks(themeName);
     document.documentElement.style.setProperty("color-scheme", "dark");
 
     if (!SUPPORTS_CSS_VARS) {
