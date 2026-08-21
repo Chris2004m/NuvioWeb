@@ -48,6 +48,16 @@ import {
 } from "../../../core/streams/streamBadgeRules.js";
 import { normalizeMathematicalAlphanumericSymbols } from "../../../core/streams/streamDisplayText.js";
 import { renderLoadingIndicator } from "../../components/loadingIndicator.js";
+import {
+  buildStreamVirtualModel,
+  findStreamVirtualIndex,
+  getStreamScrollTopForIndex,
+  getStreamVirtualWindow,
+  STREAM_VIRTUALIZATION_DEFAULT_ROW_EXTENT,
+  STREAM_VIRTUALIZATION_MIN_WINDOW,
+  STREAM_VIRTUALIZATION_OVERSCAN_PX,
+  STREAM_VIRTUALIZATION_THRESHOLD
+} from "./streamVirtualizer.js";
 
 const STREAM_BADGE_LIMIT = 9;
 // Number of rows on each side of the focused source to keep badge-hydrated.
@@ -703,6 +713,400 @@ export const StreamScreen = {
       cancelAnimationFrame(this.streamBadgeHydrationFrame);
       this.streamBadgeHydrationFrame = null;
     }
+    this.cancelStreamVirtualizationWork();
+  },
+
+  cancelStreamVirtualizationWork() {
+    if (this.streamVirtualSyncFrame) {
+      if (this.streamVirtualSyncFrameType === "timeout") {
+        clearTimeout(this.streamVirtualSyncFrame);
+      } else if (typeof cancelAnimationFrame === "function") {
+        cancelAnimationFrame(this.streamVirtualSyncFrame);
+      }
+      this.streamVirtualSyncFrame = null;
+      this.streamVirtualSyncFrameType = "";
+    }
+    if (this.streamVirtualMeasureFrame) {
+      if (this.streamVirtualMeasureFrameType === "timeout") {
+        clearTimeout(this.streamVirtualMeasureFrame);
+      } else if (typeof cancelAnimationFrame === "function") {
+        cancelAnimationFrame(this.streamVirtualMeasureFrame);
+      }
+      this.streamVirtualMeasureFrame = null;
+      this.streamVirtualMeasureFrameType = "";
+    }
+  },
+
+  disconnectStreamVirtualResizeObserver() {
+    if (this.streamVirtualResizeObserver) {
+      this.streamVirtualResizeObserver.disconnect();
+      this.streamVirtualResizeObserver = null;
+    }
+  },
+
+  stopStreamVirtualization() {
+    this.cancelStreamVirtualizationWork();
+    this.disconnectStreamVirtualResizeObserver();
+    this.streamVirtualized = false;
+    this.streamVirtualItems = [];
+    this.streamVirtualKeys = [];
+    this.streamVirtualKeyCache = null;
+    this.streamVirtualModel = null;
+    this.streamVirtualWindow = null;
+    this.streamVirtualRowGap = null;
+    this.streamVirtualPreferredIndex = null;
+    this.streamVirtualSyncForce = false;
+    this.streamVirtualPendingAnchor = null;
+  },
+
+  shouldUseStreamVirtualization(streams = []) {
+    return Array.isArray(streams) && streams.length > STREAM_VIRTUALIZATION_THRESHOLD;
+  },
+
+  getStreamVirtualKeys(streams = []) {
+    if (this.streamVirtualKeyCache?.streams === streams) {
+      return this.streamVirtualKeyCache.keys;
+    }
+    const occurrences = new Map();
+    const keys = (streams || []).map((stream, index) => {
+      const baseKey =
+        streamMergeKey(stream) ||
+        String(stream?.id || stream?.url || stream?.externalUrl || stream?.ytId || index);
+      const occurrence = Number(occurrences.get(baseKey) || 0);
+      occurrences.set(baseKey, occurrence + 1);
+      return `${baseKey}::${occurrence}`;
+    });
+    this.streamVirtualKeyCache = { streams, keys };
+    return keys;
+  },
+
+  getStreamVirtualRowGap() {
+    if (this.streamVirtualRowGap != null) {
+      return Number(this.streamVirtualRowGap);
+    }
+    const row = this.container?.querySelector?.(".stream-route-card-row[data-stream-row]");
+    if (row && typeof getComputedStyle === "function") {
+      const marginBottom = Number.parseFloat(getComputedStyle(row).marginBottom || "0");
+      if (Number.isFinite(marginBottom) && marginBottom >= 0) {
+        this.streamVirtualRowGap = marginBottom;
+        return marginBottom;
+      }
+    }
+    this.streamVirtualRowGap = this.isLegacyWebOsRoute() ? 10 : 18;
+    return this.streamVirtualRowGap;
+  },
+
+  getStreamVirtualModel(streams = this.streamVirtualItems) {
+    const keys = this.getStreamVirtualKeys(streams);
+    const rowGap = this.getStreamVirtualRowGap();
+    const sameKeys =
+      Array.isArray(this.streamVirtualKeys) &&
+      this.streamVirtualKeys.length === keys.length &&
+      this.streamVirtualKeys.every((key, index) => key === keys[index]);
+    if (
+      sameKeys &&
+      this.streamVirtualModel &&
+      Number(this.streamVirtualModel.rowGap || 0) === Number(rowGap || 0)
+    ) {
+      return this.streamVirtualModel;
+    }
+    const model = buildStreamVirtualModel(
+      keys,
+      this.streamVirtualHeights,
+      STREAM_VIRTUALIZATION_DEFAULT_ROW_EXTENT,
+      { rowGap, lastRowGap: 0 }
+    );
+    model.rowGap = rowGap;
+    model.lastRowGap = 0;
+    this.streamVirtualKeys = keys;
+    this.streamVirtualModel = model;
+    return model;
+  },
+
+  getStreamVirtualViewportHeight(listNode = null) {
+    const height = Number(listNode?.clientHeight || 0);
+    return height > 0 ? height : 720;
+  },
+
+  renderStreamVirtualMarkup(streams = [], streamBadgesEnabled = true, badgeSettings = null) {
+    this.streamVirtualItems = streams;
+    const model = this.getStreamVirtualModel(streams);
+    const listNode = this.container?.querySelector?.(".stream-route-list");
+    const preferredValue = Number(this.streamVirtualPreferredIndex);
+    const preferredIndex =
+      this.streamVirtualPreferredIndex != null &&
+      this.streamVirtualPreferredIndex !== "" &&
+      Number.isFinite(preferredValue)
+        ? preferredValue
+        : null;
+    this.streamVirtualPreferredIndex = null;
+    const virtualWindow = getStreamVirtualWindow(model, {
+      scrollTop: Number(this.listScrollTop || 0),
+      viewportHeight: this.getStreamVirtualViewportHeight(listNode),
+      overscanPx: STREAM_VIRTUALIZATION_OVERSCAN_PX,
+      minWindow: STREAM_VIRTUALIZATION_MIN_WINDOW,
+      preferredIndex
+    });
+    this.streamVirtualWindow = virtualWindow;
+    const cards = [];
+    for (let index = virtualWindow.start; index <= virtualWindow.end; index += 1) {
+      cards.push(
+        this.renderStreamCard(streams[index], index, streamBadgesEnabled, badgeSettings, {
+          streamKey: model.keys[index],
+          virtualized: true,
+          virtualRowGap: model.rowGap,
+          virtualLast: index === streams.length - 1
+        })
+      );
+    }
+    return `
+      <div class="stream-route-virtual-track" data-stream-virtual-track data-stream-virtual-total="${virtualWindow.totalExtent}">
+        <div class="stream-route-virtual-spacer" data-stream-virtual-spacer="top" aria-hidden="true" style="height:${virtualWindow.topSpacer}px"></div>
+        <div class="stream-route-virtual-window" data-stream-virtual-window data-stream-virtual-start="${virtualWindow.start}" data-stream-virtual-end="${virtualWindow.end}">${cards.join("")}</div>
+        <div class="stream-route-virtual-spacer" data-stream-virtual-spacer="bottom" aria-hidden="true" style="height:${virtualWindow.bottomSpacer}px"></div>
+      </div>`;
+  },
+
+  requestStreamVirtualSync(preferredIndex = null, force = false) {
+    if (!this.streamVirtualized) {
+      return;
+    }
+    const preferredValue = Number(preferredIndex);
+    if (preferredIndex != null && preferredIndex !== "" && Number.isFinite(preferredValue)) {
+      this.streamVirtualPreferredIndex = preferredValue;
+    }
+    this.streamVirtualSyncForce = Boolean(this.streamVirtualSyncForce || force);
+    if (this.streamVirtualSyncFrame) {
+      return;
+    }
+    const run = () => {
+      this.streamVirtualSyncFrame = null;
+      this.streamVirtualSyncFrameType = "";
+      const targetIndex = this.streamVirtualPreferredIndex;
+      const shouldForce = Boolean(this.streamVirtualSyncForce);
+      this.streamVirtualPreferredIndex = null;
+      this.streamVirtualSyncForce = false;
+      this.syncStreamVirtualization(targetIndex, { force: shouldForce });
+    };
+    if (typeof requestAnimationFrame === "function") {
+      this.streamVirtualSyncFrameType = "raf";
+      this.streamVirtualSyncFrame = requestAnimationFrame(run);
+    } else {
+      this.streamVirtualSyncFrameType = "timeout";
+      this.streamVirtualSyncFrame = setTimeout(run, 0);
+    }
+  },
+
+  requestStreamVirtualMeasure() {
+    if (!this.streamVirtualized || this.streamVirtualMeasureFrame) {
+      return;
+    }
+    const run = () => {
+      this.streamVirtualMeasureFrame = null;
+      this.streamVirtualMeasureFrameType = "";
+      this.measureStreamVirtualRows();
+    };
+    if (typeof requestAnimationFrame === "function") {
+      this.streamVirtualMeasureFrameType = "raf";
+      this.streamVirtualMeasureFrame = requestAnimationFrame(run);
+    } else {
+      this.streamVirtualMeasureFrameType = "timeout";
+      this.streamVirtualMeasureFrame = setTimeout(run, 0);
+    }
+  },
+
+  observeStreamVirtualRows(windowNode) {
+    if (typeof ResizeObserver !== "function" || !windowNode) {
+      return;
+    }
+    if (!this.streamVirtualResizeObserver) {
+      this.streamVirtualResizeObserver = new ResizeObserver(() => {
+        this.requestStreamVirtualMeasure();
+      });
+    }
+    this.streamVirtualResizeObserver.disconnect();
+    windowNode.querySelectorAll(".stream-route-card-row[data-stream-row]").forEach((row) => {
+      this.streamVirtualResizeObserver.observe(row);
+    });
+  },
+
+  getMountedStreamVirtualRow(index) {
+    const windowNode = this.container?.querySelector?.("[data-stream-virtual-window]");
+    if (!windowNode) {
+      return null;
+    }
+    const expected = String(index);
+    return (
+      Array.from(windowNode.querySelectorAll(".stream-route-card-row[data-stream-row]")).find(
+        (row) => String(row.dataset.streamRow || "") === expected
+      ) || null
+    );
+  },
+
+  syncStreamVirtualization(preferredIndex = null, { force = false } = {}) {
+    if (!this.streamVirtualized || !this.container) {
+      return false;
+    }
+    const list = this.container.querySelector(".stream-route-list");
+    const track = list?.querySelector?.("[data-stream-virtual-track]");
+    const windowNode = track?.querySelector?.("[data-stream-virtual-window]");
+    if (!list || !track || !windowNode) {
+      return false;
+    }
+    const streams = this.getFilteredStreams();
+    this.streamVirtualItems = streams;
+    const model = this.getStreamVirtualModel(streams);
+    const virtualWindow = getStreamVirtualWindow(model, {
+      scrollTop: this.getListScrollTop(list),
+      viewportHeight: this.getStreamVirtualViewportHeight(list),
+      overscanPx: STREAM_VIRTUALIZATION_OVERSCAN_PX,
+      minWindow: STREAM_VIRTUALIZATION_MIN_WINDOW,
+      preferredIndex
+    });
+    const previousWindow = this.streamVirtualWindow;
+    const sameWindow =
+      previousWindow &&
+      previousWindow.start === virtualWindow.start &&
+      previousWindow.end === virtualWindow.end &&
+      Math.abs(previousWindow.topSpacer - virtualWindow.topSpacer) < 0.5 &&
+      Math.abs(previousWindow.bottomSpacer - virtualWindow.bottomSpacer) < 0.5;
+    if (!force && sameWindow && windowNode.childElementCount) {
+      return false;
+    }
+
+    const focused = this.focusedElement;
+    const restoreFocusedAction =
+      focused && list.contains(focused) ? String(focused.dataset?.cardAction || "play") : "";
+    windowNode.innerHTML = Array.from(
+      { length: Math.max(0, virtualWindow.end - virtualWindow.start + 1) },
+      (_, offset) => {
+        const index = virtualWindow.start + offset;
+        return this.renderStreamCard(
+          streams[index],
+          index,
+          DebridSettingsStore.get().streamBadgesEnabled !== false,
+          StreamBadgeSettingsStore.snapshot(),
+          {
+            streamKey: model.keys[index],
+            virtualized: true,
+            virtualRowGap: model.rowGap,
+            virtualLast: index === streams.length - 1
+          }
+        );
+      }
+    ).join("");
+    const topSpacer = track.querySelector('[data-stream-virtual-spacer="top"]');
+    const bottomSpacer = track.querySelector('[data-stream-virtual-spacer="bottom"]');
+    if (topSpacer) {
+      topSpacer.style.height = `${virtualWindow.topSpacer}px`;
+    }
+    if (bottomSpacer) {
+      bottomSpacer.style.height = `${virtualWindow.bottomSpacer}px`;
+    }
+    track.dataset.streamVirtualTotal = String(virtualWindow.totalExtent);
+    windowNode.dataset.streamVirtualStart = String(virtualWindow.start);
+    windowNode.dataset.streamVirtualEnd = String(virtualWindow.end);
+    this.streamVirtualWindow = virtualWindow;
+    this.streamFocusDomCache = null;
+    this.focusedElement = null;
+    ScreenUtils.indexFocusables(this.container, ".focusable:not([hidden])");
+    this.hydrateVisibleStreamBadges();
+    this.bindAddonLogoFallbacks();
+    this.observeStreamVirtualRows(windowNode);
+    this.requestStreamVirtualMeasure();
+
+    if (restoreFocusedAction) {
+      const restoredRow = this.getMountedStreamVirtualRow(this.focusState?.row);
+      const target = this.resolveCardActionForRow(restoredRow, restoreFocusedAction);
+      if (target) {
+        this.focusElement(target);
+      }
+    }
+    return true;
+  },
+
+  measureStreamVirtualRows() {
+    if (!this.streamVirtualized || !this.container) {
+      return;
+    }
+    const list = this.container.querySelector(".stream-route-list");
+    const windowNode = list?.querySelector?.("[data-stream-virtual-window]");
+    if (!list || !windowNode) {
+      return;
+    }
+    if (!(this.streamVirtualHeights instanceof Map)) {
+      this.streamVirtualHeights = new Map();
+    }
+    let changed = false;
+    windowNode.querySelectorAll(".stream-route-card-row[data-stream-row]").forEach((row) => {
+      const key = String(row.dataset.streamKey || "");
+      const height = Number(row.offsetHeight || 0);
+      if (!key || !Number.isFinite(height) || height <= 0) {
+        return;
+      }
+      const previous = Number(this.streamVirtualHeights.get(key) || 0);
+      if (Math.abs(previous - height) > 0.5) {
+        this.streamVirtualHeights.set(key, height);
+        changed = true;
+      }
+    });
+    if (!changed) {
+      return;
+    }
+
+    const previousModel = this.streamVirtualModel;
+    const previousScrollTop = this.getListScrollTop(list);
+    const previousAnchorIndex = previousModel
+      ? findStreamVirtualIndex(previousModel.offsets, previousScrollTop)
+      : -1;
+    const previousAnchorKey =
+      previousAnchorIndex >= 0 ? previousModel.keys[previousAnchorIndex] : "";
+    const previousAnchorOffset =
+      previousAnchorIndex >= 0 ? Number(previousModel.offsets[previousAnchorIndex] || 0) : 0;
+    this.streamVirtualModel = null;
+    const model = this.getStreamVirtualModel(this.streamVirtualItems);
+    this.streamVirtualWindow = null;
+    this.syncStreamVirtualization(null, { force: true });
+    if (previousAnchorKey) {
+      const nextAnchorIndex = model.keys.indexOf(previousAnchorKey);
+      if (nextAnchorIndex >= 0) {
+        const anchorOffset = previousScrollTop - previousAnchorOffset;
+        const nextScrollTop = Math.max(
+          0,
+          Number(model.offsets[nextAnchorIndex] || 0) + anchorOffset
+        );
+        if (Math.abs(nextScrollTop - previousScrollTop) > 0.5) {
+          this.setListScrollTop(list, nextScrollTop);
+          this.requestStreamVirtualSync();
+        }
+      }
+    }
+  },
+
+  ensureStreamVirtualRowMounted(index) {
+    if (!this.streamVirtualized || !this.container) {
+      return false;
+    }
+    const list = this.container.querySelector(".stream-route-list");
+    if (!list) {
+      return false;
+    }
+    const model = this.getStreamVirtualModel(this.streamVirtualItems);
+    const rowIndex = clamp(Number(index || 0), 0, Math.max(0, model.keys.length - 1));
+    if (this.getMountedStreamVirtualRow(rowIndex)) {
+      return true;
+    }
+    const currentScrollTop = this.getListScrollTop(list);
+    const nextScrollTop = getStreamScrollTopForIndex(model, rowIndex, {
+      currentScrollTop,
+      viewportHeight: this.getStreamVirtualViewportHeight(list),
+      padding: 16
+    });
+    if (Math.abs(nextScrollTop - currentScrollTop) > 0.5) {
+      this.setListScrollTop(list, nextScrollTop);
+    }
+    this.syncStreamVirtualization(rowIndex, { force: true });
+    return Boolean(this.getMountedStreamVirtualRow(rowIndex));
   },
 
   requestRender({ delayMs = 0 } = {}) {
@@ -927,6 +1331,9 @@ export const StreamScreen = {
     this.container = document.getElementById("stream");
     ScreenUtils.show(this.container);
     this.params = params || {};
+    this.stopStreamVirtualization();
+    this.streamVirtualHeights = new Map();
+    this.streamVirtualFocusReset = false;
     this.loadToken = (this.loadToken || 0) + 1;
     const token = this.loadToken;
     this.focusState = { zone: "filter", index: 0 };
@@ -1601,6 +2008,12 @@ export const StreamScreen = {
     // reselecting the active chip does not jump the list back to the top.
     if (filterChanged) {
       this.listScrollTop = 0;
+      this.streamVirtualFocusReset = true;
+    }
+    if (preferredZone === "card" && filtered.length) {
+      this.streamVirtualPreferredIndex = filterChanged
+        ? 0
+        : clamp(preferredIndex, 0, filtered.length - 1);
     }
     if (this.applyAddonFilterInPlace({ filterChanged })) {
       return;
@@ -1736,7 +2149,7 @@ export const StreamScreen = {
   },
 
   getCardRows() {
-    return Array.from(
+    const rows = Array.from(
       this.container?.querySelectorAll(".stream-route-card-row[data-stream-row]:not([hidden])") ||
         []
     )
@@ -1746,6 +2159,17 @@ export const StreamScreen = {
         native: rowNode.querySelector('[data-card-action="native"]')
       }))
       .filter((row) => row.play || row.native);
+    if (!this.streamVirtualized) {
+      return rows;
+    }
+    const indexedRows = new Array(this.streamVirtualItems?.length || 0);
+    rows.forEach((row) => {
+      const rowIndex = Number(row.row);
+      if (rowIndex >= 0 && rowIndex < indexedRows.length) {
+        indexedRows[rowIndex] = row;
+      }
+    });
+    return indexedRows;
   },
 
   isCardActionFocused(rowIndex, action) {
@@ -1869,6 +2293,7 @@ export const StreamScreen = {
     }
     this.updateManualListScrollTransform(listNode, normalized);
     this.listScrollTop = normalized;
+    this.requestStreamVirtualSync();
   },
 
   setListScrollTop(listNode, nextScrollTop) {
@@ -1913,6 +2338,7 @@ export const StreamScreen = {
         return;
       }
       this.listScrollTop = Number(applied || normalized || 0);
+      this.requestStreamVirtualSync();
       return;
     }
 
@@ -1922,6 +2348,7 @@ export const StreamScreen = {
     const requested = Number.isFinite(requestedValue) ? Math.max(0, requestedValue) : 0;
     listNode.scrollTop = requested;
     this.listScrollTop = requested;
+    this.requestStreamVirtualSync();
   },
 
   ensureListItemVisible(listNode, target) {
@@ -1986,25 +2413,42 @@ export const StreamScreen = {
     }
     const chips = Array.from(this.container.querySelectorAll(".stream-route-chip.focusable"));
     const rows = this.getCardRows();
-    const value = { chips, rows };
+    const value = {
+      chips,
+      rows,
+      rowCount: this.streamVirtualized ? this.streamVirtualItems.length : rows.length,
+      virtualized: this.streamVirtualized
+    };
     this.streamFocusDomCache = { listNode, value };
     return value;
   },
 
   applyFocus() {
-    const { chips, rows } = this.getFocusLists();
-    if (!chips.length && !rows.length) {
+    const { chips, rows, rowCount, virtualized } = this.getFocusLists();
+    if (!chips.length && !rowCount) {
       return;
     }
-    const zone = this.focusState?.zone || (rows.length ? "card" : "filter");
+    const zone = this.focusState?.zone || (rowCount ? "card" : "filter");
     const index = Number(this.focusState?.index || 0);
-    if (zone === "card" && rows.length) {
-      const rowIndex = clamp(Number(this.focusState?.row || 0), 0, rows.length - 1);
+    if (zone === "card" && rowCount) {
+      const rowIndex = clamp(Number(this.focusState?.row || 0), 0, rowCount - 1);
       const preferredAction = String(this.focusState?.action || "play");
+      if (virtualized && !rows[rowIndex]) {
+        this.ensureStreamVirtualRowMounted(rowIndex);
+        this.streamFocusDomCache = null;
+        const mountedRows = this.getCardRows();
+        if (!mountedRows[rowIndex]) {
+          this.requestStreamVirtualSync(rowIndex, true);
+          return;
+        }
+        rows[rowIndex] = mountedRows[rowIndex];
+      }
       const target = this.resolveCardActionForRow(rows[rowIndex], preferredAction);
       const resolvedAction = target?.dataset?.cardAction || "play";
       this.focusState = { zone: "card", row: rowIndex, action: resolvedAction };
-      this.focusElement(target);
+      if (target) {
+        this.focusElement(target);
+      }
       return;
     }
     this.focusState = { zone: "filter", index: clamp(index, 0, Math.max(0, chips.length - 1)) };
@@ -2323,6 +2767,7 @@ export const StreamScreen = {
   refreshSourceChipsOnly() {
     const selectedFilter = String(this.addonFilter || "all");
     const availableFilters = this.getOrderedFilterNames();
+    let filterReset = false;
     if (selectedFilter !== "all" && !availableFilters.includes(selectedFilter)) {
       // An error chip can disappear after the user selected it. Do not leave
       // the state pointing at a filter that no longer has a chip or rows.
@@ -2332,6 +2777,9 @@ export const StreamScreen = {
       this.focusState = allStreams.length
         ? { zone: "card", row: 0, action: "play" }
         : { zone: "filter", index: 0 };
+      this.streamVirtualFocusReset = true;
+      this.streamVirtualPreferredIndex = allStreams.length ? 0 : null;
+      filterReset = true;
     }
     const track = this.container?.querySelector?.(".stream-route-chip-track");
     if (!track) {
@@ -2351,7 +2799,7 @@ export const StreamScreen = {
     if (this.focusState?.zone === "filter") {
       this.applyFocus();
     }
-    return true;
+    return !filterReset;
   },
 
   renderChip(name, selected, status) {
@@ -2376,7 +2824,13 @@ export const StreamScreen = {
     `;
   },
 
-  renderStreamCard(stream, index, streamBadgesEnabled = true, badgeSettings = null) {
+  renderStreamCard(
+    stream,
+    index,
+    streamBadgesEnabled = true,
+    badgeSettings = null,
+    { streamKey = index, virtualized = false, virtualRowGap = null, virtualLast = false } = {}
+  ) {
     const headline = getStreamHeadline(stream);
     const quality = getStreamQuality(stream);
     const lazyBadges =
@@ -2416,8 +2870,12 @@ export const StreamScreen = {
           </div>`;
     }
 
+    const virtualRowStyle =
+      virtualized && Number.isFinite(Number(virtualRowGap))
+        ? ` style="margin-bottom:${virtualLast ? 0 : Math.max(0, Number(virtualRowGap))}px"`
+        : "";
     return `
-      <div class="stream-route-card-row" data-stream-key="${index}" data-stream-row="${index}">
+      <div class="stream-route-card-row" data-stream-key="${escapeHtml(streamKey)}" data-stream-row="${index}"${virtualRowStyle}>
         <article class="stream-route-card stream-route-card-action focusable${this.isCardActionFocused(index, "play") ? " focused" : ""}"
                  data-action="playStream"
                  data-card-action="play"
@@ -2472,6 +2930,36 @@ export const StreamScreen = {
 
   render() {
     this.cancelScheduledRender();
+    const previousVirtualModel = this.streamVirtualized ? this.streamVirtualModel : null;
+    const previousFocusedIndex = Number(this.focusState?.row);
+    const previousFocusedKey =
+      previousVirtualModel &&
+      Number.isInteger(previousFocusedIndex) &&
+      previousFocusedIndex >= 0 &&
+      previousFocusedIndex < previousVirtualModel.keys.length
+        ? previousVirtualModel.keys[previousFocusedIndex]
+        : "";
+    if (
+      previousVirtualModel &&
+      !this.streamVirtualFocusReset &&
+      Number(this.listScrollTop || 0) > 0
+    ) {
+      const previousAnchorIndex = findStreamVirtualIndex(
+        previousVirtualModel.offsets,
+        Number(this.listScrollTop || 0)
+      );
+      this.streamVirtualPendingAnchor =
+        previousAnchorIndex >= 0
+          ? {
+              key: previousVirtualModel.keys[previousAnchorIndex],
+              offsetWithinRow:
+                Number(this.listScrollTop || 0) -
+                Number(previousVirtualModel.offsets[previousAnchorIndex] || 0)
+            }
+          : null;
+    } else {
+      this.streamVirtualPendingAnchor = null;
+    }
     // Rebuilt markup means the memoised filtered-stream list may be stale.
     this._filteredStreamsCache = null;
     const { isSeries, title, subtitle, episodeLabel, detailLine } = this.getHeaderMeta();
@@ -2487,16 +2975,55 @@ export const StreamScreen = {
     const badgeSettings = StreamBadgeSettingsStore.snapshot();
     const showAddonLogo = badgeSettings.showAddonLogo === true;
     const addonLogosReady = !showAddonLogo || !filtered.length || this.areAddonLogosReady(filtered);
+    const virtualizedStreamList = Boolean(
+      this.shouldUseStreamVirtualization(allStreams) && filtered.length && addonLogosReady
+    );
+    if (virtualizedStreamList && previousFocusedKey && !this.streamVirtualFocusReset) {
+      const nextKeys = this.getStreamVirtualKeys(filtered);
+      const nextFocusedIndex = nextKeys.indexOf(previousFocusedKey);
+      if (nextFocusedIndex >= 0) {
+        this.focusState = {
+          ...this.focusState,
+          zone: "card",
+          row: nextFocusedIndex,
+          index: nextFocusedIndex
+        };
+      }
+    }
+    if (virtualizedStreamList) {
+      this.streamVirtualized = true;
+    } else if (this.streamVirtualized) {
+      this.stopStreamVirtualization();
+    }
     const stableStreamList = Boolean(
       (Environment.isWebOS() || Environment.isTizen()) &&
       filtered.length &&
       addonLogosReady &&
       allStreams.length &&
+      !virtualizedStreamList &&
       (!showAddonLogo || this.areAddonLogosReady(allStreams))
     );
 
     let body = "";
-    if (stableStreamList) {
+    if (virtualizedStreamList) {
+      body = this.renderStreamVirtualMarkup(filtered, streamBadgesEnabled, badgeSettings);
+      if (this.streamVirtualPendingAnchor) {
+        const anchorIndex = this.streamVirtualModel?.keys?.indexOf(
+          this.streamVirtualPendingAnchor.key
+        );
+        if (anchorIndex >= 0) {
+          this.listScrollTop = Math.max(
+            0,
+            Number(this.streamVirtualModel.offsets[anchorIndex] || 0) +
+              Number(this.streamVirtualPendingAnchor.offsetWithinRow || 0)
+          );
+        }
+      }
+      this.streamVirtualPendingAnchor = null;
+      if (hasPendingForFilter) {
+        body += this.renderLoadingCards(1);
+      }
+    } else if (stableStreamList) {
       body = allStreams
         .map((stream, index) =>
           this.renderStreamCard(stream, index, streamBadgesEnabled, badgeSettings)
@@ -2593,6 +3120,11 @@ export const StreamScreen = {
     this.restoreScrollPosition();
     this.applyFocus();
     this.bindListScrollState();
+    if (virtualizedStreamList) {
+      this.requestStreamVirtualMeasure();
+      this.requestStreamVirtualSync();
+    }
+    this.streamVirtualFocusReset = false;
     this.hasRenderedStreamRouteShell = true;
   },
 
@@ -2612,6 +3144,7 @@ export const StreamScreen = {
       "scroll",
       () => {
         this.listScrollTop = this.getListScrollTop(list);
+        this.requestStreamVirtualSync();
         this.requestStreamBadgeHydration();
       },
       { passive: true }
@@ -2628,6 +3161,7 @@ export const StreamScreen = {
           }
           event?.preventDefault?.();
           this.setListScrollTop(list, this.getListScrollTop(list) + deltaY);
+          this.requestStreamVirtualSync();
           this.requestStreamBadgeHydration();
         },
         { passive: false }
@@ -2671,10 +3205,11 @@ export const StreamScreen = {
     const streamBadgesEnabled = DebridSettingsStore.get().streamBadgesEnabled !== false;
     const badgeSettings = StreamBadgeSettingsStore.snapshot();
     const focusedRow = this.focusState?.zone === "card" ? Number(this.focusState?.row || 0) : -1;
+    let changed = false;
 
-    // Android's LazyColumn only composes badge images near the viewport. Keep
-    // the complete Web card list for existing remote/pointer navigation, but
-    // apply the same bounded image/DOM lifetime on webOS and Tizen. Window by
+    // Android's LazyColumn only composes badge images near the viewport. The
+    // long-list path now also bounds the card DOM; short lists retain the
+    // existing complete markup for pointer and remote navigation. Window by
     // row index around the focus (the focused row is always scrolled into view)
     // instead of measuring every card: per-card geometry reads forced a full
     // list reflow on every focus move on constrained TV browsers.
@@ -2700,13 +3235,18 @@ export const StreamScreen = {
           placeholder.classList.remove("stream-route-card-badges-lazy");
         }
         placeholder.dataset.badgesHydrated = "true";
+        changed = true;
         // Keep already-visited Tizen rows hydrated. Removing a wrapped badge row
         // above the viewport could change list geometry and move the focused card.
       } else if (!shouldHydrate && hydrated && !Environment.isTizen()) {
         placeholder.textContent = "";
         placeholder.dataset.badgesHydrated = "false";
+        changed = true;
       }
     });
+    if (changed) {
+      this.requestStreamVirtualMeasure();
+    }
   },
 
   bindAddonLogoFallbacks() {
@@ -2897,10 +3437,23 @@ export const StreamScreen = {
 
     const direction = getDpadDirection(event);
     if (direction) {
-      const { chips, rows } = this.getFocusLists();
-      const zone = this.focusState?.zone || (rows.length ? "card" : "filter");
+      let { chips, rows, rowCount, virtualized } = this.getFocusLists();
+      const zone = this.focusState?.zone || (rowCount ? "card" : "filter");
       let index = Number(this.focusState?.index || 0);
       event?.preventDefault?.();
+
+      if (zone === "card" && virtualized) {
+        const focusedRowIndex = clamp(
+          Number(this.focusState?.row || 0),
+          0,
+          Math.max(0, rowCount - 1)
+        );
+        if (!rows[focusedRowIndex]) {
+          this.ensureStreamVirtualRowMounted(focusedRowIndex);
+          this.streamFocusDomCache = null;
+          ({ chips, rows, rowCount, virtualized } = this.getFocusLists());
+        }
+      }
 
       if (zone === "filter") {
         if (direction === "left") {
@@ -2931,7 +3484,7 @@ export const StreamScreen = {
           }
           return;
         }
-        if (direction === "down" && rows.length) {
+        if (direction === "down" && rowCount) {
           this.focusState = { zone: "card", row: 0, action: "play" };
           this.applyFocus();
         }
@@ -2939,7 +3492,7 @@ export const StreamScreen = {
       }
 
       if (zone === "card") {
-        const rowIndex = clamp(Number(this.focusState?.row || 0), 0, Math.max(0, rows.length - 1));
+        const rowIndex = clamp(Number(this.focusState?.row || 0), 0, Math.max(0, rowCount - 1));
         const currentRow = rows[rowIndex] || null;
         const currentAction = String(this.focusState?.action || "play");
         if (direction === "up") {
@@ -2949,7 +3502,7 @@ export const StreamScreen = {
             this.focusState = {
               zone: "card",
               row: rowIndex - 1,
-              action: String(target?.dataset?.cardAction || "play")
+              action: String(target?.dataset?.cardAction || currentAction)
             };
             this.applyFocus();
             return;
@@ -2966,13 +3519,13 @@ export const StreamScreen = {
           return;
         }
         if (direction === "down") {
-          const nextRowIndex = clamp(rowIndex + 1, 0, Math.max(0, rows.length - 1));
+          const nextRowIndex = clamp(rowIndex + 1, 0, Math.max(0, rowCount - 1));
           const nextRow = rows[nextRowIndex] || null;
           const target = this.resolveCardActionForRow(nextRow, currentAction);
           this.focusState = {
             zone: "card",
             row: nextRowIndex,
-            action: String(target?.dataset?.cardAction || "play")
+            action: String(target?.dataset?.cardAction || currentAction)
           };
           this.applyFocus();
           return;
@@ -3009,7 +3562,11 @@ export const StreamScreen = {
       return;
     }
 
-    const current = this.container.querySelector(".focusable.focused");
+    let current = this.container.querySelector(".focusable.focused");
+    if (!current && this.streamVirtualized && this.focusState?.zone === "card") {
+      this.applyFocus();
+      current = this.container.querySelector(".focusable.focused");
+    }
     if (!current) {
       return;
     }
@@ -3039,6 +3596,7 @@ export const StreamScreen = {
     this.playResolveToken = Number(this.playResolveToken || 0) + 1;
     this.nativePlayerRequestToken = Number(this.nativePlayerRequestToken || 0) + 1;
     this.cancelScheduledRender();
+    this.stopStreamVirtualization();
     if (this.errorChipTimer) {
       clearTimeout(this.errorChipTimer);
       this.errorChipTimer = null;

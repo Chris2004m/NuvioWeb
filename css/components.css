@@ -17697,6 +17697,24 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
   display: none;
 }
 
+.stream-route-virtual-track {
+  display: block;
+  width: 100%;
+}
+
+.stream-route-virtual-spacer {
+  display: block;
+  width: 100%;
+  pointer-events: none;
+}
+
+.stream-route-virtual-window {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+}
+
 .stream-route-card-row {
   display: flex;
   align-items: stretch;
