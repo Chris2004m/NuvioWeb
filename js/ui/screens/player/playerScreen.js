@@ -13,6 +13,7 @@ import {
   shouldAllowNativePlaybackDuringStartupAudioGate
 } from "../../../core/player/startupAudioGatePolicy.js";
 import { isTerminalHlsHttpStatus } from "../../../core/player/hlsNetworkErrorPolicy.js";
+import { deltaMsForKeyRepeat } from "../../../core/player/playerScrubRates.js";
 import { buildClockFormatOptions, resolveSystemHour12 } from "../../../core/player/clockFormat.js";
 import { resolveSubtitleStyleControlAvailability } from "../../../core/player/subtitlePresentationCapabilities.js";
 import {
@@ -4122,7 +4123,7 @@ export const PlayerScreen = {
         : null;
     return Boolean(
       isLikelyHlsMimeType.call(PlayerController, declaredSourceType) ||
-        isLikelyHlsMimeType.call(PlayerController, inferredSourceType)
+      isLikelyHlsMimeType.call(PlayerController, inferredSourceType)
     );
   },
 
@@ -10217,19 +10218,10 @@ export const PlayerScreen = {
     this.seekPreviewDirection = direction;
     this.seekRepeatCount += 1;
 
-    const stepSeconds =
-      this.seekRepeatCount >= 18
-        ? 120
-        : this.seekRepeatCount >= 12
-          ? 60
-          : this.seekRepeatCount >= 7
-            ? 30
-            : this.seekRepeatCount >= 3
-              ? 20
-              : 10;
+    const deltaSeconds = deltaMsForKeyRepeat(this.seekRepeatCount - 1, direction > 0) / 1000;
     const duration = this.getPlaybackDurationSeconds();
     const base = this.seekPreviewSeconds == null ? currentTime : Number(this.seekPreviewSeconds);
-    let next = base + direction * stepSeconds;
+    let next = base + deltaSeconds;
     if (duration > 0) {
       next = clamp(next, 0, duration);
     } else {
@@ -10405,7 +10397,7 @@ export const PlayerScreen = {
     return codeMap[keyCode] || null;
   },
 
-  applyMediaAction(action) {
+  applyMediaAction(action, event = null) {
     if (this.isExternalFrameMode() || !action) {
       return;
     }
@@ -10430,12 +10422,12 @@ export const PlayerScreen = {
     }
 
     if (action === "fastForward") {
-      this.quickSeekBy(30);
+      this.beginSeekPreview(1, Boolean(event?.repeat));
       return;
     }
 
     if (action === "rewind") {
-      this.quickSeekBy(-30);
+      this.beginSeekPreview(-1, Boolean(event?.repeat));
     }
   },
 
@@ -18910,7 +18902,7 @@ export const PlayerScreen = {
       event?.preventDefault?.();
       event?.stopPropagation?.();
       event?.stopImmediatePropagation?.();
-      this.applyMediaAction(mediaAction);
+      this.applyMediaAction(mediaAction, event);
       return;
     }
 
