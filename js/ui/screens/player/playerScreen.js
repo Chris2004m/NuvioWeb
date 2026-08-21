@@ -2369,6 +2369,9 @@ export const PlayerScreen = {
     this.sourcesFocus = { zone: "filter", index: 0 };
     this.sourceLoadToken = 0;
     this.completedSourceRequestKey = "";
+    this.sourcePanelRenderFrame = null;
+    this.sourcePanelRenderFrameType = null;
+    this.renderedSourcesMarkup = null;
     this.streamCandidatesByVideoId = new Map();
     this.streamCandidatesLoadPromises = new Map();
 
@@ -17052,6 +17055,43 @@ export const PlayerScreen = {
     };
   },
 
+  cancelScheduledSourcesPanelRender() {
+    if (this.sourcePanelRenderFrame == null) {
+      return;
+    }
+    if (this.sourcePanelRenderFrameType === "raf") {
+      if (typeof cancelAnimationFrame === "function") {
+        cancelAnimationFrame(this.sourcePanelRenderFrame);
+      } else {
+        clearTimeout(this.sourcePanelRenderFrame);
+      }
+    } else {
+      clearTimeout(this.sourcePanelRenderFrame);
+    }
+    this.sourcePanelRenderFrame = null;
+    this.sourcePanelRenderFrameType = null;
+  },
+
+  scheduleSourcesPanelRender() {
+    if (!this.sourcesPanelVisible || this.sourcePanelRenderFrame != null) {
+      return;
+    }
+    const render = () => {
+      this.sourcePanelRenderFrame = null;
+      this.sourcePanelRenderFrameType = null;
+      if (this.sourcesPanelVisible) {
+        this.renderSourcesPanel();
+      }
+    };
+    if (typeof requestAnimationFrame === "function") {
+      this.sourcePanelRenderFrameType = "raf";
+      this.sourcePanelRenderFrame = requestAnimationFrame(render);
+      return;
+    }
+    this.sourcePanelRenderFrameType = "timeout";
+    this.sourcePanelRenderFrame = setTimeout(render, 0);
+  },
+
   openSourcesPanel({ forceReload = false } = {}) {
     this.cancelSeekPreview({ commit: false });
     this.sourcesPanelVisible = true;
@@ -17131,7 +17171,7 @@ export const PlayerScreen = {
           return;
         }
         this.streamCandidates = mergeStreamItems(this.streamCandidates, chunkItems);
-        this.renderSourcesPanel();
+        this.scheduleSourcesPanelRender();
         void this.preloadPlayerSourceLogos(chunkItems);
       }
     };
@@ -17196,6 +17236,7 @@ export const PlayerScreen = {
   },
 
   renderSourcesPanel() {
+    this.cancelScheduledSourcesPanelRender();
     const panel = this.uiRefs?.sourcesPanel;
     if (!panel) {
       return;
@@ -17203,7 +17244,10 @@ export const PlayerScreen = {
 
     panel.classList.toggle("hidden", !this.sourcesPanelVisible);
     if (!this.sourcesPanelVisible) {
-      panel.innerHTML = "";
+      if (this.renderedSourcesMarkup !== null || panel.childNodes.length) {
+        panel.innerHTML = "";
+      }
+      this.renderedSourcesMarkup = null;
       return;
     }
 
@@ -17215,7 +17259,7 @@ export const PlayerScreen = {
     const badgePlacement = resolvePlayerSourceBadgePlacement(badgeSettings);
     this.ensureSourcesFocus(filters, filtered);
 
-    panel.innerHTML = `
+    const nextMarkup = `
       <div class="player-sources-header">
         <div class="player-sources-title">${escapeHtml(t("sources_title", {}, "Sources"))}</div>
         <div class="player-sources-actions">
@@ -17298,6 +17342,16 @@ export const PlayerScreen = {
         }
       </div>
     `;
+
+    // Addon responses and logo hydration can request several renders in one
+    // frame. Retain the exact generated markup when nothing visible changed so
+    // TV browsers do not repeatedly parse/layout/paint every source card.
+    const panelMounted = Boolean(panel.querySelector(".player-sources-header"));
+    const markupUnchanged = panelMounted && this.renderedSourcesMarkup === nextMarkup;
+    if (!markupUnchanged) {
+      panel.innerHTML = nextMarkup;
+      this.renderedSourcesMarkup = nextMarkup;
+    }
 
     const focusedCard = panel.querySelector(".player-source-card.focused");
     if (focusedCard) {
@@ -19808,6 +19862,8 @@ export const PlayerScreen = {
         clearTimeout(this.sourceLogoRenderTimer);
         this.sourceLogoRenderTimer = null;
       }
+      this.cancelScheduledSourcesPanelRender();
+      this.renderedSourcesMarkup = null;
       this.clearTrackDiscoveryTimer();
       this.stopLoadingLogoFillAnimation();
       this.clearPlaybackStallGuard();

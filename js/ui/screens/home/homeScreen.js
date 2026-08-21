@@ -8123,9 +8123,13 @@ export const HomeScreen = {
       };
     }
 
-    const canResumePreservedTizenHome = Boolean(
-      Platform.isTizen() &&
-      navigationContext?.isBackNavigation &&
+    const previousRoute = String(navigationContext?.previousRoute || "");
+    const isHomeRouteReturn = Boolean(
+      navigationContext?.isBackNavigation || (previousRoute && previousRoute !== "home")
+    );
+    const canResumePreservedTvHome = Boolean(
+      (Platform.isTizen() || Platform.isWebOS()) &&
+      isHomeRouteReturn &&
       this.homeDomPreserved &&
       this.hasLoadedOnce &&
       Array.isArray(this.rows) &&
@@ -8133,7 +8137,7 @@ export const HomeScreen = {
       this.container?.childNodes?.length &&
       String(this.renderedLayoutMode || "") === String(this.layoutMode || "")
     );
-    if (canResumePreservedTizenHome) {
+    if (canResumePreservedTvHome) {
       this.homeDomPreserved = false;
       this.container.classList.remove("home-dom-preserved");
       this.container.style.removeProperty("position");
@@ -11136,17 +11140,17 @@ export const HomeScreen = {
     }
     this.cachedModernPortraitPosterMetrics = null;
     this.cachedModernLandscapePosterMetrics = null;
-    const preserveRenderedTizenHome = Boolean(
-      Platform.isTizen() &&
+    const preserveRenderedTvHome = Boolean(
+      (Platform.isTizen() || Platform.isWebOS()) &&
       this.hasLoadedOnce &&
       Array.isArray(this.rows) &&
       this.rows.length &&
       this.container?.childNodes?.length
     );
-    if (preserveRenderedTizenHome) {
-      // Keep layout alive while another screen is shown. Re-displaying a large
-      // Tizen catalog after display:none can itself force an expensive full
-      // layout before the first Home frame is painted.
+    if (preserveRenderedTvHome) {
+      // Keep the rendered TV Home alive while another screen is shown. Rebuilding
+      // a large catalog after display:none forces a full parse/layout/paint on
+      // constrained TV browsers, while Android keeps the Home back-stack state.
       this.container.style.position = "absolute";
       this.container.style.top = "0";
       this.container.style.right = "0";

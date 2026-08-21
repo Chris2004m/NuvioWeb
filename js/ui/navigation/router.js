@@ -153,7 +153,8 @@ export const Router = {
       restoredState: !shouldClear && key ? RouteStateStore.get(key) : null,
       routeStateKey: key,
       fromHistory: Boolean(options?.fromHistory),
-      isBackNavigation: Boolean(options?.isBackNavigation)
+      isBackNavigation: Boolean(options?.isBackNavigation),
+      previousRoute: String(options?.previousRoute || "")
     };
   },
 
@@ -378,7 +379,10 @@ export const Router = {
 
     this.current = routeName;
     this.currentParams = targetParams;
-    const navigationContext = this.resolveNavigationContext(routeName, this.currentParams, options);
+    const navigationContext = this.resolveNavigationContext(routeName, this.currentParams, {
+      ...options,
+      previousRoute
+    });
 
     await Screen.mount(this.currentParams, navigationContext);
     this.completeRouteReturnBackGuard(routeReturnBackGuardNavigationId);
@@ -481,10 +485,17 @@ export const Router = {
 
     if (this.stack.length === 0) {
       if (this.current && this.current !== "home" && this.routes.home) {
+        const previousRoute = this.current;
         this.routes[this.current].cleanup?.();
         this.current = "home";
         this.currentParams = {};
-        await this.routes.home.mount();
+        await this.routes.home.mount(
+          {},
+          {
+            isBackNavigation: true,
+            previousRoute
+          }
+        );
         this.persistWebOsResumeRoute("home", {});
         return;
       }
@@ -501,12 +512,14 @@ export const Router = {
       return;
     }
 
+    const fromRoute = this.current;
     this.captureCurrentRouteState();
     this.routes[this.current].cleanup?.();
     this.current = previousRoute;
     this.currentParams = previousParams;
     const navigationContext = this.resolveNavigationContext(previousRoute, previousParams, {
-      isBackNavigation: true
+      isBackNavigation: true,
+      previousRoute: fromRoute
     });
 
     await this.routes[previousRoute].mount(previousParams, navigationContext);

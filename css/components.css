@@ -2497,7 +2497,7 @@ button:focus-visible {
   min-height: 100%;
 }
 
-/* Tizen keeps the rendered Home catalog alive between routes. Move the whole
+/* TV platforms keep the rendered Home catalog alive between routes. Move the
    retained layer offscreen as well as hiding it: some composited descendants
    can outlive ancestor visibility changes while the next route is mounting. */
 #home.home-dom-preserved {
