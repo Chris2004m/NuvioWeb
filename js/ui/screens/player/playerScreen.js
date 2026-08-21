@@ -13,6 +13,7 @@ import {
   shouldAllowNativePlaybackDuringStartupAudioGate
 } from "../../../core/player/startupAudioGatePolicy.js";
 import { isTerminalHlsHttpStatus } from "../../../core/player/hlsNetworkErrorPolicy.js";
+import { stepMsForKeyRepeat } from "../../../core/player/playerScrubRates.js";
 import { buildClockFormatOptions, resolveSystemHour12 } from "../../../core/player/clockFormat.js";
 import { resolveSubtitleStyleControlAvailability } from "../../../core/player/subtitlePresentationCapabilities.js";
 import {
@@ -10217,16 +10218,7 @@ export const PlayerScreen = {
     this.seekPreviewDirection = direction;
     this.seekRepeatCount += 1;
 
-    const stepSeconds =
-      this.seekRepeatCount >= 18
-        ? 120
-        : this.seekRepeatCount >= 12
-          ? 60
-          : this.seekRepeatCount >= 7
-            ? 30
-            : this.seekRepeatCount >= 3
-              ? 20
-              : 10;
+    const stepSeconds = stepMsForKeyRepeat(this.seekRepeatCount - 1) / 1000;
     const duration = this.getPlaybackDurationSeconds();
     const base = this.seekPreviewSeconds == null ? currentTime : Number(this.seekPreviewSeconds);
     let next = base + direction * stepSeconds;
