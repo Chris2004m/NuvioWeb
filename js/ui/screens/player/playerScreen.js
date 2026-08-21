@@ -86,6 +86,8 @@ import {
   supportsBitmapSubtitleDecoding,
   warmBitmapSubtitleDecoder
 } from "../../../core/player/bitmapSubtitleDecoder.js";
+import { isAssSubtitle, convertAssBodyToVtt } from "../../../core/player/assSubtitle.js";
+import { createAssRenderer } from "../../../core/player/assRenderer.js";
 
 const CLOCK_FORMATTER_CACHE = new Map();
 const LANGUAGE_DISPLAY_NAME_CACHE = new Map();
@@ -2329,6 +2331,7 @@ export const PlayerScreen = {
     this.webOsEmbeddedHtmlSubtitleTrack = null;
     this.webOsEmbeddedHtmlSubtitleCueCount = 0;
     this.webOsEmbeddedHtmlSubtitleActivationKey = "";
+    this.assSubtitleRenderer = null;
     this.bitmapSubtitleDecoder = null;
     this.bitmapSubtitleTrack = null;
     this.bitmapSubtitleLoadToken = 0;
@@ -5096,6 +5099,7 @@ export const PlayerScreen = {
 
         <div id="playerHtmlSubtitles" class="player-html-subtitles hidden" aria-hidden="true"></div>
         <canvas id="playerBitmapSubtitles" class="player-bitmap-subtitles hidden" aria-hidden="true"></canvas>
+        <div id="playerAssSubtitles" class="player-ass-subtitles hidden" aria-hidden="true"></div>
 
         <div id="playerSeekOverlay" class="player-seek-overlay hidden">
           <div class="player-seek-overlay-track"><div id="playerSeekFill" class="player-seek-fill"></div></div>
@@ -5195,6 +5199,7 @@ export const PlayerScreen = {
           skipIntro: uiRoot.querySelector("#playerSkipIntro"),
           aspectToast: uiRoot.querySelector("#playerAspectToast"),
           htmlSubtitles: uiRoot.querySelector("#playerHtmlSubtitles"),
+          assSubtitles: uiRoot.querySelector("#playerAssSubtitles"),
           bitmapSubtitles: uiRoot.querySelector("#playerBitmapSubtitles"),
           seekOverlay: uiRoot.querySelector("#playerSeekOverlay"),
           seekDirection: uiRoot.querySelector("#playerSeekDirection"),
@@ -10714,6 +10719,7 @@ export const PlayerScreen = {
     this.embeddedAudioTracks = [];
     this.selectedEmbeddedAudioTrackIndex = -1;
     this.clearBitmapSubtitleOverlay({ dispose: true });
+    this.destroyAssSubtitleRenderer();
     this.clearSubtitleCueStyleBindings();
     this.clearMountedExternalSubtitleTracks();
     this.trackDiscoveryInProgress = true;
@@ -12372,6 +12378,9 @@ export const PlayerScreen = {
   clearMountedExternalSubtitleTracks() {
     this.externalTrackNodes.forEach((node) => node.remove());
     this.externalTrackNodes = [];
+    // External subtitle selection is being torn down; retire the ASS
+    // renderer so no overlay, instance, or timer outlives the tracks.
+    this.destroyAssSubtitleRenderer();
     this.revokeExternalSubtitleObjectUrls();
   },
 
@@ -12517,13 +12526,19 @@ export const PlayerScreen = {
     return this.applySubtitleAssAlignmentToVtt(`WEBVTT\n\n${normalized}`);
   },
 
-  async resolveSubtitlePlaybackUrl(url, { timeoutMs = 0 } = {}) {
+  /**
+   * Raw subtitle fetch boundary for ASS-aware callers. Returns
+   * { body, sourceUrl, contentType, resolvedUrl } or null. Never converts
+   * to a VTT object URL; callers that need that use
+   * resolveSubtitlePlaybackUrl(), whose URL contract is unchanged.
+   */
+  async fetchSubtitleRawBody(url, { timeoutMs = 0 } = {}) {
     const original = String(url || "").trim();
     if (!original) {
-      return "";
+      return null;
     }
     if (/^(blob:|data:)/i.test(original)) {
-      return original;
+      return { body: null, sourceUrl: original, contentType: "", resolvedUrl: original };
     }
     const effectiveTimeoutMs =
       Number(timeoutMs) > 0 ? Number(timeoutMs) : Environment.isWebOS() ? 5000 : 0;
@@ -12559,26 +12574,52 @@ export const PlayerScreen = {
       }
       const body = await response.text();
       const contentType = String(response.headers?.get("content-type") || "").toLowerCase();
-      return this.createSubtitleObjectUrl(body, original, contentType);
+      return { body, sourceUrl: original, contentType, resolvedUrl: response.url || original };
     } catch (directError) {
       if (Environment.isWebOS()) {
         try {
           const resolved = await localMediaSubtitleRepository.getExternalSubtitleText(original);
-          return this.createSubtitleObjectUrl(resolved.body, original, resolved.contentType);
+          return {
+            body: resolved.body,
+            sourceUrl: original,
+            contentType: resolved.contentType,
+            resolvedUrl: resolved.resolvedUrl || original
+          };
         } catch (proxyError) {
           console.warn("webOS subtitle resolver failed", {
             subtitleUrl: original,
             directError: directError?.message || String(directError || ""),
             proxyError: proxyError?.message || String(proxyError || "")
           });
-          return "";
+          return null;
         }
       }
-      return original;
+      throw directError;
     } finally {
       if (requestTimeoutId) {
         clearTimeout(requestTimeoutId);
       }
+    }
+  },
+
+  async resolveSubtitlePlaybackUrl(url, { timeoutMs = 0 } = {}) {
+    const original = String(url || "").trim();
+    if (!original) {
+      return "";
+    }
+    if (/^(blob:|data:)/i.test(original)) {
+      return original;
+    }
+    try {
+      const raw = await this.fetchSubtitleRawBody(url, { timeoutMs });
+      if (!raw) {
+        return "";
+      }
+      return this.createSubtitleObjectUrl(raw.body, raw.sourceUrl, raw.contentType);
+    } catch (_) {
+      // Direct fetch failed on a non-webOS platform: fall back to the
+      // original URL so the browser <track> can try it directly.
+      return original;
     }
   },
 
@@ -12650,6 +12691,74 @@ export const PlayerScreen = {
         ""
       )
     ).trim();
+  },
+
+  getAssSubtitleContainer() {
+    return this.uiRefs?.assSubtitles || document.getElementById("playerAssSubtitles");
+  },
+
+  destroyAssSubtitleRenderer(renderer = null) {
+    // A stale async activation may finish after a newer selection replaced
+    // this.assSubtitleRenderer. Destroy only the instance owned by that
+    // activation; never hide or clear the newer renderer's container.
+    if (renderer && this.assSubtitleRenderer !== renderer) {
+      renderer.destroy?.();
+      return;
+    }
+    if (this.assSubtitleRenderer) {
+      this.assSubtitleRenderer.destroy();
+      this.assSubtitleRenderer = null;
+    }
+    const node = this.getAssSubtitleContainer();
+    if (node) {
+      node.classList.add("hidden");
+      node.setAttribute("aria-hidden", "true");
+    }
+  },
+
+  showAssSubtitleContainer() {
+    const node = this.getAssSubtitleContainer();
+    if (node) {
+      node.classList.remove("hidden");
+      node.setAttribute("aria-hidden", "false");
+    }
+  },
+
+  isAssAddonSubtitleActive() {
+    return Boolean(this.assSubtitleRenderer?.active);
+  },
+
+  /**
+   * Render a detected ASS body through ass.js. Returns { applied } —
+   * applied=true means ass.js owns this selection; applied=false means the
+   * caller must fall back, using the returned fallbackVtt (plain-text VTT
+   * converted from Dialogue events, never raw ASS text).
+   */
+  async applyAssSubtitleBody({ body, selectionToken }) {
+    const isCurrentSelection = () => Number(selectionToken) === Number(this.subtitleSelectionToken);
+    this.destroyAssSubtitleRenderer();
+    const container = this.getAssSubtitleContainer();
+    const video = PlayerController.video;
+    const renderer = createAssRenderer({
+      body,
+      video,
+      container,
+      selectionToken,
+      isCurrentSelection
+    });
+    if (!renderer || typeof renderer.init !== "function") {
+      return { applied: false, fallbackVtt: convertAssBodyToVtt(body) };
+    }
+    this.assSubtitleRenderer = renderer;
+    const result = await renderer.init();
+    if (!result.ok || !isCurrentSelection()) {
+      const fallbackVtt = convertAssBodyToVtt(body);
+      this.destroyAssSubtitleRenderer(renderer);
+      return { applied: false, fallbackVtt };
+    }
+    renderer.setDelay(this.subtitleDelayMs);
+    this.showAssSubtitleContainer();
+    return { applied: true };
   },
 
   parseSubtitleCues(content = "") {
@@ -13126,6 +13235,106 @@ export const PlayerScreen = {
       return false;
     }
     const subtitleId = subtitle?.id || subtitle?.url || `subtitle-${subtitleIndex}`;
+    const sourceUrl = String(subtitle?.url || "");
+
+    // ASS branch: fetch the raw body and render through ass.js when
+    // detected. Native AVPlay subtitle handling cannot consume ASS text,
+    // so the HTML overlay (or ass.js overlay) is the only presentation.
+    if (Environment.isWebOS() || (Environment.isTizen() && PlayerController.isUsingAvPlay?.())) {
+      let raw = null;
+      try {
+        raw = await this.fetchSubtitleRawBody(sourceUrl);
+      } catch (assFetchError) {
+        if (!isCurrentSelection()) {
+          return false;
+        }
+        console.warn("ASS subtitle fetch failed", {
+          subtitleUrl: sourceUrl,
+          error: assFetchError?.message || String(assFetchError || "")
+        });
+        // Fall through to the existing HTML subtitle path.
+      }
+      if (
+        raw?.body != null &&
+        isAssSubtitle(raw.body, { sourceUrl, contentType: raw.contentType })
+      ) {
+        if (!isCurrentSelection()) {
+          return false;
+        }
+        this.clearMountedExternalSubtitleTracks();
+        this.clearHtmlSubtitleOverlay();
+        if (typeof PlayerController.setAvPlaySubtitleTrack === "function") {
+          PlayerController.setAvPlaySubtitleTrack(-1);
+        }
+        const assResult = await this.applyAssSubtitleBody({
+          body: raw.body,
+          selectionToken
+        });
+        if (assResult.applied && isCurrentSelection()) {
+          this.selectedAddonSubtitleId = subtitleId;
+          this.selectedSubtitleTrackIndex = -1;
+          this.selectedEmbeddedSubtitleTrackIndex = -1;
+          this.selectedManifestSubtitleTrackId = null;
+          this.invalidateTrackDialogCaches();
+          this.renderControlButtons();
+          this.renderSubtitleDialog();
+          return true;
+        }
+        // ass.js unavailable or stale: plain-text VTT fallback below.
+        const fallbackCues = this.parseSubtitleCues(assResult.fallbackVtt || "");
+        if (fallbackCues.length && isCurrentSelection()) {
+          this.clearMountedExternalSubtitleTracks();
+          this.clearHtmlSubtitleOverlay();
+          this.destroyAssSubtitleRenderer();
+          this.htmlSubtitleCues = fallbackCues;
+          this.htmlSubtitleSelectedId = subtitleId;
+          this.selectedAddonSubtitleId = subtitleId;
+          this.selectedSubtitleTrackIndex = -1;
+          this.selectedEmbeddedSubtitleTrackIndex = -1;
+          this.selectedManifestSubtitleTrackId = null;
+          this.renderHtmlSubtitleOverlayCue([]);
+          this.scheduleHtmlSubtitleOverlayRender();
+          this.invalidateTrackDialogCaches();
+          this.refreshSubtitleCueStyles();
+          this.renderControlButtons();
+          this.renderSubtitleDialog();
+          return true;
+        }
+        console.warn("ASS subtitle fallback produced no cues", { subtitleUrl: sourceUrl });
+        return false;
+      }
+      if (raw?.body != null) {
+        // Non-ASS body already fetched: parse cues directly, no second
+        // network round trip.
+        if (!isCurrentSelection()) {
+          return false;
+        }
+        const cues = this.parseSubtitleCues(raw.body);
+        if (!cues.length) {
+          throw new Error("HTML subtitle fetch returned no cues");
+        }
+        this.clearMountedExternalSubtitleTracks();
+        this.clearHtmlSubtitleOverlay();
+        this.destroyAssSubtitleRenderer();
+        if (typeof PlayerController.setAvPlaySubtitleTrack === "function") {
+          PlayerController.setAvPlaySubtitleTrack(-1);
+        }
+        this.htmlSubtitleCues = cues;
+        this.htmlSubtitleSelectedId = subtitleId;
+        this.selectedAddonSubtitleId = subtitleId;
+        this.selectedSubtitleTrackIndex = -1;
+        this.selectedEmbeddedSubtitleTrackIndex = -1;
+        this.selectedManifestSubtitleTrackId = null;
+        this.renderHtmlSubtitleOverlayCue([]);
+        this.scheduleHtmlSubtitleOverlayRender();
+        this.invalidateTrackDialogCaches();
+        this.refreshSubtitleCueStyles();
+        this.renderControlButtons();
+        this.renderSubtitleDialog();
+        return true;
+      }
+    }
+
     const subtitleUrl = Environment.isTizen()
       ? await this.resolveTizenAvPlaySubtitleUrl(subtitle?.url)
       : await this.resolveSubtitlePlaybackUrl(subtitle?.url);
@@ -13146,6 +13355,7 @@ export const PlayerScreen = {
     }
     this.clearMountedExternalSubtitleTracks();
     this.clearHtmlSubtitleOverlay();
+    this.destroyAssSubtitleRenderer();
     if (typeof PlayerController.setAvPlaySubtitleTrack === "function") {
       PlayerController.setAvPlaySubtitleTrack(-1);
     }
@@ -14902,6 +15112,14 @@ export const PlayerScreen = {
         verticalOffsetContract: defaults.verticalOffsetContract
       };
     }
+    if (
+      (controlId === "delay" || controlId === "resetDelay" || controlId === "reset") &&
+      this.isAssAddonSubtitleActive()
+    ) {
+      // ass.js delay is seconds, positive = later; update in place instead
+      // of recreating the renderer.
+      this.assSubtitleRenderer?.setDelay(this.subtitleDelayMs);
+    }
 
     if (controlId !== "delay" && controlId !== "reset") {
       this.subtitleStyleSettings = style;
@@ -14989,6 +15207,9 @@ export const PlayerScreen = {
       return;
     }
     this.subtitleDelayMs = 0;
+    if (this.isAssAddonSubtitleActive()) {
+      this.assSubtitleRenderer?.setDelay(0);
+    }
     this.applySubtitlePresentationSettings({ refreshTrackRendering: true });
   },
 
@@ -15095,6 +15316,7 @@ export const PlayerScreen = {
     }
 
     if (isEmbeddedEntry) {
+      this.destroyAssSubtitleRenderer();
       const targetTrackIndex = Number(entry.embeddedSubtitleTrackIndex);
       const embeddedTrack = this.getEmbeddedSubtitleTrackByEmbeddedIndex(targetTrackIndex);
       if (embeddedTrack?.bitmapSubtitle) {
@@ -15110,6 +15332,10 @@ export const PlayerScreen = {
     }
     if (!entry.fallbackAddonSubtitle) {
       this.clearHtmlSubtitleOverlay();
+      // A different subtitle kind was selected: retire any active ASS
+      // renderer. The fallbackAddonSubtitle branch re-activates ASS when
+      // the new selection is itself an ASS body.
+      this.destroyAssSubtitleRenderer();
     }
 
     if (Object.prototype.hasOwnProperty.call(entry, "avplaySubtitleTrackIndex")) {
@@ -15351,7 +15577,67 @@ export const PlayerScreen = {
     this.disableEmbeddedSubtitleSelection();
     this.clearMountedExternalSubtitleTracks();
 
-    const resolvedSubtitleUrl = await this.resolveSubtitlePlaybackUrl(subtitle.url);
+    // ASS branch: detect from the raw body and render through ass.js.
+    let assFallbackVtt = "";
+    let rawBody = null;
+    let detectedAss = false;
+    try {
+      const raw = await this.fetchSubtitleRawBody(subtitle.url);
+      rawBody = raw;
+      detectedAss = Boolean(
+        raw?.body != null &&
+        isAssSubtitle(raw.body, { sourceUrl: subtitle.url, contentType: raw.contentType })
+      );
+      if (detectedAss) {
+        if (!isCurrentSelection()) {
+          return;
+        }
+        this.clearHtmlSubtitleOverlay();
+        const assResult = await this.applyAssSubtitleBody({
+          body: raw.body,
+          selectionToken
+        });
+        if (assResult.applied && isCurrentSelection()) {
+          this.selectedAddonSubtitleId = subtitleId;
+          this.selectedSubtitleTrackIndex = -1;
+          this.selectedEmbeddedSubtitleTrackIndex = -1;
+          this.selectedManifestSubtitleTrackId = null;
+          this.renderControlButtons();
+          this.renderSubtitleDialog();
+          return;
+        }
+        assFallbackVtt = assResult.fallbackVtt || "";
+      }
+    } catch (assError) {
+      if (!isCurrentSelection()) {
+        return;
+      }
+      console.warn("ASS subtitle handling failed", {
+        subtitleUrl: subtitle.url,
+        error: assError?.message || String(assError || "")
+      });
+    }
+
+    let resolvedSubtitleUrl = "";
+    if (detectedAss) {
+      if (!assFallbackVtt) {
+        console.warn("ASS subtitle fallback produced no cues", { subtitleUrl: subtitle.url });
+        return;
+      }
+      resolvedSubtitleUrl = URL.createObjectURL(new Blob([assFallbackVtt], { type: "text/vtt" }));
+      this.externalSubtitleObjectUrls.push(resolvedSubtitleUrl);
+    } else if (rawBody?.body == null && rawBody?.sourceUrl) {
+      // blob:/data: URLs were not fetched; preserve the old direct URL path.
+      resolvedSubtitleUrl = rawBody.sourceUrl;
+    } else if (rawBody) {
+      resolvedSubtitleUrl = this.createSubtitleObjectUrl(
+        rawBody.body,
+        rawBody.resolvedUrl || rawBody.sourceUrl,
+        rawBody.contentType
+      );
+    } else {
+      resolvedSubtitleUrl = subtitle.url;
+    }
     if (!isCurrentSelection() || !resolvedSubtitleUrl) {
       return;
     }
@@ -19436,6 +19722,7 @@ export const PlayerScreen = {
       this.subtitleLoading = false;
       this.manifestLoading = false;
       this.clearHtmlSubtitleOverlay();
+      this.destroyAssSubtitleRenderer();
       this.clearBitmapSubtitleOverlay({ dispose: true });
       if (this.releaseImageProxyReadyListener) {
         this.releaseImageProxyReadyListener();

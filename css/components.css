@@ -11416,6 +11416,22 @@ html.legacy-webos .debug-console-log-frame {
   display: none;
 }
 
+.player-ass-subtitles {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  inset: 0;
+  z-index: 12;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.player-ass-subtitles.hidden {
+  display: none;
+}
+
 .player-html-subtitle-cue {
   position: absolute;
   display: flex;
