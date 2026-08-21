@@ -1231,6 +1231,13 @@
     <string name="profile_avatar_category_movie">Movie</string>
     <string name="profile_avatar_category_tv">TV</string>
     <string name="profile_avatar_category_gaming">Gaming</string>
+    <string name="profile_avatar_category_supporter">Supporter</string>
+    <string name="profile_editor_tab_avatar">Avatar</string>
+    <string name="profile_editor_tab_background">Background</string>
+    <string name="profile_choose_background">Choose Background</string>
+    <string name="profile_background_member_note">Supporter backgrounds are available with an active membership.</string>
+    <string name="profile_background_normal">Default</string>
+    <string name="profile_background_custom">Custom URL</string>
     <string name="profile_add_new">Add Profile</string>
     <string name="profile_cancel">Cancel</string>
     <string name="profile_save">Save</string>

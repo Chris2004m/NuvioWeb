@@ -804,6 +804,13 @@
     <string name="profile_avatar_category_movie">Film</string>
     <string name="profile_avatar_category_tv">TV</string>
     <string name="profile_avatar_category_gaming">Videogiochi</string>
+    <string name="profile_avatar_category_supporter">Supporter</string>
+    <string name="profile_editor_tab_avatar">Avatar</string>
+    <string name="profile_editor_tab_background">Sfondo</string>
+    <string name="profile_choose_background">Scegli sfondo</string>
+    <string name="profile_background_member_note">Gli sfondi supporter sono disponibili con un abbonamento attivo.</string>
+    <string name="profile_background_normal">Predefinito</string>
+    <string name="profile_background_custom">URL personalizzato</string>
     <string name="profile_add_new">Aggiungi Profilo</string>
     <string name="profile_cancel">Annulla</string>
     <string name="profile_save">Salva</string>

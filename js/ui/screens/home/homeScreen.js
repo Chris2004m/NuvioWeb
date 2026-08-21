@@ -22,7 +22,9 @@ import { TmdbSettingsStore } from "../../../data/local/tmdbSettingsStore.js";
 import { metaRepository } from "../../../data/repository/metaRepository.js";
 import { mdbListRepository } from "../../../data/repository/mdbListRepository.js";
 import { ProfileManager } from "../../../core/profile/profileManager.js";
+import { StartupSyncService } from "../../../core/profile/startupSyncService.js";
 import { AvatarRepository } from "../../../data/remote/supabase/avatarRepository.js";
+import { MemberAccessRepository } from "../../../data/remote/supabase/memberAccessRepository.js";
 import { Platform } from "../../../platform/index.js";
 import { isFastHorizontalNavigationEnabled } from "../../../platform/sharedKeys.js";
 import { LocalStore } from "../../../core/storage/localStore.js";
@@ -70,6 +72,7 @@ import {
   CW_ENTER_DELAY_MS,
   CW_HOLD_DELAY_MS,
   CW_INITIAL_RESOLVE_BUDGET_MS,
+  CW_INITIAL_RESOLVE_BUDGET_TV_MS,
   CW_MAX_ENRICHMENT_CONCURRENCY,
   CW_MAX_NEXT_UP_CONCURRENCY,
   CW_MAX_NEXT_UP_LOOKUPS,
@@ -173,7 +176,14 @@ function getDirectionFromKeyCode(keyCode) {
 async function getLocalSidebarProfileState() {
   const activeProfileId = String(ProfileManager.getActiveProfileId() || "");
   const profiles = await ProfileManager.getProfiles();
-  const avatarCatalog = await AvatarRepository.getAvatarCatalog().catch(() => []);
+  const memberAccess = await MemberAccessRepository.getAccess().catch(() => null);
+  const hasMemberAvatarAccess = MemberAccessRepository.hasEntitlement(
+    memberAccess,
+    "PROFILE_AVATARS"
+  );
+  const avatarCatalog = await AvatarRepository.getAvatarCatalog(hasMemberAvatarAccess).catch(
+    () => []
+  );
   const activeProfile =
     profiles.find(
       (profile) => String(profile.id || profile.profileIndex || "1") === activeProfileId
@@ -8034,6 +8044,7 @@ export const HomeScreen = {
 
   async mount(params = {}, navigationContext = {}) {
     const mountStart = HOME_PERF_DEBUG ? homePerfNow() : 0;
+    const waitForFreshContinueWatching = Boolean(params?.waitForFreshContinueWatching);
     this.container = document.getElementById("home");
     const restoredRouteFocusState =
       navigationContext?.isBackNavigation && navigationContext?.restoredState?.layoutMode
@@ -8208,16 +8219,18 @@ export const HomeScreen = {
     this.rows = [];
     this.watchedItems = [];
     this.watchedTitleIds = new Set();
-    this.continueWatchingDisplay = readContinueWatchingDisplaySnapshot(
-      watchProgressRepository.getContinueWatchingSourceKey()
+    this.continueWatchingDisplay = waitForFreshContinueWatching
+      ? []
+      : readContinueWatchingDisplaySnapshot(watchProgressRepository.getContinueWatchingSourceKey());
+    this.continueWatchingHydratedFromSnapshot = Boolean(
+      !waitForFreshContinueWatching && this.continueWatchingDisplay.length
     );
-    this.continueWatchingHydratedFromSnapshot = Boolean(this.continueWatchingDisplay.length);
     this.continueWatchingLoading = false;
     this.heroCandidates = [];
     this.heroItem = null;
     this.sidebarProfile = await getLocalSidebarProfileState().catch(() => null);
     this.render();
-    await this.loadData({ background: false });
+    await this.loadData({ background: false, waitForFreshContinueWatching });
     logHomePerf("mount", {
       ms: Number((homePerfNow() - mountStart).toFixed(2)),
       route: "home",
@@ -8226,9 +8239,19 @@ export const HomeScreen = {
     });
   },
 
-  async loadData({ background = false, preserveReturnState = false } = {}) {
+  async loadData({
+    background = false,
+    preserveReturnState = false,
+    waitForFreshContinueWatching = false
+  } = {}) {
     const loadStart = HOME_PERF_DEBUG ? homePerfNow() : 0;
     const token = this.homeLoadToken;
+    if (!background && waitForFreshContinueWatching && StartupSyncService.started) {
+      globalThis.NuvioBootGuard?.stage?.("Synchronizing Continue Watching");
+      await StartupSyncService.requestHomeSyncNow().catch((error) => {
+        console.warn("Initial Continue Watching sync failed", error);
+      });
+    }
     const preserveHomeReturnState = Boolean(background && preserveReturnState);
     const preservedHeroItem = preserveHomeReturnState ? this.heroItem : null;
     const preservedHeroIdentity = preserveHomeReturnState ? buildHeroIdentity(this.heroItem) : "";
@@ -8259,6 +8282,10 @@ export const HomeScreen = {
       ? buildContinueWatchingSignature(this.continueWatchingDisplay)
       : "";
     const waitForInitialContinueWatching = Boolean(!background && !hydratedFromSnapshot);
+    const initialContinueWatchingBudgetMs =
+      Platform.isWebOS() || Platform.isTizen()
+        ? CW_INITIAL_RESOLVE_BUDGET_TV_MS
+        : CW_INITIAL_RESOLVE_BUDGET_MS;
     let initialContinueWatchingReleased = false;
     const releaseInitialHomeAfterContinueWatching = () => {
       if (!waitForInitialContinueWatching || initialContinueWatchingReleased) {
@@ -8525,7 +8552,7 @@ export const HomeScreen = {
           return;
         }
         releaseInitialHomeAfterContinueWatching();
-      }, CW_INITIAL_RESOLVE_BUDGET_MS);
+      }, initialContinueWatchingBudgetMs);
     }
 
     {

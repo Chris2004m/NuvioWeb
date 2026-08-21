@@ -12,6 +12,7 @@ import { TraktCredentialSyncService } from "./traktCredentialSyncService.js";
 import { SimklCredentialSyncService } from "./simklCredentialSyncService.js";
 import { ProviderCredentialSyncService } from "./providerCredentialSyncService.js";
 import { SimklSyncService } from "../../data/repository/simklSyncService.js";
+import { watchProgressRepository } from "../../data/repository/watchProgressRepository.js";
 import { CollectionSyncService } from "./collectionSyncService.js";
 import { HomeCatalogSettingsSyncService } from "./homeCatalogSettingsSyncService.js";
 import { ThemeManager } from "../../ui/theme/themeManager.js";
@@ -56,6 +57,7 @@ export const StartupSyncService = {
   started: false,
   intervalId: null,
   inFlight: false,
+  inFlightPromise: null,
   profileScopedSyncEnabled: false,
   addonPushTimer: null,
   unsubscribeAddonChanges: null,
@@ -105,20 +107,48 @@ export const StartupSyncService = {
   },
 
   async requestSyncNow({ pushAfterPull = false } = {}) {
-    if (!this.started || this.inFlight) {
+    if (!this.started) {
       return false;
     }
-    this.inFlight = true;
-    try {
-      const includeProfileScoped = this.profileScopedSyncEnabled;
-      await this.syncPull({ includeProfileScoped });
-      if (pushAfterPull && includeProfileScoped) {
-        await this.syncPush();
-      }
-      return true;
-    } finally {
-      this.inFlight = false;
+    if (this.inFlightPromise) {
+      return this.inFlightPromise;
     }
+
+    let requestPromise = null;
+    requestPromise = (async () => {
+      this.inFlight = true;
+      try {
+        const includeProfileScoped = this.profileScopedSyncEnabled;
+        await this.syncPull({ includeProfileScoped });
+        if (pushAfterPull && includeProfileScoped) {
+          await this.syncPush();
+        }
+        return true;
+      } finally {
+        this.inFlight = false;
+        if (this.inFlightPromise === requestPromise) {
+          this.inFlightPromise = null;
+        }
+      }
+    })();
+    this.inFlightPromise = requestPromise;
+    return requestPromise;
+  },
+
+  async requestHomeSyncNow() {
+    const synced = await this.requestSyncNow();
+    if (!synced) {
+      return false;
+    }
+
+    // Trakt and Simkl are the active Continue Watching sources in some
+    // profiles, so the Supabase pull above intentionally does not populate
+    // their progress. Warm the same repository Home reads so the first Home
+    // render does not race the provider snapshot request.
+    await watchProgressRepository.getAllForContinueWatching().catch((error) => {
+      console.warn("Initial Continue Watching warm-up failed", error);
+    });
+    return true;
   },
 
   async syncPull({ includeProfileScoped = this.profileScopedSyncEnabled } = {}) {

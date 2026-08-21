@@ -51,6 +51,9 @@ function mapProfileRow(row = {}) {
     avatarColorHex: row.avatar_color_hex || row.avatarColorHex || "#1E88E5",
     avatarId: row.avatar_id || row.avatarId || null,
     avatarUrl: row.avatar_url || row.avatarUrl || null,
+    profileBackgroundId:
+      String(row.profile_background_id || row.profileBackgroundId || "").trim() || null,
+    profileBackgroundUrl: row.profile_background_url || row.profileBackgroundUrl || null,
     usesPrimaryAddons:
       typeof row.uses_primary_addons === "boolean"
         ? row.uses_primary_addons
@@ -122,6 +125,7 @@ export const ProfileSyncService = {
             p_profiles: profiles.map((profile) => {
               const profileIndex = Number(profile.profileIndex || profile.id || 1);
               const avatarUrl = String(profile.avatarUrl || "").trim() || null;
+              const profileBackgroundUrl = String(profile.profileBackgroundUrl || "").trim() || null;
               return {
                 profile_index:
                   Number.isFinite(profileIndex) && profileIndex > 0 ? Math.trunc(profileIndex) : 1,
@@ -129,6 +133,8 @@ export const ProfileSyncService = {
                 avatar_color_hex: profile.avatarColorHex || "#1E88E5",
                 avatar_id: avatarUrl ? null : profile.avatarId || null,
                 avatar_url: avatarUrl,
+                profile_background_id: String(profile.profileBackgroundId || "").trim() || null,
+                profile_background_url: profileBackgroundUrl,
                 uses_primary_addons: Boolean(profile.usesPrimaryAddons),
                 uses_primary_plugins: Boolean(profile.usesPrimaryPlugins)
               };
@@ -145,6 +151,7 @@ export const ProfileSyncService = {
       const rows = profiles.map((profile) => {
         const profileIndex = Number(profile.profileIndex || profile.id || 1);
         const avatarUrl = String(profile.avatarUrl || "").trim() || null;
+        const profileBackgroundUrl = String(profile.profileBackgroundUrl || "").trim() || null;
         return {
           id: profile.id,
           owner_id: ownerId,
@@ -154,6 +161,8 @@ export const ProfileSyncService = {
           avatar_color_hex: profile.avatarColorHex || "#1E88E5",
           avatar_id: avatarUrl ? null : profile.avatarId || null,
           avatar_url: avatarUrl,
+          profile_background_id: String(profile.profileBackgroundId || "").trim() || null,
+          profile_background_url: profileBackgroundUrl,
           uses_primary_addons: Boolean(profile.usesPrimaryAddons),
           uses_primary_plugins: Boolean(profile.usesPrimaryPlugins),
           is_primary: Boolean(profile.isPrimary)
@@ -167,6 +176,8 @@ export const ProfileSyncService = {
         avatar_color_hex: row.avatar_color_hex,
         avatar_id: row.avatar_id || null,
         avatar_url: row.avatar_url || null,
+        profile_background_id: row.profile_background_id || null,
+        profile_background_url: row.profile_background_url || null,
         uses_primary_addons: Boolean(row.uses_primary_addons),
         uses_primary_plugins: Boolean(row.uses_primary_plugins)
       }));
