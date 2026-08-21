@@ -3711,6 +3711,12 @@ export const SettingsScreen = {
         }
       });
     });
+    this.actionMap.set("layout:homeImdbRatings", () => {
+      const current = LayoutPreferences.get().homeImdbRatingsVisibility;
+      LayoutPreferences.set({
+        homeImdbRatingsVisibility: current === "HIDE_ALL" ? "SHOW_ALL" : "HIDE_ALL"
+      });
+    });
     this.actionMap.set("layout:posterLabels", () => {
       LayoutPreferences.set({ posterLabelsEnabled: !LayoutPreferences.get().posterLabelsEnabled });
     });
@@ -3810,6 +3816,7 @@ export const SettingsScreen = {
         : continueWatchingSortMode === "streaming_style"
           ? t("settings.layout.continueWatchingSort.streamingStyle", {}, "Streaming Style")
           : t("settings.layout.continueWatchingSort.default", {}, "Default");
+    const homeRatingsShown = model.layout.homeImdbRatingsVisibility !== "HIDE_ALL";
 
     const homeLayoutBody = `
       <div class="settings-stack">
@@ -3962,6 +3969,18 @@ export const SettingsScreen = {
           title: t("settings.layout.hideUnreleased.title"),
           subtitle: t("settings.layout.hideUnreleased.subtitle"),
           checked: Boolean(model.layout.hideUnreleasedContent)
+        })}
+        ${this.renderToggleRow({
+          focusKey: "layout:homeImdbRatings",
+          title: t("layout_overall_ratings", {}, "Overall Ratings"),
+          subtitle: homeRatingsShown
+            ? t("layout_overall_ratings_sub_on", {}, "Standard and TMDB ratings are shown.")
+            : t(
+                "layout_overall_ratings_sub_off",
+                {},
+                "Standard and TMDB ratings are Hidden. MDBList provider settings take priority on detail pages."
+              ),
+          checked: homeRatingsShown
         })}
       </div>
     `;

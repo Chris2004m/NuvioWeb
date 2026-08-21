@@ -746,6 +746,9 @@ const FEATURE_ADAPTERS = {
         continue_watching_sort_mode: normalizeContinueWatchingSortModeForAndroid(
           layout.continueWatchingSortMode
         ),
+        home_imdb_ratings_visibility: String(
+          layout.homeImdbRatingsVisibility || "SHOW_ALL"
+        ).toUpperCase(),
         fast_horizontal_navigation_enabled: isFastHorizontalNavigationEnabled()
       };
     },
@@ -845,6 +848,13 @@ const FEATURE_ADAPTERS = {
         projected.fast_horizontal_navigation_enabled = Boolean(
           raw.fast_horizontal_navigation_enabled
         );
+      }
+      if (stringOrNull(raw.home_imdb_ratings_visibility)) {
+        projected.home_imdb_ratings_visibility = String(
+          raw.home_imdb_ratings_visibility
+        )
+          .trim()
+          .toUpperCase();
       }
       return projected;
     },
@@ -979,6 +989,11 @@ const FEATURE_ADAPTERS = {
         partial.continueWatchingSortMode = normalizeContinueWatchingSortModeForWeb(
           raw.continue_watching_sort_mode
         );
+      }
+      if (stringOrNull(raw.home_imdb_ratings_visibility)) {
+        partial.homeImdbRatingsVisibility = String(raw.home_imdb_ratings_visibility)
+          .trim()
+          .toUpperCase();
       }
       if (!Object.keys(partial).length) {
         return false;
