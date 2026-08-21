@@ -66,6 +66,47 @@ function isAbsoluteLocalAvPlaySubtitlePath(value) {
   return path.startsWith("/") || /^file:\/\//i.test(path);
 }
 
+function normalizeTizenAvPlayDisplayRect(rect, viewport) {
+  const viewportWidth = Math.max(1, Math.round(Number(viewport?.width || 1920)));
+  const viewportHeight = Math.max(1, Math.round(Number(viewport?.height || 1080)));
+  const rawWidth = Math.max(1, Math.round(Number(rect?.width || viewportWidth)));
+  const rawHeight = Math.max(1, Math.round(Number(rect?.height || viewportHeight)));
+  const width = Math.min(viewportWidth, rawWidth);
+  const height = Math.min(viewportHeight, rawHeight);
+  const maxX = Math.max(0, viewportWidth - width);
+  const maxY = Math.max(0, viewportHeight - height);
+  const rawX = Math.round(Number(rect?.x || 0));
+  const rawY = Math.round(Number(rect?.y || 0));
+
+  return {
+    x: Math.min(maxX, Math.max(0, rawX)),
+    y: Math.min(maxY, Math.max(0, rawY)),
+    width,
+    height
+  };
+}
+
+function syncTizenAvPlayObjectStyle(rect) {
+  const object = globalThis.document?.getElementById?.("avPlayerObject");
+  if (!object?.style || !rect) {
+    return;
+  }
+
+  // Samsung renders AVPlay in the application/avplayer object, not in the
+  // HTML video element. Keep the object CSS rectangle in lockstep with the
+  // native display rectangle as required by the AVPlay API.
+  object.style.position = "fixed";
+  object.style.left = `${rect.x}px`;
+  object.style.top = `${rect.y}px`;
+  object.style.right = "auto";
+  object.style.bottom = "auto";
+  object.style.width = `${rect.width}px`;
+  object.style.height = `${rect.height}px`;
+  object.style.maxWidth = "none";
+  object.style.maxHeight = "none";
+  object.style.transform = "none";
+}
+
 // com.webos.media exposes five discrete subtitle sizes (0=tiny, 4=largest).
 function resolveWebOsSubtitleFontSizeLevel(value) {
   const size = Number(value);
@@ -2229,12 +2270,17 @@ export const PlayerController = {
     if (displayMethod) {
       this.avplayDisplayMethod = String(displayMethod);
     }
-    const targetRect = this.avplayDisplayRect || {
+    let targetRect = this.avplayDisplayRect || {
       x: 0,
       y: 0,
       width: viewport.width,
       height: viewport.height
     };
+    if (Platform.isTizen()) {
+      targetRect = normalizeTizenAvPlayDisplayRect(targetRect, viewport);
+      this.avplayDisplayRect = targetRect;
+      syncTizenAvPlayObjectStyle(targetRect);
+    }
     try {
       avplay.setDisplayRect?.(targetRect.x, targetRect.y, targetRect.width, targetRect.height);
     } catch (_) {
