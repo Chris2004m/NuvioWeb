@@ -11846,8 +11846,10 @@ export const PlayerScreen = {
       }
 
       const now = Date.now();
+      const canDiscoverEmbeddedTracks =
+        this.canDiscoverEmbeddedSubtitleTracks() || this.canDiscoverEmbeddedAudioTracks();
       const shouldRetryEmbeddedTracks =
-        this.canDiscoverEmbeddedSubtitleTracks() &&
+        canDiscoverEmbeddedTracks &&
         this.embeddedSubtitleTracks.length <= 0 &&
         this.embeddedAudioTracks.length <= 0 &&
         !this.embeddedSubtitleLoading &&
