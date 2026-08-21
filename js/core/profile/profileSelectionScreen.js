@@ -2482,11 +2482,9 @@ export const ProfileSelectionScreen = {
           : {},
         experienceRoute === "home" ? {} : { replaceHistory: true, skipStackPush: true }
       );
-      if (!shouldWaitForHomeSync) {
-        void StartupSyncService.requestSyncNow().catch((error) => {
-          console.warn("Profile background sync failed", error);
-        });
-      }
+      void StartupSyncService.requestSyncNow().catch((error) => {
+        console.warn("Profile background sync failed", error);
+      });
     } catch (error) {
       console.warn("Failed to activate profile", error);
       this.isActivatingProfile = false;

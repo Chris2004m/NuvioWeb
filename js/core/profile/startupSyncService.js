@@ -13,6 +13,7 @@ import { SimklCredentialSyncService } from "./simklCredentialSyncService.js";
 import { ProviderCredentialSyncService } from "./providerCredentialSyncService.js";
 import { SimklSyncService } from "../../data/repository/simklSyncService.js";
 import { watchProgressRepository } from "../../data/repository/watchProgressRepository.js";
+import { TraktSettingsStore, WatchProgressSource } from "../../data/local/traktSettingsStore.js";
 import { CollectionSyncService } from "./collectionSyncService.js";
 import { HomeCatalogSettingsSyncService } from "./homeCatalogSettingsSyncService.js";
 import { ThemeManager } from "../../ui/theme/themeManager.js";
@@ -59,6 +60,7 @@ export const StartupSyncService = {
   intervalId: null,
   inFlight: false,
   inFlightPromise: null,
+  continueWatchingInFlightPromise: null,
   profileScopedSyncEnabled: false,
   addonPushTimer: null,
   unsubscribeAddonChanges: null,
@@ -114,6 +116,12 @@ export const StartupSyncService = {
     if (this.inFlightPromise) {
       return this.inFlightPromise;
     }
+    if (this.continueWatchingInFlightPromise) {
+      await this.continueWatchingInFlightPromise.catch(() => false);
+      if (this.inFlightPromise) {
+        return this.inFlightPromise;
+      }
+    }
 
     let requestPromise = null;
     requestPromise = (async () => {
@@ -136,16 +144,62 @@ export const StartupSyncService = {
     return requestPromise;
   },
 
+  async requestContinueWatchingSyncNow() {
+    if (!this.started || !AuthManager.isAuthenticated) {
+      return false;
+    }
+    if (this.inFlightPromise) {
+      return this.inFlightPromise;
+    }
+    if (this.continueWatchingInFlightPromise) {
+      return this.continueWatchingInFlightPromise;
+    }
+
+    let requestPromise = null;
+    requestPromise = (async () => {
+      try {
+        const activeProfileId = ProfileManager.getActiveProfileId();
+
+        // The active profile's settings determine which Continue Watching
+        // source Home must read. Other profile settings remain background work.
+        await ProfileSettingsSyncService.pull(activeProfileId);
+
+        const requestedSource = TraktSettingsStore.get().watchProgressSource;
+        if (requestedSource === WatchProgressSource.TRAKT) {
+          await TraktCredentialSyncService.pullFromRemote(activeProfileId);
+        } else if (requestedSource === WatchProgressSource.SIMKL) {
+          await SimklCredentialSyncService.pullFromRemote(activeProfileId);
+        }
+
+        // Nuvio progress is stored in the synced local repository. Trakt and
+        // Simkl are fetched by watchProgressRepository when it is warmed below.
+        if (
+          watchProgressRepository.getContinueWatchingSource() === WatchProgressSource.NUVIO_SYNC
+        ) {
+          await WatchProgressSyncService.pull();
+        }
+        return true;
+      } catch (error) {
+        console.warn("Continue Watching sync failed", error);
+        return false;
+      } finally {
+        if (this.continueWatchingInFlightPromise === requestPromise) {
+          this.continueWatchingInFlightPromise = null;
+        }
+      }
+    })();
+    this.continueWatchingInFlightPromise = requestPromise;
+    return requestPromise;
+  },
+
   async requestHomeSyncNow() {
-    const synced = await this.requestSyncNow();
+    const synced = await this.requestContinueWatchingSyncNow();
     if (!synced) {
       return false;
     }
 
-    // Trakt and Simkl are the active Continue Watching sources in some
-    // profiles, so the Supabase pull above intentionally does not populate
-    // their progress. Warm the same repository Home reads so the first Home
-    // render does not race the provider snapshot request.
+    // Warm the same repository Home reads so the first Home render does not
+    // race the provider snapshot request for Trakt or Simkl profiles.
     await watchProgressRepository.getAllForContinueWatching().catch((error) => {
       console.warn("Initial Continue Watching warm-up failed", error);
     });

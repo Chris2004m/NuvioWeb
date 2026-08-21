@@ -266,11 +266,9 @@ async function enterWithLastProfile({ restoreWebOsRoute = false } = {}) {
     );
   }
 
-  if (!shouldWaitForHomeSync) {
-    void StartupSyncService.requestSyncNow().catch((error) => {
-      console.warn("Profile background sync failed", error);
-    });
-  }
+  void StartupSyncService.requestSyncNow().catch((error) => {
+    console.warn("Profile background sync failed", error);
+  });
 }
 
 async function routeAfterAuthentication() {
