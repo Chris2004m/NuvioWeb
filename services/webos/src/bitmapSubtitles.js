@@ -968,9 +968,7 @@ function uniqueFramesInRange(frames, startMs, endMs) {
 function isTextSubtitleTrack(track) {
   var codecId = String((track && track.codecId) || "");
   return Boolean(
-    track &&
-    track.type === 0x11 &&
-    (/^S_TEXT\//i.test(codecId) || isAssSubtitleCodec(codecId))
+    track && track.type === 0x11 && (/^S_TEXT\//i.test(codecId) || isAssSubtitleCodec(codecId))
   );
 }
 
