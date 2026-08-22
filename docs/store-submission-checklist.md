@@ -10,11 +10,9 @@ The locally prepared visual and metadata draft is in [`store-assets/`](../store-
 
 - The declared minimum remains Tizen 4.0+.
 - `npm run package:tizen` creates an unsigned development WGT with EngineFS enabled for local testing.
-- `npm run package:tizen:store` creates a public-store profile through the official Tizen CLI, requires a security profile, verifies `author-signature.xml` and `signature1.xml`, and fails if either signature is absent.
-- The public-store profile does not package the EngineFS `tizen:service`, `web.service` feature, or `application.launch` privilege. Torrent/P2P is therefore reported as unavailable at runtime, including on Tizen 5+, unless Samsung has explicitly approved the partner-service route.
+- `npm run package:tizen:store` creates the Store-signed profile through the official Tizen CLI, requires a security profile, verifies `author-signature.xml` and `signature1.xml`, and fails if either signature is absent.
+- The Store profile packages the local EngineFS `tizen:service`, the `web.service` feature, and the `application.launch` privilege. Torrent/P2P therefore remains available on capable Tizen 5+ TVs and is unavailable only on Tizen 4, where the runtime capability gate intentionally reports the feature as unsupported.
 - `auto-restart` and `on-boot` are disabled in generated Tizen service metadata.
-
-If Samsung confirms that the publisher is an approved TV partner and authorizes the service, the approved `tizen:metadata` element and the existing certificate profile must be supplied before enabling that route.
 
 ### LG webOS
 
