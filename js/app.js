@@ -231,9 +231,7 @@ async function enterWithLastProfile({ restoreWebOsRoute = false } = {}) {
       console.warn("Stream badge image prerender failed", error);
     });
   }
-  const experienceRoute = activeProfile
-    ? await resolveExperienceRoute(activeProfile.id)
-    : "home";
+  const experienceRoute = activeProfile ? await resolveExperienceRoute(activeProfile.id) : "home";
   const resumeRoute =
     restoreWebOsRoute && typeof Router.consumeWebOsResumeRoute === "function"
       ? Router.consumeWebOsResumeRoute()
@@ -418,8 +416,7 @@ function setupWebOsAppLifecycle() {
 }
 
 function setupProviderCredentialForegroundLifecycle() {
-  let wasBackgrounded =
-    document.visibilityState === "hidden" || document.webkitHidden === true;
+  let wasBackgrounded = document.visibilityState === "hidden" || document.webkitHidden === true;
   const requestAfterBackground = () => {
     if (!wasBackgrounded) return;
     wasBackgrounded = false;

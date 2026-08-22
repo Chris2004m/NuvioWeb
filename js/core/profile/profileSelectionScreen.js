@@ -267,7 +267,9 @@ function getAvatarCategories(avatars) {
     "all",
     ...PINNED_AVATAR_CATEGORIES.filter((category) => uniqueCategories.includes(category)),
     ...uniqueCategories
-      .filter((category) => category !== "supporter" && !PINNED_AVATAR_CATEGORIES.includes(category))
+      .filter(
+        (category) => category !== "supporter" && !PINNED_AVATAR_CATEGORIES.includes(category)
+      )
       .sort((left, right) => left.localeCompare(right))
   ];
   if (hasMemberAvatars) {
@@ -432,10 +434,7 @@ export const ProfileSelectionScreen = {
     const previousBackgroundAccess = Boolean(this.hasProfileBackgroundAccess);
     const access = await MemberAccessRepository.getAccess().catch(() => this.memberAccess);
     this.memberAccess = access;
-    this.hasProfileAvatarAccess = MemberAccessRepository.hasEntitlement(
-      access,
-      "PROFILE_AVATARS"
-    );
+    this.hasProfileAvatarAccess = MemberAccessRepository.hasEntitlement(access, "PROFILE_AVATARS");
     this.hasProfileBackgroundAccess = MemberAccessRepository.hasEntitlement(
       access,
       "PROFILE_BACKGROUNDS"
@@ -517,9 +516,7 @@ export const ProfileSelectionScreen = {
     if (!selectedId) {
       return null;
     }
-    return (
-      this.profileBackgroundCatalog.find((background) => background.id === selectedId) || null
-    );
+    return this.profileBackgroundCatalog.find((background) => background.id === selectedId) || null;
   },
 
   getEditorBackgroundPreviewUrl() {
@@ -2353,9 +2350,7 @@ export const ProfileSelectionScreen = {
           this.editorState.selectedBackgroundUrl = customUrl;
         }
       } else {
-        const background = this.profileBackgroundCatalog.find(
-          (entry) => entry.id === backgroundId
-        );
+        const background = this.profileBackgroundCatalog.find((entry) => entry.id === backgroundId);
         if (!background) {
           return;
         }

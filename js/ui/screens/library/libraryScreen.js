@@ -400,14 +400,14 @@ export const LibraryScreen = {
         : picker === "cloud_type"
           ? state.selectedCloudType || "__all__"
           : picker === "list"
-        ? state.selectedListKey
-        : picker === "type"
-          ? state.selectedTypeKey
-          : picker === "genre"
-            ? state.selectedGenre || "__all__"
-            : picker === "year"
-              ? state.selectedYear || "__all__"
-              : state.selectedSortKey;
+            ? state.selectedListKey
+            : picker === "type"
+              ? state.selectedTypeKey
+              : picker === "genre"
+                ? state.selectedGenre || "__all__"
+                : picker === "year"
+                  ? state.selectedYear || "__all__"
+                  : state.selectedSortKey;
     const selectedIndex = Math.max(
       0,
       options.findIndex((option) => option.value === currentValue)
@@ -431,9 +431,8 @@ export const LibraryScreen = {
   renderPickerGroups(state) {
     if (state.viewMode === LIBRARY_VIEW_MODE.CLOUD) {
       const providerLabel =
-        state.availableCloudProviders.find(
-          (option) => option.key === state.selectedCloudProviderId
-        )?.label || t("cloud_library_provider_all", {}, "All");
+        state.availableCloudProviders.find((option) => option.key === state.selectedCloudProviderId)
+          ?.label || t("cloud_library_provider_all", {}, "All");
       const typeLabel =
         state.availableCloudTypes.find((option) => option.key === state.selectedCloudType)?.label ||
         t("cloud_library_type_all", {}, "All");

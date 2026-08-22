@@ -479,8 +479,7 @@ const SUBTITLE_TEXT_COLOR_OPTIONS = [
 
 const SUBTITLE_TEXT_OPACITY_OPTIONS = Array.from(
   {
-    length:
-      (SUBTITLE_TEXT_OPACITY_MAX - SUBTITLE_TEXT_OPACITY_MIN) / SUBTITLE_TEXT_OPACITY_STEP + 1
+    length: (SUBTITLE_TEXT_OPACITY_MAX - SUBTITLE_TEXT_OPACITY_MIN) / SUBTITLE_TEXT_OPACITY_STEP + 1
   },
   (_, index) => {
     const value = SUBTITLE_TEXT_OPACITY_MIN + index * SUBTITLE_TEXT_OPACITY_STEP;
@@ -3518,13 +3517,15 @@ export const SettingsScreen = {
         </div>
         <div class="settings-horizontal-scroll-frame">
           <div class="settings-theme-row">
-            ${themeOptions.map((theme) =>
-              this.renderThemeCard(
-                theme,
-                String(model.theme.themeName).toUpperCase() === theme.id,
-                `appearance:theme:${theme.id}`
+            ${themeOptions
+              .map((theme) =>
+                this.renderThemeCard(
+                  theme,
+                  String(model.theme.themeName).toUpperCase() === theme.id,
+                  `appearance:theme:${theme.id}`
+                )
               )
-            ).join("")}
+              .join("")}
           </div>
           ${settingsScrollIndicatorMarkup("horizontal")}
         </div>
@@ -6033,9 +6034,7 @@ export const SettingsScreen = {
       this.openOptionDialog({
         title: t("subtitle_style_text_opacity", {}, "Text Opacity"),
         options: SUBTITLE_TEXT_OPACITY_OPTIONS,
-        selectedId: clampSubtitleTextOpacity(
-          PlayerSettingsStore.get().subtitleStyle?.textOpacity
-        ),
+        selectedId: clampSubtitleTextOpacity(PlayerSettingsStore.get().subtitleStyle?.textOpacity),
         returnFocusKey: "playback:subtitleTextOpacity",
         onSelect: (option) => {
           updateSubtitleStyle({ textOpacity: clampSubtitleTextOpacity(option.id) });
@@ -6154,11 +6153,7 @@ export const SettingsScreen = {
             title: t("essential_p2p_streams", {}, "P2P streams"),
             subtitle: tizenP2pUnsupported
               ? p2pUnavailableSubtitle
-              : t(
-                  "essential_p2p_streams_subtitle",
-                  {},
-                  "Allow peer-to-peer stream playback."
-                ),
+              : t("essential_p2p_streams_subtitle", {}, "Allow peer-to-peer stream playback."),
             checked: tizenP2pUnsupported ? false : Boolean(torrentSettings.p2pEnabled),
             disabled: tizenP2pUnsupported
           })}

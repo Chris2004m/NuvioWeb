@@ -135,7 +135,9 @@ export const ProfileBackgroundRepository = {
     if (selected) {
       await loadAndPublish(selected);
     }
-    await Promise.all(catalog.filter((item) => item !== selected).map((item) => loadAndPublish(item)));
+    await Promise.all(
+      catalog.filter((item) => item !== selected).map((item) => loadAndPublish(item))
+    );
     return catalog;
   },
 

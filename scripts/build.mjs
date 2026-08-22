@@ -467,9 +467,7 @@ async function buildCoreJsBundle() {
 
 async function buildAssSubtitleLibrary() {
   await build({
-    entryPoints: [
-      path.join(rootDir, "node_modules", "assjs", "dist", "ass.global.min.js")
-    ],
+    entryPoints: [path.join(rootDir, "node_modules", "assjs", "dist", "ass.global.min.js")],
     outfile: path.join(distDir, "assets", "libs", "ass.min.js"),
     minify: !debugBundle,
     target: [`chrome${compatibilityPolicy.chromiumVersion}`],

@@ -85,8 +85,7 @@ function validateTargetUrl(rawUrl, method) {
   }
   var isSupabaseTarget =
     isAllowedSupabaseHost(parsed.hostname) &&
-    (parsed.pathname.indexOf("/rest/v1/") === 0 ||
-      parsed.pathname.indexOf("/storage/v1/") === 0);
+    (parsed.pathname.indexOf("/rest/v1/") === 0 || parsed.pathname.indexOf("/storage/v1/") === 0);
   var isDebridTarget = isAllowedDebridTarget(parsed);
   if (!isSupabaseTarget && !isDebridTarget) {
     return { ok: false, statusCode: 403, message: "Proxy target is not allowed" };

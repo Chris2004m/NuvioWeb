@@ -3360,11 +3360,7 @@ export const PlayerScreen = {
   isNextEpisodeCardFocusable() {
     const card = this.uiRefs?.nextEpisodeCard;
     const target = card?.querySelector(".player-next-episode-card-inner.is-playable");
-    return Boolean(
-      target &&
-      target.isConnected &&
-      !card.classList.contains("hidden")
-    );
+    return Boolean(target && target.isConnected && !card.classList.contains("hidden"));
   },
 
   syncSkipIntroFocusState() {
@@ -4222,7 +4218,7 @@ export const PlayerScreen = {
         : null;
     return Boolean(
       isLikelyDashMimeType.call(PlayerController, declaredSourceType) ||
-        isLikelyDashMimeType.call(PlayerController, inferredSourceType)
+      isLikelyDashMimeType.call(PlayerController, inferredSourceType)
     );
   },
 
@@ -4476,9 +4472,9 @@ export const PlayerScreen = {
   isTizenDashSubtitleSwitchingUnsupported() {
     return Boolean(
       Environment.isTizen() &&
-        this.isCurrentSourceLikelyDash() &&
-        typeof PlayerController.isUsingAvPlay === "function" &&
-        PlayerController.isUsingAvPlay()
+      this.isCurrentSourceLikelyDash() &&
+      typeof PlayerController.isUsingAvPlay === "function" &&
+      PlayerController.isUsingAvPlay()
     );
   },
 
@@ -7158,7 +7154,10 @@ export const PlayerScreen = {
     const shouldReturnToLibrary = !forceDetail && this.params?.returnToLibraryOnBack === true;
     const shouldReturnToHome = !forceDetail && this.params?.returnToHomeOnBack === true;
     const shouldReturnToStream =
-      !shouldReturnToLibrary && !shouldReturnToHome && !forceDetail && this.shouldReturnToStreamOnBack();
+      !shouldReturnToLibrary &&
+      !shouldReturnToHome &&
+      !forceDetail &&
+      this.shouldReturnToStreamOnBack();
     Router.suppressNextPopstate?.(1500);
     Router.ignoreSinglePopstate?.();
     const targetRoute = shouldReturnToHome
@@ -11259,25 +11258,24 @@ export const PlayerScreen = {
                 "Torrent/P2P streaming is not supported on this TV."
               )
             : !p2pEnabled && canResolveP2p
-            ? t(
-                "player_error_p2p_disabled",
-                {},
-                "P2P streaming is disabled. Enable P2P in Settings to play torrent streams."
-              )
-            : canUseP2p
               ? t(
-                  "player_error_failed_start_torrent",
-                  [t("player_error_playback_fallback", {}, "Playback error")],
-                  "Failed to start torrent: %1$s"
+                  "player_error_p2p_disabled",
+                  {},
+                  "P2P streaming is disabled. Enable P2P in Settings to play torrent streams."
                 )
-              : t("player_error_playback_fallback", {}, "Playback error"));
+              : canUseP2p
+                ? t(
+                    "player_error_failed_start_torrent",
+                    [t("player_error_playback_fallback", {}, "Playback error")],
+                    "Failed to start torrent: %1$s"
+                  )
+                : t("player_error_playback_fallback", {}, "Playback error"));
         if (!this.hasPresentedPlaybackFrame) {
           this.showStartupError(startupMessage, {
             streamCandidate,
-            reason:
-              tizenP2pUnsupported
-                ? "tizen-p2p-unsupported"
-                : !p2pEnabled && canResolveP2p
+            reason: tizenP2pUnsupported
+              ? "tizen-p2p-unsupported"
+              : !p2pEnabled && canResolveP2p
                 ? "p2p-disabled"
                 : canUseP2p
                   ? "p2p-resolve"
@@ -11287,14 +11285,13 @@ export const PlayerScreen = {
           });
           return;
         }
-        const sourceErrorMessage =
-          tizenP2pUnsupported
-            ? t(
-                "player_error_tizen_p2p_unsupported",
-                {},
-                "Torrent/P2P streaming is not supported on this TV."
-              )
-            : !p2pEnabled && canResolveP2p
+        const sourceErrorMessage = tizenP2pUnsupported
+          ? t(
+              "player_error_tizen_p2p_unsupported",
+              {},
+              "Torrent/P2P streaming is not supported on this TV."
+            )
+          : !p2pEnabled && canResolveP2p
             ? t(
                 "player_error_p2p_disabled",
                 {},
@@ -11310,10 +11307,9 @@ export const PlayerScreen = {
                 );
         this.sourcesError = this.formatPlaybackErrorForSources(sourceErrorMessage, {
           streamCandidate,
-          reason:
-            tizenP2pUnsupported
-              ? "tizen-p2p-unsupported"
-              : !p2pEnabled && canResolveP2p
+          reason: tizenP2pUnsupported
+            ? "tizen-p2p-unsupported"
+            : !p2pEnabled && canResolveP2p
               ? "p2p-disabled"
               : canUseP2p
                 ? "p2p-resolve"
@@ -15628,9 +15624,7 @@ export const PlayerScreen = {
       ? "html"
       : PlayerController.getAvPlaySubtitleOutputMode?.() || "none";
     const usingWebOsNative = Boolean(
-      Environment.isWebOS() &&
-        PlayerController.isUsingNativePlayback?.() &&
-        !htmlRendererActive
+      Environment.isWebOS() && PlayerController.isUsingNativePlayback?.() && !htmlRendererActive
     );
     const availability = resolveSubtitleStyleControlAvailability({
       isTizenAvPlay: usingTizenAvPlay,
@@ -15639,11 +15633,7 @@ export const PlayerScreen = {
       supportsExternalDelay: PlayerController.supportsAvPlayExternalSubtitleDelay?.() === true
     });
     const unavailableValue = TizenCapabilities.isAdvancedSubtitleStylingLimited()
-      ? t(
-          "player_subtitle_tizen_advanced_unavailable_short",
-          {},
-          "Not fully supported on this TV"
-        )
+      ? t("player_subtitle_tizen_advanced_unavailable_short", {}, "Not fully supported on this TV")
       : t("subtitle_style_unavailable_native", {}, "Unavailable with native subtitles");
     return [
       {
@@ -17371,12 +17361,7 @@ export const PlayerScreen = {
                 ? `${entry.label || ""} · ${t("player.audio.unsupported", {}, "Unsupported")}`
                 : entry.label || "";
               const secondary = disabled
-                ? [
-                    entry.secondary,
-                    unsupportedText
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")
+                ? [entry.secondary, unsupportedText].filter(Boolean).join(" · ")
                 : entry.secondary || "";
               return `
               <div class="player-dialog-item focusable${selected ? " selected" : ""}${focused ? " focused" : ""}${disabled ? " disabled" : ""}${pending ? " pending" : ""}" data-audio-column="tracks" data-audio-index="${index}" aria-disabled="${disabled ? "true" : "false"}" aria-busy="${pending ? "true" : "false"}">

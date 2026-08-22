@@ -125,7 +125,8 @@ export const ProfileSyncService = {
             p_profiles: profiles.map((profile) => {
               const profileIndex = Number(profile.profileIndex || profile.id || 1);
               const avatarUrl = String(profile.avatarUrl || "").trim() || null;
-              const profileBackgroundUrl = String(profile.profileBackgroundUrl || "").trim() || null;
+              const profileBackgroundUrl =
+                String(profile.profileBackgroundUrl || "").trim() || null;
               return {
                 profile_index:
                   Number.isFinite(profileIndex) && profileIndex > 0 ? Math.trunc(profileIndex) : 1,

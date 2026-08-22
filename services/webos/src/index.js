@@ -179,7 +179,12 @@ function registerSafeHttpProxyCommand(commandName) {
             supabaseProxy: true,
             statusCode: result ? result.statusCode || 0 : 0,
             headers: result ? result.headers || {} : {},
-            body: result && Buffer.isBuffer(result.body) ? result.body.toString("base64") : result ? result.body || "" : "",
+            body:
+              result && Buffer.isBuffer(result.body)
+                ? result.body.toString("base64")
+                : result
+                  ? result.body || ""
+                  : "",
             bodyEncoding: result && Buffer.isBuffer(result.body) ? "base64" : "utf8"
           })
         );

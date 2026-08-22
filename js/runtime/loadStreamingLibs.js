@@ -55,7 +55,7 @@ function ensureStreamingLibrary(entry) {
   if (entry.loadingPromise) {
     return entry.loadingPromise;
   }
-    const loadingPromise = loadStreamingLibrary(entry).finally(() => {
+  const loadingPromise = loadStreamingLibrary(entry).finally(() => {
     if (entry.loadingPromise === loadingPromise) {
       entry.loadingPromise = null;
     }
@@ -65,10 +65,7 @@ function ensureStreamingLibrary(entry) {
 }
 
 export async function loadStreamingLibs({ hls = true, dash = true } = {}) {
-  const requiredLibraryIds = new Set([
-    ...(hls ? ["hls"] : []),
-    ...(dash ? ["dash"] : [])
-  ]);
+  const requiredLibraryIds = new Set([...(hls ? ["hls"] : []), ...(dash ? ["dash"] : [])]);
   for (const entry of STREAMING_LIBS) {
     if (!requiredLibraryIds.has(entry.id) || entry.isLoaded()) {
       continue;

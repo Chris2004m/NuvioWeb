@@ -8,7 +8,7 @@
     Bring your own sources. Nuvio turns them into a TV library with artwork, ratings, subtitles, and saved progress.
   </p>
 
-  [Website](https://nuvio.tv) · [GitHub releases](https://github.com/NuvioMedia/NuvioWeb/releases/latest) · [Support Nuvio](https://nuvio.tv/support)
+[Website](https://nuvio.tv) · [GitHub releases](https://github.com/NuvioMedia/NuvioWeb/releases/latest) · [Support Nuvio](https://nuvio.tv/support)
 
 </div>
 

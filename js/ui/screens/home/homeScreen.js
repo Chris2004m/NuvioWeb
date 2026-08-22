@@ -1595,7 +1595,11 @@ function normalizeContinueWatchingItem(item) {
 }
 
 function isCloudContinueWatchingItem(item = {}) {
-  return String(item?.contentType || item?.type || "").trim().toLowerCase() === "cloud";
+  return (
+    String(item?.contentType || item?.type || "")
+      .trim()
+      .toLowerCase() === "cloud"
+  );
 }
 
 function isRawContinueWatchingTitle(item) {
@@ -1819,10 +1823,7 @@ function readContinueWatchingDisplaySnapshot(scopeKey) {
       return true;
     }
     return Boolean(
-      CloudLibraryPlaybackProgressStore.findForContinueWatching(
-        item.contentId,
-        item.videoId
-      )
+      CloudLibraryPlaybackProgressStore.findForContinueWatching(item.contentId, item.videoId)
     );
   });
 }
@@ -4514,9 +4515,7 @@ export const HomeScreen = {
 
   restoreContinueWatchingMenuFocus() {
     this.unlockHomeHoldFocus();
-    const rowKey = String(
-      this.pendingContinueWatchingFocusRowKey || "continue_watching"
-    );
+    const rowKey = String(this.pendingContinueWatchingFocusRowKey || "continue_watching");
     const cards = this.getNavigationRowNodes(rowKey);
     const target =
       cards[
@@ -4803,12 +4802,15 @@ export const HomeScreen = {
       normalizedAction === "confirmDestructiveSimklRemoval"
     ) {
       try {
-        await libraryRepository.applyMembershipChanges(this.posterListPicker.item, {
-          desiredMembership: this.posterListPicker.membership || {}
-        }, {
-          destructiveRemovalConfirmed:
-            normalizedAction === "confirmDestructiveSimklRemoval"
-        });
+        await libraryRepository.applyMembershipChanges(
+          this.posterListPicker.item,
+          {
+            desiredMembership: this.posterListPicker.membership || {}
+          },
+          {
+            destructiveRemovalConfirmed: normalizedAction === "confirmDestructiveSimklRemoval"
+          }
+        );
         this.posterListPicker = null;
         this.destroyHomeHoldDialog();
         this.restorePosterHoldMenuFocus();
@@ -5372,9 +5374,7 @@ export const HomeScreen = {
       return false;
     }
     const anchorIndex = Math.max(0, Number(this.continueWatchingMenu?.index || 0));
-    const anchorRowKey = String(
-      this.continueWatchingMenu?.rowKey || "continue_watching"
-    );
+    const anchorRowKey = String(this.continueWatchingMenu?.rowKey || "continue_watching");
     if (option.action === "resume") {
       return this.openContinueWatchingFromItem(item);
     }
@@ -8848,10 +8848,7 @@ export const HomeScreen = {
   },
 
   filterUnreleasedResult(result) {
-    if (
-      !this.layoutPrefs?.hideUnreleasedContent ||
-      result?.status !== "success"
-    ) {
+    if (!this.layoutPrefs?.hideUnreleasedContent || result?.status !== "success") {
       return result;
     }
     const items = result.data?.items;
@@ -9125,16 +9122,19 @@ export const HomeScreen = {
     const depthClass = this.layoutPrefs?.cardDepthEnabled
       ? ` home-card-depth${this.layoutPrefs.cardDepthPostersEnabled !== false ? " depth-posters" : ""}${this.layoutPrefs.cardDepthContinueWatchingEnabled !== false ? " depth-continue-watching" : ""}`
       : "";
-    const classicGradientClass = this.layoutMode === "classic" && this.layoutPrefs?.classicFocusGradientEnabled
-      ? " home-classic-focus-gradient"
-      : "";
+    const classicGradientClass =
+      this.layoutMode === "classic" && this.layoutPrefs?.classicFocusGradientEnabled
+        ? " home-classic-focus-gradient"
+        : "";
     const layoutClass = `home-layout-${this.layoutMode}${modernLandscapeLayoutClass}${modernHeroFullScreenBackdropClass}${modernSidebarLayoutClass}${depthClass}${classicGradientClass}`;
     const sizingStyle = [
       this.layoutMode === "modern" ? buildModernHomeSizingStyle(this.layoutPrefs) : "",
       `--card-depth-edge:${Number(this.layoutPrefs?.cardDepthEdgeStrength ?? 28) / 100}`,
       `--card-depth-sheen:${Number(this.layoutPrefs?.cardDepthSheenStrength ?? 10) / 100}`,
       `--card-depth-coverage:${Number(this.layoutPrefs?.cardDepthEdgeCoverage ?? 0)}%`
-    ].filter(Boolean).join(";");
+    ]
+      .filter(Boolean)
+      .join(";");
     const showPosterLabels = this.layoutPrefs?.posterLabelsEnabled !== false;
     const showCatalogAddonName = this.layoutPrefs?.catalogAddonNameEnabled !== false;
     const showCatalogTypeSuffix = this.layoutPrefs?.catalogTypeSuffixEnabled !== false;
@@ -9395,9 +9395,7 @@ export const HomeScreen = {
       !backFocusState &&
       Number.isFinite(this.pendingContinueWatchingFocusIndex)
     ) {
-      const pendingRowKey = String(
-        this.pendingContinueWatchingFocusRowKey || "continue_watching"
-      );
+      const pendingRowKey = String(this.pendingContinueWatchingFocusRowKey || "continue_watching");
       const cards = this.getNavigationRowNodes(pendingRowKey);
       const target =
         cards[
@@ -9511,9 +9509,7 @@ export const HomeScreen = {
 
   scheduleHomeLazyImageHydration(anchorNode = null, { refreshIndex = false } = {}) {
     const anchorRow =
-      anchorNode instanceof HTMLElement
-        ? anchorNode.closest(HOME_LAZY_IMAGE_ROW_SELECTOR)
-        : null;
+      anchorNode instanceof HTMLElement ? anchorNode.closest(HOME_LAZY_IMAGE_ROW_SELECTOR) : null;
     if (
       anchorRow instanceof HTMLElement &&
       anchorRow === this.lastHomeLazyImageHydrationAnchorRow &&

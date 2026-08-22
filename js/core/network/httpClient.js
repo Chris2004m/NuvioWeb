@@ -94,7 +94,9 @@ export async function httpRequest(url, options = {}) {
   if (response.status === 204) {
     return null;
   }
-  const responseType = String(requestedResponseType || "json").trim().toLowerCase();
+  const responseType = String(requestedResponseType || "json")
+    .trim()
+    .toLowerCase();
   if (responseType === "response") {
     return response;
   }

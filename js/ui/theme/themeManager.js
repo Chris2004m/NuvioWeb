@@ -144,10 +144,7 @@ export const ThemeManager = {
     ensureMemberAccessSubscription();
     const storedTheme = ThemeStore.get();
     const themeName = enforceAccess
-      ? resolveThemeName(
-          storedTheme.themeName,
-          access || MemberAccessRepository.getCurrentAccess()
-        )
+      ? resolveThemeName(storedTheme.themeName, access || MemberAccessRepository.getCurrentAccess())
       : String(storedTheme.themeName || "WHITE").toUpperCase();
     const theme =
       themeName === storedTheme.themeName
