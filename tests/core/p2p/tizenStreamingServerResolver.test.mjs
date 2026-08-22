@@ -7,6 +7,8 @@ import { resetTizenCapabilitiesCache } from "../../../js/platform/tizen/tizenCap
 const originalPlatformOverride = globalThis.__NUVIO_PLATFORM__;
 const originalTizen = globalThis.tizen;
 const originalNavigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+const originalNuvioEnv = globalThis.__NUVIO_ENV__;
+const originalFetch = globalThis.fetch;
 const TORRENT = { infoHash: "0123456789abcdef0123456789abcdef01234567" };
 
 function installTizen(version, webService = true) {
@@ -50,6 +52,16 @@ afterEach(() => {
   }
   Platform.current = null;
   resetTizenCapabilitiesCache();
+  if (typeof originalNuvioEnv === "undefined") {
+    delete globalThis.__NUVIO_ENV__;
+  } else {
+    globalThis.__NUVIO_ENV__ = originalNuvioEnv;
+  }
+  if (typeof originalFetch === "undefined") {
+    delete globalThis.fetch;
+  } else {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("Tizen 4 torrent sources are identified but cannot be resolved", () => {
@@ -72,4 +84,63 @@ test("Tizen P2P is disabled when the web service capability is absent", () => {
 
   assert.equal(TizenStreamingServerResolver.canResolveStream(TORRENT), false);
   assert.equal(TizenStreamingServerResolver.isUnsupportedOnCurrentTizen(TORRENT), true);
+});
+
+test("Tizen 4 can resolve through a configured external streaming server", async () => {
+  installTizen("4.0", false);
+  const requests = [];
+  globalThis.fetch = async (url, options) => {
+    requests.push({ url, options });
+    return {
+      ok: true,
+      json: async () => ({
+        infoHash: TORRENT.infoHash,
+        fileIdx: 2,
+        files: [{ name: "episode.mkv" }, {}, { name: "episode.mkv" }]
+      })
+    };
+  };
+
+  const stream = {
+    ...TORRENT,
+    tizenP2p: { baseUrl: "https://stream.example.test" }
+  };
+  const result = await TizenStreamingServerResolver.resolve(stream, {
+    season: 1,
+    episode: 2
+  });
+
+  assert.equal(TizenStreamingServerResolver.canResolveStream(stream), true);
+  assert.equal(TizenStreamingServerResolver.isUnsupportedOnCurrentTizen(stream), false);
+  assert.equal(result.status, "success");
+  assert.equal(result.stream.url, `https://stream.example.test/${TORRENT.infoHash}/2`);
+  assert.equal(result.stream.tizenP2p.baseUrlKind, "external-service");
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, `https://stream.example.test/${TORRENT.infoHash}/create`);
+});
+
+test("Tizen 4 can resolve through the packaged external streaming server setting", async () => {
+  installTizen("4.0", false);
+  globalThis.__NUVIO_ENV__ = {
+    TIZEN_STREAMING_SERVER_URL: "https://stream.example.test"
+  };
+  const requests = [];
+  globalThis.fetch = async (url, options) => {
+    requests.push({ url, options });
+    return {
+      ok: true,
+      json: async () => ({ guessedFileIdx: 1 })
+    };
+  };
+
+  const result = await TizenStreamingServerResolver.resolve(TORRENT, {
+    season: 1,
+    episode: 2
+  });
+
+  assert.equal(TizenStreamingServerResolver.canResolveStream(TORRENT), true);
+  assert.equal(result.status, "success");
+  assert.equal(result.stream.url, `https://stream.example.test/${TORRENT.infoHash}/1`);
+  assert.equal(result.stream.tizenP2p.baseUrlKind, "external-service");
+  assert.equal(requests[0].url, `https://stream.example.test/${TORRENT.infoHash}/create`);
 });

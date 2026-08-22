@@ -93,6 +93,24 @@ test("public-store builds disable EngineFS even on Tizen 5", () => {
   assert.equal(capabilities.supportsP2p, false);
 });
 
+test("a configured external streaming server keeps P2P eligible without local EngineFS", () => {
+  const runtime = makeRuntime({
+    version: "4.0",
+    chromium: 56,
+    webService: false,
+    engineFsServicePackaged: false
+  });
+  runtime.__NUVIO_ENV__ = {
+    TIZEN_STREAMING_SERVER_URL: "https://stream.example.test"
+  };
+
+  const capabilities = getTizenCapabilities(runtime);
+
+  assert.equal(capabilities.externalStreamingServerConfigured, true);
+  assert.equal(capabilities.supportsWebService, false);
+  assert.equal(capabilities.supportsP2p, true);
+});
+
 test("unknown web service capability does not disable generic Tizen services", () => {
   const runtime = makeRuntime({ version: "4.0", chromium: 56 });
   runtime.tizen.systeminfo.getCapability = (name) => {

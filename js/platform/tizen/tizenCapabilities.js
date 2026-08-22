@@ -3,6 +3,24 @@ const TIZEN_WEB_SERVICE_CAPABILITY = "http://tizen.org/feature/web.service";
 const TIZEN_P2P_MIN_MAJOR_VERSION = 5;
 const TIZEN_P2P_MIN_CHROMIUM_VERSION = 63;
 
+function hasExternalStreamingServer(runtime) {
+  const candidates = [
+    runtime?.__NUVIO_TIZEN_STREAMING_SERVER_URL__,
+    runtime?.__NUVIO_ENV__?.TIZEN_STREAMING_SERVER_URL
+  ];
+  return candidates.some((value) => {
+    try {
+      const parsed = new URL(String(value || "").trim());
+      return (
+        (parsed.protocol === "http:" || parsed.protocol === "https:") &&
+        !["127.0.0.1", "localhost", "::1"].includes(parsed.hostname)
+      );
+    } catch (_) {
+      return false;
+    }
+  });
+}
+
 let cachedCapabilities = null;
 
 function normalizedText(value) {
@@ -124,14 +142,16 @@ export function getTizenCapabilities(runtime = globalThis) {
       ? normalizeBooleanCapability(webServiceCapability.value)
       : null;
   const engineFsServicePackaged = runtime?.__NUVIO_TIZEN_ENGINEFS_SERVICE_ENABLED__ !== false;
+  const externalStreamingServerConfigured = hasExternalStreamingServer(runtime);
   const supportsWebService = isTizen && engineFsServicePackaged && webServiceSupported !== false;
   const supportsP2p =
     isTizen &&
-    supportsP2pByVersion({
-      tizenMajorVersion: tizenVersion.major,
-      chromiumMajorVersion
-    }) &&
-    supportsWebService;
+    (externalStreamingServerConfigured ||
+      (supportsP2pByVersion({
+        tizenMajorVersion: tizenVersion.major,
+        chromiumMajorVersion
+      }) &&
+        supportsWebService));
 
   const capabilities = Object.freeze({
     isTizen,
@@ -143,6 +163,7 @@ export function getTizenCapabilities(runtime = globalThis) {
     hasResizeObserver: typeof runtime?.ResizeObserver === "function",
     hasWebAssembly: typeof runtime?.WebAssembly === "object",
     engineFsServicePackaged,
+    externalStreamingServerConfigured,
     webServiceSupported,
     supportsWebService,
     supportsP2p,

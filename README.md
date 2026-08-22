@@ -15,8 +15,8 @@
 ## Get Nuvio TV
 
 NuvioTV Web supports **Samsung Tizen TVs from 2018 onward (Tizen 4+)** and **LG webOS TVs from 2020 onward (webOS 5+)**.
-On Tizen 4, some advanced audio/subtitle features may be limited, and torrent/P2P playback is unavailable.
-The public Samsung Store profile also disables EngineFS/torrent/P2P on newer Tizen versions unless Samsung partner approval is configured.
+On Tizen 4, some advanced audio/subtitle features may be limited; torrent/P2P playback requires the same validated remote streaming-server route used by the public package.
+The public Samsung Store profile does not package the local EngineFS service; torrent/P2P can remain available through a configured remote streaming server that follows the Stremio-compatible HTTP contract.
 
 - [Nuvio WebTV Installer](https://github.com/NuvioMedia/NuvioWeb/releases/latest) for Windows, macOS, and Linux
 - [Samsung Tizen WGT](https://github.com/NuvioMedia/NuvioWeb/releases/latest) for manual installation
@@ -40,7 +40,7 @@ npm run package:tizen:store
 npm run package:webos
 ```
 
-`package:tizen` is the unsigned development package. `package:tizen:store` requires Tizen Studio/Web CLI and a configured security profile, and creates the signed public-store profile with EngineFS/P2P disabled unless Samsung partner approval is explicitly configured. NuvioTV Web is built with JavaScript, HTML, CSS, and platform TV APIs. Building requires Node.js and npm; package installation additionally requires the relevant Tizen or webOS tools.
+`package:tizen` is the unsigned development package. `package:tizen:store` requires Tizen Studio/Web CLI and a configured security profile. It excludes the local EngineFS service unless Samsung partner approval is explicitly configured, but can embed `TIZEN_STREAMING_SERVER_URL` from `local.properties` for the remote streaming-server route. NuvioTV Web is built with JavaScript, HTML, CSS, and platform TV APIs. Building requires Node.js and npm; package installation additionally requires the relevant Tizen or webOS tools.
 
 ## License
 

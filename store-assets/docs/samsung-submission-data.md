@@ -4,7 +4,7 @@
 
 Start with a Samsung TV Seller Office account as a Public Seller, register the application and use the public-store package profile for the first pre-test. Samsung’s official guide says Public Sellers distribute in the United States by default; distribution outside the US and partner-level APIs require a Partner Seller request.
 
-Because Nuvio’s local EngineFS implementation is a packaged `tizen:service`, the torrent/P2P path must not be enabled in a public package by assumption. To keep that feature in the Samsung Store package, Samsung must approve the partner-service route and provide the exact metadata/privilege scope. The repository already fails closed unless all of the following are present:
+Because Nuvio’s local EngineFS implementation is a packaged `tizen:service`, that local implementation is not included in a normal public package. The public package can still keep torrent/P2P available through the remote streaming-server route, matching the Stremio TV architecture. Samsung partner approval is only needed if we decide to ship the local service itself. The repository fails closed for the local route unless all of the following are present:
 
 - `TIZEN_PARTNER_SERVICE_APPROVED=true`;
 - `TIZEN_INCLUDE_ENGINEFS_SERVICE=true`;
@@ -12,7 +12,19 @@ Because Nuvio’s local EngineFS implementation is a packaged `tizen:service`, t
 - a valid `TIZEN_SECURITY_PROFILE`;
 - the official `tizen` CLI in `TIZEN_CLI`.
 
-Without that approval, `npm run package:tizen:store` produces the public profile with EngineFS/P2P disabled. This is intentional and is required to avoid submitting a package with an unauthorized partner-only service.
+Without that approval, `npm run package:tizen:store` produces the public profile without local EngineFS. If `TIZEN_STREAMING_SERVER_URL` is set to a validated remote endpoint, the torrent resolver remains available in the store package; if it is empty, the app reports torrent/P2P unavailable rather than pretending that the local service exists.
+
+### Remote streaming-server route
+
+Set `TIZEN_STREAMING_SERVER_URL` in the release `local.properties` before building the store package. The endpoint must implement the same HTTP contract used by Stremio’s TV streaming wrapper:
+
+- `POST /<infoHash>/create` with `torrent.infoHash`, optional `peerSearch.sources`, and `guessFileIdx`;
+- JSON response containing `fileIdx` or `guessedFileIdx` (and optionally file metadata);
+- `GET /<infoHash>/<fileIdx>` for range-capable playback;
+- optional `GET /<infoHash>/remove` cleanup, with `404` treated as harmless;
+- TV-reachable HTTPS/HTTP origin and CORS allowing the app’s requests.
+
+The current checkout has the client-side route and tests, but no production endpoint is configured. We must receive the endpoint and a lawful test torrent/source before claiming end-to-end torrent compatibility in Seller Office.
 
 ## Local certificate setup
 
@@ -40,11 +52,14 @@ The command verifies that the result contains both `author-signature.xml` and `s
 ## Seller Office fields still needed
 
 - Seller account/group and legal seller information.
+- Publisher/support starting values copied from the Nuvio Google Play listing: `Nuvio Media`, Muhammed Nayif Rahman, India, `nayiftapframe@gmail.com`, `https://nuvioapp.space`, privacy policy `https://nuvio.tv/privacy-policy`.
 - Public Seller or Partner Seller status.
 - App title, languages, store descriptions and support contact.
 - Privacy URL, content rating and market/country selection.
 - Samsung model groups to target; start from Tizen 4+/2018 only if the pre-test and real-device matrix confirm it.
-- Four final JPG screenshots and the UI Description PPTX (draft supplied in this directory).
+- Four final English JPG screenshots and the UI Description PPTX (draft supplied in this directory).
+- If torrent/P2P is part of the public release, the final `TIZEN_STREAMING_SERVER_URL` endpoint and its lawful certification test source.
+- App UI locales currently shipped by the web build: English, Arabic, Bosnian, Czech, German, Greek, Spanish, Spanish (Latin America), French, Hebrew, Hindi, Hungarian, Indonesian, Italian, Japanese, Lithuanian, Dutch, Norwegian, Polish, Portuguese (Brazil), Portuguese (Portugal), Romanian, Russian, Slovak, Slovenian, Swedish, Tamil, Turkish, Vietnamese and Chinese (Simplified). Store metadata translations can be added after the English submission.
 - A real test account and the provider/add-on configuration used by certification.
 - Final player declarations: codecs, containers, streaming engine, subtitle formats and DRM only after the supported test matrix is known.
 

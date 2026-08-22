@@ -1,6 +1,6 @@
 # Nuvio TV store submission materials
 
-This directory contains the first store-ready material draft for Samsung TV and LG webOS. The visual assets are generated from the project-owned Nuvio brand and real 1920x1080 captures of the local TV build.
+This directory contains the first store-ready material draft for Samsung TV and LG webOS. The visual assets are generated from the project-owned Nuvio brand and real 1920x1080 captures of the local TV build. All submitted screenshots use the English app locale.
 
 ## Ready locally
 
@@ -12,9 +12,9 @@ This directory contains the first store-ready material draft for Samsung TV and 
 
 ## Important status
 
-These are submission drafts, not a final store release. The final publisher identity, legal contact, privacy URL, rating, countries/model groups, test account and signed package must be supplied in Seller Office/Seller Lounge. Do not copy the publisher and support details currently visible on the public `com.nuvio.app` Google Play page without confirming that listing ownership; they do not match the NuvioMedia repository identity.
+These are submission drafts, not a final store release. The final publisher identity, legal contact, privacy URL, rating, countries/model groups, test account and signed package must be supplied in Seller Office/Seller Lounge. The publisher has authorized reusing the Nuvio Google Play publisher/contact identity in the accompanying draft; the store account must still be checked before submission.
 
-Samsung’s public-store profile intentionally excludes the EngineFS `tizen:service`. Torrent/P2P can be kept in a signed Samsung package only after Samsung approves the partner-service route and provides the exact metadata/privilege authorization. LG’s package keeps the existing native webOS service path; its availability remains subject to LG review and real-device QA.
+Samsung’s public-store profile intentionally excludes the local EngineFS `tizen:service`. That is a packaging fact, not a product limitation: the app is prepared for a Stremio-compatible remote streaming-server path, which can keep torrent/P2P available without a Samsung partner-only service. The endpoint still has to be supplied and tested before it is embedded in a release. LG’s package keeps the existing native webOS service path; its availability remains subject to LG review and real-device QA.
 
 Official references:
 

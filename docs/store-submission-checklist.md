@@ -11,10 +11,12 @@ The locally prepared visual and metadata draft is in [`store-assets/`](../store-
 - The declared minimum remains Tizen 4.0+.
 - `npm run package:tizen` creates an unsigned development WGT with EngineFS enabled for local testing.
 - `npm run package:tizen:store` creates a public-store profile through the official Tizen CLI, requires a security profile, verifies `author-signature.xml` and `signature1.xml`, and fails if either signature is absent.
-- The public-store profile does not package the EngineFS `tizen:service`, `web.service` feature, or `application.launch` privilege. Torrent/P2P is therefore reported as unavailable at runtime, including on Tizen 5+, unless Samsung has explicitly approved the partner-service route.
+- The public-store profile does not package the local EngineFS `tizen:service`, `web.service` feature, or `application.launch` privilege. Torrent/P2P is still eligible when `TIZEN_STREAMING_SERVER_URL` is configured with a validated remote streaming server; otherwise the app reports it unavailable on that package.
 - `auto-restart` and `on-boot` are disabled in generated Tizen service metadata.
 
 If Samsung confirms that the publisher is an approved TV partner and authorizes the service, the approved `tizen:metadata` element and the existing certificate profile must be supplied before enabling that route.
+
+The remote route follows the Stremio-compatible streaming-server contract: `POST /<infoHash>/create` with the torrent/peer-search body, followed by range-capable playback at `/<infoHash>/<fileIdx>`. The endpoint must be reachable from the TV, expose the required CORS headers, and use a URL that can be embedded in the release configuration. No endpoint is currently configured in this checkout.
 
 ### LG webOS
 
@@ -29,7 +31,7 @@ If Samsung confirms that the publisher is an approved TV partner and authorizes 
 - Whether the account is a Samsung Smart TV partner; if yes, the approved service metadata and approval scope.
 - The existing Tizen author certificate/security profile used for updates, plus a secure CI installation of that profile.
 - The Tizen CLI executable path on the release runner (`TIZEN_CLI`) and the security profile name (`TIZEN_SECURITY_PROFILE`).
-- Final store title, descriptions, supported languages, support email, privacy-policy URL, content rating, and market/model-group selection.
+- Final store title, descriptions, supported languages, support email, privacy-policy URL, content rating, and market/model-group selection. Starting publisher/contact values copied from Google Play are recorded in [`store-copy.md`](../store-assets/docs/store-copy.md).
 - Four JPG screenshots in an accepted resolution and file size.
 - 1920x1080 logo/background material, 512x423 icon material, and the UI Description PPTX.
 - Draft files: [`store-assets/samsung/`](../store-assets/samsung/) and [`store-assets/docs/store-copy.md`](../store-assets/docs/store-copy.md). Replace the screenshots/copy only if Seller Office requests a different resolution, language, or content treatment.

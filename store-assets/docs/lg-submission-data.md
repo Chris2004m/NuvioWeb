@@ -25,10 +25,12 @@ Nuvio TV does not host or provide video content. Catalogs and playable links are
 ### Required QA input from the publisher
 
 - Seller Lounge account and legal/publisher information.
+- Publisher/support starting values copied from the Nuvio Google Play listing: `Nuvio Media`, Muhammed Nayif Rahman, India, `nayiftapframe@gmail.com`, `https://nuvioapp.space`, privacy policy `https://nuvio.tv/privacy-policy`.
 - Final privacy/support URLs and content rating.
 - Test account, if account-based flows are included in the submission.
 - Provider/add-on configuration and a lawful test source that can be replayed by LG QA.
 - Target country/model selection and final release version.
+- The web build ships UI translations for 30 locales: English, Arabic, Bosnian, Czech, German, Greek, Spanish, Spanish (Latin America), French, Hebrew, Hindi, Hungarian, Indonesian, Italian, Japanese, Lithuanian, Dutch, Norwegian, Polish, Portuguese (Brazil), Portuguese (Portugal), Romanian, Russian, Slovak, Slovenian, Swedish, Tamil, Turkish, Vietnamese and Chinese (Simplified). Seller Lounge language entries and translated metadata can be completed after the English base submission.
 
 ## App Self Checklist draft
 

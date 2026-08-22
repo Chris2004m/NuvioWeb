@@ -1,6 +1,7 @@
 import { Platform } from "../../platform/index.js";
 import { TizenEngineFsService } from "../../platform/tizen/tizenEngineFsService.js";
 import { TizenCapabilities } from "../../platform/tizen/tizenCapabilities.js";
+import { TIZEN_STREAMING_SERVER_URL } from "../../config.js";
 
 const TIZEN_STREAMING_KIND = "tizen-streaming-server";
 const CREATE_TIMEOUT_MS = 60000;
@@ -150,13 +151,38 @@ function getTrackerSources(stream = {}, magnetUri = "") {
 function normalizeBaseUrl(value = "") {
   try {
     const parsed = new URL(String(value || "").trim());
-    if (parsed.protocol !== "http:") {
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
       return "";
     }
-    return `http://${parsed.hostname}:${parsed.port || "80"}`;
+    const path = parsed.pathname.replace(/\/+$/, "");
+    return `${parsed.protocol}//${parsed.host}${path === "/" ? "" : path}`;
   } catch (_) {
     return "";
   }
+}
+
+function isLocalBaseUrl(value = "") {
+  try {
+    return ["127.0.0.1", "localhost", "::1"].includes(new URL(value).hostname);
+  } catch (_) {
+    return false;
+  }
+}
+
+function getExternalBaseUrl(stream = {}) {
+  const candidates = [
+    stream.tizenP2p?.baseUrl,
+    stream.raw?.tizenP2p?.baseUrl,
+    stream.engineFs?.baseUrl,
+    stream.raw?.engineFs?.baseUrl,
+    globalThis.__NUVIO_TIZEN_STREAMING_SERVER_URL__,
+    globalThis.__NUVIO_ENV__?.TIZEN_STREAMING_SERVER_URL,
+    TIZEN_STREAMING_SERVER_URL
+  ];
+  return (
+    candidates.map(normalizeBaseUrl).find((candidate) => candidate && !isLocalBaseUrl(candidate)) ||
+    ""
+  );
 }
 
 function uniqueBaseUrls(values = []) {
@@ -361,7 +387,11 @@ function buildResolvedStream(
 
 export const TizenStreamingServerResolver = {
   canResolveStream(stream = {}) {
-    return Platform.isTizen() && TizenCapabilities.canUseP2p() && Boolean(getInfoHash(stream));
+    return (
+      Platform.isTizen() &&
+      Boolean(getInfoHash(stream)) &&
+      (TizenCapabilities.canUseP2p() || Boolean(getExternalBaseUrl(stream)))
+    );
   },
 
   isTorrentStream(stream = {}) {
@@ -369,7 +399,7 @@ export const TizenStreamingServerResolver = {
   },
 
   isUnsupportedOnCurrentTizen(stream = {}) {
-    return Platform.isTizen() && this.isTorrentStream(stream) && !TizenCapabilities.canUseP2p();
+    return Platform.isTizen() && this.isTorrentStream(stream) && !this.canResolveStream(stream);
   },
 
   getResolvedStreamState(stream = {}) {
@@ -422,7 +452,11 @@ export const TizenStreamingServerResolver = {
       return existingRequest;
     }
     const removeRequest = (async () => {
-      const bases = uniqueBaseUrls([baseUrl, ...TizenEngineFsService.getLocalBaseUrls()]);
+      const bases = uniqueBaseUrls([
+        baseUrl,
+        getExternalBaseUrl({}),
+        ...TizenEngineFsService.getLocalBaseUrls()
+      ]);
       let lastError = null;
       for (const candidateBaseUrl of bases) {
         try {
@@ -460,7 +494,8 @@ export const TizenStreamingServerResolver = {
     if (!Platform.isTizen()) {
       return { status: "unsupported" };
     }
-    if (!TizenCapabilities.canUseP2p()) {
+    const externalBaseUrl = getExternalBaseUrl(stream);
+    if (!TizenCapabilities.canUseP2p() && !externalBaseUrl) {
       return { status: "unsupported", detail: "Tizen P2P streaming is not supported on this TV" };
     }
     const infoHash = getInfoHash(stream);
@@ -469,17 +504,23 @@ export const TizenStreamingServerResolver = {
     }
 
     try {
-      let baseUrl = "";
-      let baseUrlKind = "local-service";
-      const localService = await TizenEngineFsService.ensureStarted({ purpose: "p2p" });
-      if (localService.status === "success" && localService.baseUrl) {
-        baseUrl = localService.baseUrl;
-        baseUrlKind = "local-service";
+      let baseUrl = externalBaseUrl;
+      let baseUrlKind = externalBaseUrl ? "external-service" : "local-service";
+      if (!baseUrl) {
+        const localService = await TizenEngineFsService.ensureStarted({ purpose: "p2p" });
+        if (localService.status === "success" && localService.baseUrl) {
+          baseUrl = localService.baseUrl;
+          baseUrlKind = "local-service";
+        } else {
+          return {
+            status: "error",
+            detail: localService.detail || "Tizen local EngineFS service did not start"
+          };
+        }
       } else {
-        return {
-          status: "error",
-          detail: localService.detail || "Tizen local EngineFS service did not start"
-        };
+        logTizenP2pDebug("TizenStreamingServerResolver: using configured external server", {
+          baseUrl
+        });
       }
       const magnetUri = getMagnetUri(stream);
       const trackerSources = getTrackerSources(stream, magnetUri);

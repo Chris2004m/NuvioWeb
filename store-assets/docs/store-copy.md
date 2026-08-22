@@ -52,11 +52,32 @@ This copy is deliberately conservative: it describes the app as an organizer/pla
 
 ## Fields that must not be guessed
 
-- Publisher/legal entity and seller information.
-- Support email and customer support URL.
-- Privacy policy URL and data-safety declarations.
+- Seller account ownership and any legal entity fields that differ from the Google Play publisher profile.
 - Age/content rating and regional certificates.
 - Countries, languages and TV model groups.
 - Test account and the exact provider/add-on configuration used by QA.
 
-The current public Google Play page for `com.nuvio.app` is used only as a positioning reference. Its displayed publisher and support information are not copied here until ownership is confirmed against NuvioMedia.
+## Publisher and support reference — copied from Google Play as requested
+
+Use these values as the starting point for Samsung Seller Office and LG Seller Lounge, then verify that the signed-in store account presents the same publisher identity before submitting:
+
+- Developer/publisher: `Nuvio Media`
+- Legal developer name: `Muhammed Nayif Rahman`
+- Country: `India`
+- Support email: `nayiftapframe@gmail.com`
+- Support website: `https://nuvioapp.space`
+- Canonical project website: `https://nuvio.tv`
+- Privacy policy: `https://nuvio.tv/privacy-policy`
+- Android reference rating: `Everyone` (Samsung/LG ratings must still be completed in their own portals.)
+
+Reference listing: https://play.google.com/store/apps/details?id=com.nuvio.app
+
+The Google Play data-safety panel currently states that no data is shared with third parties, the app may collect personal information, data is encrypted in transit, and users can request deletion. Treat those statements as the Android declaration to reconcile with the TV builds and the current Samsung/LG forms; do not copy them blindly if a TV-specific flow differs.
+
+## Supported Nuvio TV interface languages
+
+The web build currently ships UI translations for 30 locales:
+
+`English`, `Arabic`, `Bosnian`, `Czech`, `German`, `Greek`, `Spanish`, `Spanish (Latin America)`, `French`, `Hebrew`, `Hindi`, `Hungarian`, `Indonesian`, `Italian`, `Japanese`, `Lithuanian`, `Dutch`, `Norwegian`, `Polish`, `Portuguese (Brazil)`, `Portuguese (Portugal)`, `Romanian`, `Russian`, `Slovak`, `Slovenian`, `Swedish`, `Tamil`, `Turkish`, `Vietnamese`, and `Chinese (Simplified)`.
+
+This is the app UI locale list, not a promise that every store portal accepts localized metadata for every locale. The language selections and translated store descriptions can be completed after the base English submission is accepted.
