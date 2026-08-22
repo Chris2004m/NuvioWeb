@@ -14,7 +14,7 @@ This directory contains the first store-ready material draft for Samsung TV and 
 
 These are submission drafts, not a final store release. The final publisher identity, legal contact, privacy URL, rating, countries/model groups, test account and signed package must be supplied in Seller Office/Seller Lounge. The publisher has authorized reusing the Nuvio Google Play publisher/contact identity in the accompanying draft; the store account must still be checked before submission.
 
-Samsung’s public-store profile intentionally excludes the local EngineFS `tizen:service`. That is a packaging fact, not a product limitation: the app is prepared for a Stremio-compatible remote streaming-server path, which can keep torrent/P2P available without a Samsung partner-only service. The endpoint still has to be supplied and tested before it is embedded in a release. LG’s package keeps the existing native webOS service path; its availability remains subject to LG review and real-device QA.
+Samsung’s public-store profile intentionally excludes the local EngineFS `tizen:service`. Torrent/P2P is consequently unavailable in that package unless Samsung approves the partner-service route. LG’s package keeps the existing native webOS service path and uses it locally; no external torrent streaming server is configured. Availability remains subject to store review and real-device QA.
 
 Official references:
 

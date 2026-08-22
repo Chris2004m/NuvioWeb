@@ -13,10 +13,6 @@
       typeof existing.NUVIO_SUPABASE_FALLBACK_URL === "undefined"
         ? ""
         : existing.NUVIO_SUPABASE_FALLBACK_URL,
-    TIZEN_STREAMING_SERVER_URL:
-      typeof existing.TIZEN_STREAMING_SERVER_URL === "undefined"
-        ? ""
-        : existing.TIZEN_STREAMING_SERVER_URL,
     TV_LOGIN_WEB_BASE_URL:
       typeof existing.TV_LOGIN_WEB_BASE_URL === "undefined" ? "" : existing.TV_LOGIN_WEB_BASE_URL,
     YOUTUBE_PROXY_URL:

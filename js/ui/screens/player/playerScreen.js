@@ -133,6 +133,16 @@ function logEngineFsDebug(...args) {
   }
 }
 
+function isLocalEngineFsUrl(value = "") {
+  try {
+    const parsed = new URL(String(value || "").trim());
+    const hostname = parsed.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+    return parsed.protocol === "http:" && ["127.0.0.1", "localhost", "::1"].includes(hostname);
+  } catch (_) {
+    return false;
+  }
+}
+
 function buildPendingPlaybackRestore(params = {}) {
   if (params?.startFromBeginning) {
     return null;
@@ -3863,6 +3873,10 @@ export const PlayerScreen = {
       if (!match) {
         return null;
       }
+      const isLocalPlayback = isLocalEngineFsUrl(playbackUrl);
+      if ((Environment.isTizen() || Environment.isWebOS()) && !isLocalPlayback) {
+        return null;
+      }
       const fileIdx = Number(match[2]);
       return {
         kind: Environment.isTizen() ? "tizen-streaming-server" : "webos-enginefs",
@@ -3871,18 +3885,18 @@ export const PlayerScreen = {
         playbackUrl,
         mimeType:
           String(streamCandidate?.mimeType || streamCandidate?.sourceType || "").trim() || null,
-        baseUrlKind:
-          parsed.hostname === "127.0.0.1" ||
-          parsed.hostname === "localhost" ||
-          parsed.hostname === "::1"
-            ? "local-service"
-            : "public-service",
-        publicPlaybackUrl:
-          String(
-            streamCandidate?.engineFs?.publicPlaybackUrl ||
-              streamCandidate?.raw?.engineFs?.publicPlaybackUrl ||
-              ""
-          ).trim() || null,
+        baseUrlKind: isLocalPlayback ? "local-service" : "public-service",
+        publicPlaybackUrl: isLocalEngineFsUrl(
+          streamCandidate?.engineFs?.publicPlaybackUrl ||
+            streamCandidate?.raw?.engineFs?.publicPlaybackUrl ||
+            ""
+        )
+          ? String(
+              streamCandidate?.engineFs?.publicPlaybackUrl ||
+                streamCandidate?.raw?.engineFs?.publicPlaybackUrl ||
+                ""
+            ).trim()
+          : null,
         baseUrl: `${parsed.protocol}//${parsed.host}`
       };
     } catch (_) {

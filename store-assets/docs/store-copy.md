@@ -57,6 +57,12 @@ This copy is deliberately conservative: it describes the app as an organizer/pla
 - Countries, languages and TV model groups.
 - Test account and the exact provider/add-on configuration used by QA.
 
+## Distribution decision
+
+- Countries/regions: use the same production country list currently enabled for `com.nuvio.app` on Google Play. The exact list must be copied from Play Console because it is account-specific and is not exposed by the public listing.
+- Samsung model groups: select the Tizen model groups for 2018 onward (Tizen 4+) that Seller Office offers for this package architecture.
+- LG targets: select the webOS 5.x and later model coverage (2020 onward) that Seller Lounge offers for the submitted IPK.
+
 ## Publisher and support reference — copied from Google Play as requested
 
 Use these values as the starting point for Samsung Seller Office and LG Seller Lounge, then verify that the signed-in store account presents the same publisher identity before submitting:

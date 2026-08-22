@@ -21,6 +21,7 @@ Nuvio TV is a TV-first media organizer for movies and series. It lets users disc
 ### Content and source disclosure
 
 Nuvio TV does not host or provide video content. Catalogs and playable links are supplied by the user’s configured add-ons and supported services. Availability of a source, audio, subtitles, DRM and advanced playback depends on the source, TV model and webOS version.
+Torrent/P2P playback, where available on the submitted webOS package, uses only the bundled local companion service; no external torrent streaming server is configured.
 
 ### Required QA input from the publisher
 
@@ -29,7 +30,7 @@ Nuvio TV does not host or provide video content. Catalogs and playable links are
 - Final privacy/support URLs and content rating.
 - Test account, if account-based flows are included in the submission.
 - Provider/add-on configuration and a lawful test source that can be replayed by LG QA.
-- Target country/model selection and final release version.
+- Target country/model selection and final release version. Mirror the production country list currently enabled for `com.nuvio.app` on Google Play, subject to the countries and model groups available in LG Seller Lounge.
 - The web build ships UI translations for 30 locales: English, Arabic, Bosnian, Czech, German, Greek, Spanish, Spanish (Latin America), French, Hebrew, Hindi, Hungarian, Indonesian, Italian, Japanese, Lithuanian, Dutch, Norwegian, Polish, Portuguese (Brazil), Portuguese (Portugal), Romanian, Russian, Slovak, Slovenian, Swedish, Tamil, Turkish, Vietnamese and Chinese (Simplified). Seller Lounge language entries and translated metadata can be completed after the English base submission.
 
 ## App Self Checklist draft

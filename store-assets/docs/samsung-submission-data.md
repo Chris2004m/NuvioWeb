@@ -4,7 +4,7 @@
 
 Start with a Samsung TV Seller Office account as a Public Seller, register the application and use the public-store package profile for the first pre-test. Samsung’s official guide says Public Sellers distribute in the United States by default; distribution outside the US and partner-level APIs require a Partner Seller request.
 
-Because Nuvio’s local EngineFS implementation is a packaged `tizen:service`, that local implementation is not included in a normal public package. The public package can still keep torrent/P2P available through the remote streaming-server route, matching the Stremio TV architecture. Samsung partner approval is only needed if we decide to ship the local service itself. The repository fails closed for the local route unless all of the following are present:
+Because Nuvio’s local EngineFS implementation is a packaged `tizen:service`, it is not included in a normal public package. Samsung partner approval is required if we want to ship that service and keep torrent/P2P in the Samsung Store package. The repository fails closed for the local route unless all of the following are present:
 
 - `TIZEN_PARTNER_SERVICE_APPROVED=true`;
 - `TIZEN_INCLUDE_ENGINEFS_SERVICE=true`;
@@ -12,19 +12,7 @@ Because Nuvio’s local EngineFS implementation is a packaged `tizen:service`, t
 - a valid `TIZEN_SECURITY_PROFILE`;
 - the official `tizen` CLI in `TIZEN_CLI`.
 
-Without that approval, `npm run package:tizen:store` produces the public profile without local EngineFS. If `TIZEN_STREAMING_SERVER_URL` is set to a validated remote endpoint, the torrent resolver remains available in the store package; if it is empty, the app reports torrent/P2P unavailable rather than pretending that the local service exists.
-
-### Remote streaming-server route
-
-Set `TIZEN_STREAMING_SERVER_URL` in the release `local.properties` before building the store package. The endpoint must implement the same HTTP contract used by Stremio’s TV streaming wrapper:
-
-- `POST /<infoHash>/create` with `torrent.infoHash`, optional `peerSearch.sources`, and `guessFileIdx`;
-- JSON response containing `fileIdx` or `guessedFileIdx` (and optionally file metadata);
-- `GET /<infoHash>/<fileIdx>` for range-capable playback;
-- optional `GET /<infoHash>/remove` cleanup, with `404` treated as harmless;
-- TV-reachable HTTPS/HTTP origin and CORS allowing the app’s requests.
-
-The current checkout has the client-side route and tests, but no production endpoint is configured. We must receive the endpoint and a lawful test torrent/source before claiming end-to-end torrent compatibility in Seller Office.
+Without that approval, `npm run package:tizen:store` produces the public profile with EngineFS/P2P disabled. This is intentional and keeps the public package within Samsung’s service and privilege rules.
 
 ## Local certificate setup
 
@@ -55,10 +43,10 @@ The command verifies that the result contains both `author-signature.xml` and `s
 - Publisher/support starting values copied from the Nuvio Google Play listing: `Nuvio Media`, Muhammed Nayif Rahman, India, `nayiftapframe@gmail.com`, `https://nuvioapp.space`, privacy policy `https://nuvio.tv/privacy-policy`.
 - Public Seller or Partner Seller status.
 - App title, languages, store descriptions and support contact.
-- Privacy URL, content rating and market/country selection.
+- Privacy URL, content rating and market/country selection. Use the same production country list currently enabled for `com.nuvio.app` on Google Play; Samsung Public Sellers are limited to the US, so a Partner Seller request is required to mirror a wider Android country list.
 - Samsung model groups to target; start from Tizen 4+/2018 only if the pre-test and real-device matrix confirm it.
 - Four final English JPG screenshots and the UI Description PPTX (draft supplied in this directory).
-- If torrent/P2P is part of the public release, the final `TIZEN_STREAMING_SERVER_URL` endpoint and its lawful certification test source.
+- Torrent/P2P is intentionally unavailable on Tizen 4 and in the public-store package unless Samsung approves the local partner-service route.
 - App UI locales currently shipped by the web build: English, Arabic, Bosnian, Czech, German, Greek, Spanish, Spanish (Latin America), French, Hebrew, Hindi, Hungarian, Indonesian, Italian, Japanese, Lithuanian, Dutch, Norwegian, Polish, Portuguese (Brazil), Portuguese (Portugal), Romanian, Russian, Slovak, Slovenian, Swedish, Tamil, Turkish, Vietnamese and Chinese (Simplified). Store metadata translations can be added after the English submission.
 - A real test account and the provider/add-on configuration used by certification.
 - Final player declarations: codecs, containers, streaming engine, subtitle formats and DRM only after the supported test matrix is known.
