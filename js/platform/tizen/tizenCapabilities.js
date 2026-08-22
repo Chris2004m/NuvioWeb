@@ -123,7 +123,8 @@ export function getTizenCapabilities(runtime = globalThis) {
     webServiceCapability.known && webServiceCapability.value != null
       ? normalizeBooleanCapability(webServiceCapability.value)
       : null;
-  const supportsWebService = isTizen && webServiceSupported !== false;
+  const engineFsServicePackaged = runtime?.__NUVIO_TIZEN_ENGINEFS_SERVICE_ENABLED__ !== false;
+  const supportsWebService = isTizen && engineFsServicePackaged && webServiceSupported !== false;
   const supportsP2p =
     isTizen &&
     supportsP2pByVersion({
@@ -141,6 +142,7 @@ export function getTizenCapabilities(runtime = globalThis) {
     hasIntersectionObserver: typeof runtime?.IntersectionObserver === "function",
     hasResizeObserver: typeof runtime?.ResizeObserver === "function",
     hasWebAssembly: typeof runtime?.WebAssembly === "object",
+    engineFsServicePackaged,
     webServiceSupported,
     supportsWebService,
     supportsP2p,

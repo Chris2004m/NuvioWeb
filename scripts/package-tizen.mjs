@@ -1,4 +1,5 @@
 import { access, cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
 import { constants as fsConstants } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,6 +13,7 @@ const rootDir = path.resolve(__dirname, "..");
 const distDir = path.join(rootDir, "dist");
 const cacheDir = path.join(rootDir, ".cache");
 const stagingDir = path.join(cacheDir, "tizen-package");
+const signedOutputDir = path.join(cacheDir, "tizen-signed-output");
 const requireConfiguredRuntimeEnv = /^(1|true|yes|on)$/i.test(
   String(process.env.NUVIO_REQUIRE_LOCAL_PROPERTIES || "")
 );
@@ -22,6 +24,10 @@ const defaultTizenAppId = "NuvioTV001.NuvioTV";
 const defaultWidgetUri = "https://nuvio.tv";
 const tizenEngineFsServiceRelativePath = "services/tizen/enginefs-service.js";
 const tizenEngineFsRuntimeDirRelativePath = "services/tizen/runtime";
+
+function isTruthy(value) {
+  return /^(1|true|yes|on)$/i.test(String(value || ""));
+}
 
 function normalizeVersion(version) {
   const parts = String(version || "0.0.0")
@@ -51,8 +57,31 @@ async function assertDistExists() {
   }
 }
 
-function buildConfigXml({ appId, packageId, version }) {
+function buildConfigXml({
+  appId,
+  packageId,
+  version,
+  includeEngineFsService,
+  serviceMetadataXml = ""
+}) {
   const engineFsServiceId = `${packageId}.EngineFsService`;
+  const serviceFeature = includeEngineFsService
+    ? '  <feature name="http://tizen.org/feature/web.service"/>\n'
+    : "";
+  const applicationLaunchPrivilege = includeEngineFsService
+    ? '  <tizen:privilege name="http://tizen.org/privilege/application.launch"/>\n'
+    : "";
+  const serviceMetadata = serviceMetadataXml ? `\n    ${serviceMetadataXml}` : "";
+  const engineFsService = includeEngineFsService
+    ? `  <tizen:service id="${engineFsServiceId}" auto-restart="false" on-boot="false">
+    <tizen:content src="${tizenEngineFsServiceRelativePath}"/>${serviceMetadata}
+    <tizen:name>Nuvio EngineFS Service</tizen:name>
+    <tizen:icon src="icon.png"/>
+    <tizen:description>Local torrent streaming service for Nuvio Tizen playback</tizen:description>
+    <tizen:category name="http://tizen.org/category/service"/>
+  </tizen:service>
+`
+    : "";
   return `<?xml version="1.0" encoding="UTF-8"?>
 <widget xmlns:tizen="http://tizen.org/ns/widgets" xmlns="http://www.w3.org/ns/widgets" id="${defaultWidgetUri}" version="${version}" viewmodes="maximized">
   <access origin="*" subdomains="true"/>
@@ -60,24 +89,46 @@ function buildConfigXml({ appId, packageId, version }) {
   <author href="${defaultWidgetUri}">Nuvio</author>
   <content src="index.html"/>
   <feature name="http://tizen.org/feature/screen.size.all"/>
-  <feature name="http://tizen.org/feature/web.service"/>
-  <icon src="icon.png"/>
+${serviceFeature}  <icon src="icon.png"/>
   <name>${appName}</name>
   <tizen:privilege name="http://tizen.org/privilege/internet"/>
-  <tizen:privilege name="http://tizen.org/privilege/application.launch"/>
-  <tizen:privilege name="http://developer.samsung.com/privilege/network.public"/>
+${applicationLaunchPrivilege}  <tizen:privilege name="http://developer.samsung.com/privilege/network.public"/>
   <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
-  <tizen:service id="${engineFsServiceId}" auto-restart="true" on-boot="false">
-    <tizen:content src="${tizenEngineFsServiceRelativePath}"/>
-    <tizen:name>Nuvio EngineFS Service</tizen:name>
-    <tizen:icon src="icon.png"/>
-    <tizen:description>Local torrent streaming service for Nuvio Tizen playback</tizen:description>
-    <tizen:category name="http://tizen.org/category/service"/>
-  </tizen:service>
-  <tizen:profile name="tv-samsung"/>
+${engineFsService}  <tizen:profile name="tv-samsung"/>
   <tizen:setting screen-orientation="landscape" context-menu="enable" background-support="disable" encryption="disable" install-location="auto" hwkey-event="enable"/>
 </widget>
 `;
+}
+
+/*
+ * Keep the public-store profile free of the Samsung-partner-only service.
+ * The service metadata is intentionally supplied by the partner integration,
+ * rather than guessed here: Samsung validates those values during review.
+ */
+function validatePartnerServiceOptions({ includeEngineFsService, storeBuild, serviceMetadataXml }) {
+  if (!storeBuild || !includeEngineFsService) {
+    return;
+  }
+
+  if (!isTruthy(process.env.TIZEN_PARTNER_SERVICE_APPROVED)) {
+    throw new Error(
+      "Tizen Store packaging cannot include EngineFS without TIZEN_PARTNER_SERVICE_APPROVED=true. " +
+        "Samsung restricts tizen:service to approved TV partners."
+    );
+  }
+
+  if (!serviceMetadataXml) {
+    throw new Error(
+      "Tizen Store partner-service packaging requires TIZEN_SERVICE_METADATA_XML with the " +
+        "Samsung-approved tizen:metadata element."
+    );
+  }
+
+  if (!/^<tizen:metadata\b[\s\S]*\/>$/.test(serviceMetadataXml)) {
+    throw new Error(
+      "TIZEN_SERVICE_METADATA_XML must contain one self-closing <tizen:metadata .../> element."
+    );
+  }
 }
 
 function buildIndexHtml() {
@@ -104,8 +155,9 @@ function buildIndexHtml() {
 `;
 }
 
-function buildMainJs({ packageId }) {
+function buildMainJs({ packageId, includeEngineFsService }) {
   const engineFsServiceId = `${packageId}.EngineFsService`;
+  const configuredServiceId = includeEngineFsService ? engineFsServiceId : "";
   const compatibilityOptions = JSON.stringify({
     platform: "tizen",
     minVersion: Number.parseInt(compatibilityPolicy.tizenRequiredVersion, 10),
@@ -113,7 +165,8 @@ function buildMainJs({ packageId }) {
     requiredLabel: `Samsung Tizen ${compatibilityPolicy.tizenRequiredVersion}+ · Chromium ${compatibilityPolicy.chromiumVersion}+ (${compatibilityPolicy.tizenSupportYear}+)`
   });
   return `window.__NUVIO_PLATFORM__ = "tizen";
-window.__NUVIO_TIZEN_ENGINEFS_SERVICE_ID__ = ${JSON.stringify(engineFsServiceId)};
+window.__NUVIO_TIZEN_ENGINEFS_SERVICE_ENABLED__ = ${includeEngineFsService};
+window.__NUVIO_TIZEN_ENGINEFS_SERVICE_ID__ = ${JSON.stringify(configuredServiceId)};
 
 var tvInput = window.tizen && window.tizen.tvinputdevice;
 if (tvInput && typeof tvInput.registerKey === "function") {
@@ -189,7 +242,14 @@ async function copyDistFolder(folderName) {
   await cp(source, path.join(stagingDir, folderName), { recursive: true });
 }
 
-async function stagePackage({ appId, packageId, version, envSourcePath }) {
+async function stagePackage({
+  appId,
+  packageId,
+  version,
+  envSourcePath,
+  includeEngineFsService,
+  serviceMetadataXml
+}) {
   await rm(stagingDir, { recursive: true, force: true });
   await mkdir(stagingDir, { recursive: true });
 
@@ -204,13 +264,25 @@ async function stagePackage({ appId, packageId, version, envSourcePath }) {
     cp(path.join(rootDir, "assets", "images", "tizenIcon.png"), path.join(stagingDir, "icon.png")),
     writeFile(
       path.join(stagingDir, "config.xml"),
-      buildConfigXml({ appId, packageId, version }),
+      buildConfigXml({
+        appId,
+        packageId,
+        version,
+        includeEngineFsService,
+        serviceMetadataXml
+      }),
       "utf8"
     ),
     writeFile(path.join(stagingDir, "index.html"), buildIndexHtml(), "utf8"),
-    writeFile(path.join(stagingDir, "main.js"), buildMainJs({ packageId }), "utf8")
+    writeFile(
+      path.join(stagingDir, "main.js"),
+      buildMainJs({ packageId, includeEngineFsService }),
+      "utf8"
+    )
   ]);
-  await stageTizenEngineFsService();
+  if (includeEngineFsService) {
+    await stageTizenEngineFsService();
+  }
 
   if (envSourcePath) {
     await writeRuntimeEnvScriptFile(path.join(stagingDir, "nuvio.env.js"), {
@@ -243,11 +315,19 @@ async function addDirectoryToZip(zip, dir, baseDir = dir) {
 }
 
 function parseArgs(argv) {
+  const storeBuild = isTruthy(process.env.TIZEN_STORE_BUILD);
+  const configuredIncludeService = process.env.TIZEN_INCLUDE_ENGINEFS_SERVICE;
   const options = {
     outDir: rootDir,
     appId: process.env.TIZEN_APP_ID || defaultTizenAppId,
     packageId: process.env.TIZEN_PACKAGE_ID || defaultTizenPackageId,
-    envSourcePath: process.env.TIZEN_ENV_SOURCE || ""
+    envSourcePath: process.env.TIZEN_ENV_SOURCE || "",
+    storeBuild,
+    includeEngineFsService:
+      configuredIncludeService == null ? !storeBuild : isTruthy(configuredIncludeService),
+    signingProfile: process.env.TIZEN_SECURITY_PROFILE || "",
+    tizenCli: process.env.TIZEN_CLI || "tizen",
+    serviceMetadataXml: String(process.env.TIZEN_SERVICE_METADATA_XML || "").trim()
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -264,6 +344,24 @@ function parseArgs(argv) {
     } else if (arg === "--env-source") {
       options.envSourcePath = path.resolve(argv[index + 1] || "");
       index += 1;
+    } else if (arg === "--store") {
+      options.storeBuild = true;
+      if (configuredIncludeService == null) {
+        options.includeEngineFsService = false;
+      }
+    } else if (arg === "--include-enginefs-service") {
+      options.includeEngineFsService = true;
+    } else if (arg === "--no-enginefs-service") {
+      options.includeEngineFsService = false;
+    } else if (arg === "--sign-profile") {
+      options.signingProfile = argv[index + 1] || "";
+      index += 1;
+    } else if (arg === "--tizen-cli") {
+      options.tizenCli = argv[index + 1] || "";
+      index += 1;
+    } else if (arg === "--service-metadata") {
+      options.serviceMetadataXml = String(argv[index + 1] || "").trim();
+      index += 1;
     } else {
       throw new Error(`Unknown argument: ${arg}`);
     }
@@ -273,7 +371,123 @@ function parseArgs(argv) {
     throw new Error("Tizen app id and package id are required.");
   }
 
+  if (options.storeBuild && !options.signingProfile) {
+    throw new Error(
+      "Tizen Store packaging requires an official Tizen security profile. " +
+        "Provide TIZEN_SECURITY_PROFILE or --sign-profile."
+    );
+  }
+
+  validatePartnerServiceOptions(options);
+
   return options;
+}
+
+function runCommand(command, args, { cwd }) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.on("error", (error) => {
+      if (error.code === "ENOENT") {
+        reject(
+          new Error(
+            `Tizen CLI not found at "${command}". Install Tizen Studio/Web CLI on the packaging runner or set TIZEN_CLI to its executable path.`
+          )
+        );
+        return;
+      }
+      reject(error);
+    });
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve({ stdout, stderr });
+        return;
+      }
+      const details = [stdout.trim(), stderr.trim()].filter(Boolean).join("\n");
+      reject(new Error(`Tizen CLI package command failed with exit code ${code}. ${details}`));
+    });
+  });
+}
+
+async function findWgtFiles(directory) {
+  if (!(await pathExists(directory))) {
+    return [];
+  }
+  const entries = await readdir(directory, { withFileTypes: true });
+  return entries
+    .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".wgt"))
+    .map((entry) => path.join(directory, entry.name));
+}
+
+async function assertSignedTizenPackage(outputPath, { publicStoreBuild }) {
+  const zip = await JSZip.loadAsync(await readFile(outputPath));
+  const requiredFiles = ["config.xml", "author-signature.xml", "signature1.xml"];
+  for (const fileName of requiredFiles) {
+    const entry = zip.file(fileName);
+    if (!entry) {
+      throw new Error(`Signed Tizen WGT is missing required ${fileName}.`);
+    }
+  }
+
+  const configXml = await zip.file("config.xml").async("string");
+  if (/auto-restart\s*=\s*["']true["']/i.test(configXml)) {
+    throw new Error(
+      'Tizen WGT contains auto-restart="true", which is not allowed for Store submission.'
+    );
+  }
+  if (/on-boot\s*=\s*["']true["']/i.test(configXml)) {
+    throw new Error(
+      'Tizen WGT contains on-boot="true", which is not allowed for Store submission.'
+    );
+  }
+  if (
+    publicStoreBuild &&
+    /<tizen:service\b|http:\/\/tizen\.org\/feature\/web\.service|http:\/\/tizen\.org\/privilege\/application\.launch/i.test(
+      configXml
+    )
+  ) {
+    throw new Error(
+      "Public Tizen Store WGT unexpectedly contains the partner-only EngineFS service or its privileges."
+    );
+  }
+}
+
+async function packageWithOfficialTizenCli({
+  outputPath,
+  signingProfile,
+  tizenCli,
+  publicStoreBuild
+}) {
+  await rm(signedOutputDir, { recursive: true, force: true });
+  await mkdir(signedOutputDir, { recursive: true });
+  await runCommand(tizenCli, ["package", "-t", "wgt", "-s", signingProfile, "--", stagingDir], {
+    cwd: signedOutputDir
+  });
+
+  const candidates = [
+    ...(await findWgtFiles(signedOutputDir)),
+    ...(await findWgtFiles(stagingDir))
+  ];
+  if (candidates.length === 0) {
+    throw new Error(
+      `Tizen CLI completed without producing a WGT in ${signedOutputDir}. Check the installed CLI version and security profile.`
+    );
+  }
+
+  const [signedPackagePath] = candidates;
+  await cp(signedPackagePath, outputPath);
+  await assertSignedTizenPackage(outputPath, { publicStoreBuild });
 }
 
 async function packageTizen() {
@@ -296,17 +510,32 @@ async function packageTizen() {
 
   await mkdir(options.outDir, { recursive: true });
   const outputPath = path.join(options.outDir, `${options.packageId}_${version}.wgt`);
-  const zip = new JSZip();
-  await addDirectoryToZip(zip, stagingDir);
-  const buffer = await zip.generateAsync({
-    type: "nodebuffer",
-    compression: "DEFLATE"
-  });
-  await writeFile(outputPath, buffer);
+  await rm(outputPath, { force: true });
+
+  if (options.storeBuild) {
+    await packageWithOfficialTizenCli({
+      outputPath,
+      signingProfile: options.signingProfile,
+      tizenCli: options.tizenCli,
+      publicStoreBuild: !options.includeEngineFsService
+    });
+  } else {
+    const zip = new JSZip();
+    await addDirectoryToZip(zip, stagingDir);
+    const buffer = await zip.generateAsync({
+      type: "nodebuffer",
+      compression: "DEFLATE"
+    });
+    await writeFile(outputPath, buffer);
+  }
 
   console.log(`Tizen WGT created: ${outputPath}`);
   console.log(`Tizen application id: ${options.appId}`);
   console.log(`Tizen package id: ${options.packageId}`);
+  console.log(
+    `Tizen package profile: ${options.storeBuild ? "official Store-signed" : "development (unsigned)"}`
+  );
+  console.log(`Tizen EngineFS service packaged: ${options.includeEngineFsService ? "yes" : "no"}`);
   console.log(
     `Runtime env bundled from: ${options.envSourcePath || path.join(distDir, "nuvio.env.js")}`
   );

@@ -187,10 +187,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Package local Tizen WGT
+      - name: Package signed public-store Tizen WGT
         env:
           NUVIO_REQUIRE_LOCAL_PROPERTIES: "1"
-        run: npm run package:tizen
+          TIZEN_CLI: ${{ vars.TIZEN_CLI || 'tizen' }}
+          TIZEN_SECURITY_PROFILE: ${{ secrets.TIZEN_SECURITY_PROFILE }}
+        run: npm run package:tizen:store
 
       - name: Normalize Tizen package metadata
         id: package

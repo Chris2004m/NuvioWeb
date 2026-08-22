@@ -9,10 +9,11 @@ function makeRuntime({
   version = "5.0",
   chromium = 63,
   webService = true,
+  engineFsServicePackaged,
   intersectionObserver = false,
   resizeObserver = false
 } = {}) {
-  return {
+  const runtime = {
     navigator: {
       userAgent: `Mozilla/5.0 Tizen/${version} AppleWebKit/537.36 Chrome/${chromium}.0 Safari/537.36`
     },
@@ -33,6 +34,10 @@ function makeRuntime({
     ResizeObserver: resizeObserver ? class {} : undefined,
     WebAssembly: undefined
   };
+  if (engineFsServicePackaged !== undefined) {
+    runtime.__NUVIO_TIZEN_ENGINEFS_SERVICE_ENABLED__ = engineFsServicePackaged;
+  }
+  return runtime;
 }
 
 test("Tizen 4 is recognized as a legacy runtime and P2P is disabled", () => {
@@ -70,6 +75,20 @@ test("explicitly unavailable web service disables P2P without disabling version 
   const capabilities = getTizenCapabilities(runtime);
 
   assert.equal(capabilities.tizenMajorVersion, 5);
+  assert.equal(capabilities.supportsWebService, false);
+  assert.equal(capabilities.supportsP2p, false);
+});
+
+test("public-store builds disable EngineFS even on Tizen 5", () => {
+  const runtime = makeRuntime({
+    version: "5.0",
+    chromium: 63,
+    webService: true,
+    engineFsServicePackaged: false
+  });
+  const capabilities = getTizenCapabilities(runtime);
+
+  assert.equal(capabilities.engineFsServicePackaged, false);
   assert.equal(capabilities.supportsWebService, false);
   assert.equal(capabilities.supportsP2p, false);
 });

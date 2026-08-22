@@ -16,6 +16,7 @@
 
 NuvioTV Web supports **Samsung Tizen TVs from 2018 onward (Tizen 4+)** and **LG webOS TVs from 2020 onward (webOS 5+)**.
 On Tizen 4, some advanced audio/subtitle features may be limited, and torrent/P2P playback is unavailable.
+The public Samsung Store profile also disables EngineFS/torrent/P2P on newer Tizen versions unless Samsung partner approval is configured.
 
 - [Nuvio WebTV Installer](https://github.com/NuvioMedia/NuvioWeb/releases/latest) for Windows, macOS, and Linux
 - [Samsung Tizen WGT](https://github.com/NuvioMedia/NuvioWeb/releases/latest) for manual installation
@@ -35,10 +36,11 @@ Build TV packages with:
 
 ```bash
 npm run package:tizen
+npm run package:tizen:store
 npm run package:webos
 ```
 
-NuvioTV Web is built with JavaScript, HTML, CSS, and platform TV APIs. Building requires Node.js and npm; package installation additionally requires the relevant Tizen or webOS tools.
+`package:tizen` is the unsigned development package. `package:tizen:store` requires Tizen Studio/Web CLI and a configured security profile, and creates the signed public-store profile with EngineFS/P2P disabled unless Samsung partner approval is explicitly configured. NuvioTV Web is built with JavaScript, HTML, CSS, and platform TV APIs. Building requires Node.js and npm; package installation additionally requires the relevant Tizen or webOS tools.
 
 ## License
 

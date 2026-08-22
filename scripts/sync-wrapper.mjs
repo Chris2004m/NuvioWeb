@@ -365,8 +365,10 @@ async function updateWebOsMetadata(targetDir) {
   appInfo.icon = wrapperIconFiles.webosIcon.target;
   appInfo.largeIcon = wrapperIconFiles.webosLargeIcon.target;
   appInfo.splashBackground = wrapperIconFiles.webosSplash.target;
+  appInfo.iconColor = appInfo.iconColor || "#0e0f12";
   appInfo.services = [webOsServiceId];
-  appInfo.requiredVersion = compatibilityPolicy.webOsRequiredVersion;
+  delete appInfo.bgColor;
+  delete appInfo.requiredVersion;
   delete appInfo.disableBackHistoryAPI;
 
   await writeTextFile(appInfoPath, `${JSON.stringify(appInfo, null, 2)}\n`);
@@ -471,7 +473,7 @@ function removeTizenEngineFsService(xml) {
 }
 
 function upsertTizenEngineFsService(xml, serviceId) {
-  const serviceSnippet = `<tizen:service id="${serviceId}" auto-restart="true" on-boot="false">
+  const serviceSnippet = `<tizen:service id="${serviceId}" auto-restart="false" on-boot="false">
     <tizen:content src="${tizenEngineFsServiceRelativePath}"/>
     <tizen:name>Nuvio EngineFS Service</tizen:name>
     <tizen:description>Local torrent streaming service for Nuvio Tizen playback</tizen:description>

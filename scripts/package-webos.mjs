@@ -39,6 +39,75 @@ async function pathExists(filePath) {
   }
 }
 
+function validateWebOsAppInfo(appInfo) {
+  const requiredFields = ["id", "title", "type", "main", "icon", "version"];
+  const missingField = requiredFields.find((field) => !String(appInfo?.[field] || "").trim());
+  if (missingField) {
+    throw new Error(`webOS appinfo.json is missing required field: ${missingField}`);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(appInfo, "requiredVersion")) {
+    throw new Error(
+      "webOS appinfo.json contains unsupported requiredVersion metadata. " +
+        "The app runtime compatibility gate is maintained in scripts/compatibilityPolicy.mjs."
+    );
+  }
+
+  if (!/^#[0-9a-f]{6}(?:[0-9a-f]{2})?$/i.test(String(appInfo.iconColor || ""))) {
+    throw new Error("webOS appinfo.json requires a valid iconColor in #RRGGBB or #RRGGBBAA form.");
+  }
+
+  if (String(appInfo.title).length > 20) {
+    throw new Error("webOS appinfo.json title must be 20 characters or fewer.");
+  }
+  if (String(appInfo.appDescription || "").length > 60) {
+    throw new Error("webOS appinfo.json appDescription must be 60 characters or fewer.");
+  }
+
+  const appId = String(appInfo.id);
+  const services = Array.isArray(appInfo.services) ? appInfo.services : [];
+  if (services.some((serviceId) => !String(serviceId).startsWith(`${appId}.`))) {
+    throw new Error("webOS service IDs must begin with the application ID followed by a dot.");
+  }
+}
+
+async function validatePngDimensions(filePath, expectedWidth, expectedHeight, label) {
+  const image = await readFile(filePath);
+  const isPng =
+    image.length >= 24 &&
+    image.readUInt32BE(0) === 0x89504e47 &&
+    image.readUInt32BE(4) === 0x0d0a1a0a;
+  if (
+    !isPng ||
+    image.readUInt32BE(16) !== expectedWidth ||
+    image.readUInt32BE(20) !== expectedHeight
+  ) {
+    throw new Error(
+      `${label} must be a PNG of exactly ${expectedWidth}x${expectedHeight}: ${filePath}`
+    );
+  }
+}
+
+function validateWebOsServiceManifest(serviceManifest) {
+  if (String(serviceManifest?.id || "") !== webOsServiceId) {
+    throw new Error(`webOS services.json must use service id ${webOsServiceId}.`);
+  }
+
+  const services = Array.isArray(serviceManifest?.services) ? serviceManifest.services : [];
+  if (
+    !services.length ||
+    services.some(
+      (service) =>
+        !String(service?.name || "").startsWith(`${webOsServiceId}.`) &&
+        String(service?.name || "") !== webOsServiceId
+    )
+  ) {
+    throw new Error(
+      "Every webOS services.json service name must begin with the application service ID."
+    );
+  }
+}
+
 async function resolveWebOsScriptPath(targetDir) {
   const webOsScriptPath = path.join(targetDir, webOsRuntimeScriptPath);
   if (!(await pathExists(webOsScriptPath))) {
@@ -97,9 +166,28 @@ async function stageApp() {
   appInfo.icon = "icon.png";
   appInfo.largeIcon = "largeIcon.png";
   appInfo.services = [webOsServiceId];
+  validateWebOsAppInfo(appInfo);
   await writeFile(appInfoPath, `${JSON.stringify(appInfo, null, 2)}\n`, "utf8");
 
   await Promise.all([
+    validatePngDimensions(
+      path.join(rootDir, "assets", "images", "icon.png"),
+      80,
+      80,
+      "webOS small icon"
+    ),
+    validatePngDimensions(
+      path.join(rootDir, "assets", "images", "largeIcon.png"),
+      130,
+      130,
+      "webOS large icon"
+    ),
+    validatePngDimensions(
+      path.join(rootDir, "assets", "images", "splash.png"),
+      1920,
+      1080,
+      "webOS splash image"
+    ),
     cp(path.join(rootDir, "assets", "images", "icon.png"), path.join(appStageDir, "icon.png")),
     cp(
       path.join(rootDir, "assets", "images", "largeIcon.png"),
@@ -118,7 +206,10 @@ async function stageApp() {
 
 async function stageService() {
   const packageJsonPath = path.join(webOsServiceSourceDir, "package.json");
+  const servicesManifestPath = path.join(webOsServiceSourceDir, "services.json");
   const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8"));
+  const servicesManifest = JSON.parse(await readFile(servicesManifestPath, "utf8"));
+  validateWebOsServiceManifest(servicesManifest);
 
   await mkdir(path.join(serviceStageDir, "src"), { recursive: true });
   await mkdir(path.join(serviceStageDir, "runtime"), { recursive: true });
@@ -129,9 +220,10 @@ async function stageService() {
       `${JSON.stringify(packageJson, null, 2)}\n`,
       "utf8"
     ),
-    cp(
-      path.join(webOsServiceSourceDir, "services.json"),
-      path.join(serviceStageDir, "services.json")
+    writeFile(
+      path.join(serviceStageDir, "services.json"),
+      `${JSON.stringify(servicesManifest, null, 2)}\n`,
+      "utf8"
     ),
     cp(
       path.join(webOsServiceSourceDir, "runtime", "media-http.cjs"),
