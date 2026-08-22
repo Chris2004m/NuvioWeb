@@ -8147,7 +8147,13 @@ export const HomeScreen = {
 
   async mount(params = {}, navigationContext = {}) {
     const mountStart = HOME_PERF_DEBUG ? homePerfNow() : 0;
-    const waitForFreshContinueWatching = Boolean(params?.waitForFreshContinueWatching);
+    const isBackNavigation = Boolean(navigationContext?.isBackNavigation);
+    // Startup-only Home flags can be retained in the route stack when the
+    // user opens Detail. Do not replay them when returning to the rendered TV
+    // Home, otherwise Back is mistaken for a new cold Home load.
+    const waitForFreshContinueWatching = Boolean(
+      params?.waitForFreshContinueWatching && !isBackNavigation
+    );
     this.container = document.getElementById("home");
     const restoredRouteFocusState =
       navigationContext?.isBackNavigation && navigationContext?.restoredState?.layoutMode
@@ -8207,7 +8213,7 @@ export const HomeScreen = {
     const watchProgressSourceChanged =
       watchProgressRepository.getContinueWatchingSourceKey() !==
       String(this.loadedWatchProgressSourceKey || "");
-    const forceReload = Boolean(params?.forceReload);
+    const forceReload = Boolean(params?.forceReload && !isBackNavigation);
     if (profileChanged || watchProgressSourceChanged || forceReload) {
       this.hasLoadedOnce = false;
       this.hasAppliedInitialContinueWatchingFocus = false;
