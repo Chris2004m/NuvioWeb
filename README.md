@@ -14,7 +14,8 @@
 
 ## Get Nuvio TV
 
-NuvioTV Web supports **Samsung Tizen TVs from 2019 onward** and **LG webOS TVs from 2020 onward**.
+NuvioTV Web supports **Samsung Tizen TVs from 2018 onward (Tizen 4+)** and **LG webOS TVs from 2020 onward (webOS 5+)**.
+On Tizen 4, some advanced audio/subtitle features may be limited, and torrent/P2P playback is unavailable.
 
 - [Nuvio WebTV Installer](https://github.com/NuvioMedia/NuvioWeb/releases/latest) for Windows, macOS, and Linux
 - [Samsung Tizen WGT](https://github.com/NuvioMedia/NuvioWeb/releases/latest) for manual installation

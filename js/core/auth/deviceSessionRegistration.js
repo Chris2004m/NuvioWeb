@@ -1,6 +1,7 @@
 /* global __NUVIO_APP_VERSION__ */
 
 import { Platform } from "../../platform/index.js";
+import { getTizenCapabilities } from "../../platform/tizen/tizenCapabilities.js";
 import { SupabaseApi } from "../../data/remote/supabase/supabaseApi.js";
 import { AuthManager } from "./authManager.js";
 import { AuthState } from "./authState.js";
@@ -106,23 +107,13 @@ export function buildDeviceRegistrationParams({ installationId, clientVersion, m
 }
 
 function readTizenMetadata(runtime, fallbackDeviceName) {
-  let version = "";
+  const capabilities = getTizenCapabilities(runtime);
+  let version = capabilities.tizenVersion || "";
   let model = "";
-  try {
-    version = normalizedText(
-      runtime.tizen?.systeminfo?.getCapability?.("http://tizen.org/feature/platform.version")
-    );
-  } catch {
-    // Fall back to the user agent below.
-  }
   try {
     model = normalizedText(runtime.webapis?.productinfo?.getModel?.());
   } catch {
     // Model access is optional on wrappers and older TVs.
-  }
-  if (!version) {
-    version =
-      (normalizedText(runtime.navigator?.userAgent).match(/Tizen[\s/]([0-9.]+)/i) || [])[1] || "";
   }
   return {
     deviceName: model || fallbackDeviceName || "Tizen TV",

@@ -58,6 +58,7 @@ import {
   STREAM_VIRTUALIZATION_OVERSCAN_PX,
   STREAM_VIRTUALIZATION_THRESHOLD
 } from "./streamVirtualizer.js";
+import { isStreamEmptyStateVisible } from "./streamEmptyState.js";
 
 const STREAM_BADGE_LIMIT = 9;
 // Number of rows on each side of the focused source to keep badge-hydrated.
@@ -1975,8 +1976,11 @@ export const StreamScreen = {
   },
 
   hasPendingSourceLoads(filter = this.addonFilter) {
+    if (this.loading) {
+      return true;
+    }
     if (!Array.isArray(this.sourceChips) || !this.sourceChips.length) {
-      return Boolean(this.loading);
+      return false;
     }
     if (filter === "all") {
       return this.sourceChips.some((chip) => chip.status === "loading");
@@ -2027,6 +2031,12 @@ export const StreamScreen = {
       return false;
     }
 
+    const targetFilter = String(this.addonFilter || "all");
+    // The All tab is defined by the complete stream list. Keep this explicit
+    // so a stale filtered cache can never leave All with hidden cards and a
+    // misleading empty state.
+    const visibleStreams = targetFilter === "all" ? allStreams : filtered;
+
     const rows = Array.from(list.querySelectorAll(".stream-route-card-row[data-stream-key]"));
     if (rows.length !== allStreams.length) {
       return false;
@@ -2041,7 +2051,7 @@ export const StreamScreen = {
     });
     const streamOccurrences = new Map();
     const visibleRows = [];
-    for (const stream of filtered) {
+    for (const stream of visibleStreams) {
       const indices = streamIndices.get(stream) || [];
       const occurrence = Number(streamOccurrences.get(stream) || 0);
       const row = rowsByKey.get(String(indices[occurrence] ?? ""));
@@ -2075,7 +2085,6 @@ export const StreamScreen = {
     // LazyColumn retaining keyed items while the filtered state changes.
     visibleRows.forEach((row) => list.appendChild(row));
 
-    const targetFilter = String(this.addonFilter || "all");
     this.container?.querySelectorAll(".stream-route-chip[data-addon]").forEach((chip) => {
       const selected = String(chip.dataset.addon || "all") === targetFilter;
       chip.classList.toggle("selected", selected);
@@ -2090,7 +2099,11 @@ export const StreamScreen = {
     }
     const emptyState = list.querySelector("[data-stream-empty]");
     if (emptyState) {
-      const visible = !filtered.length && !this.hasPendingSourceLoads(targetFilter);
+      const visible = isStreamEmptyStateVisible({
+        filteredStreams: visibleStreams,
+        isLoading: this.loading,
+        hasPendingSourceLoads: this.hasPendingSourceLoads(targetFilter)
+      });
       emptyState.hidden = !visible;
       emptyState.style.display = visible ? "" : "none";
     }
@@ -2113,6 +2126,11 @@ export const StreamScreen = {
     ) {
       return false;
     }
+    const allStreams = this.getFilteredStreams("all");
+    const filtered = this.getFilteredStreams();
+    if (!this.applyAddonFilterDomState(filtered, allStreams)) {
+      return false;
+    }
     if (!filterChanged) {
       this.streamFocusDomCache = null;
       this.hydrateVisibleStreamBadges();
@@ -2120,12 +2138,6 @@ export const StreamScreen = {
       this.applyFocus();
       return true;
     }
-    const allStreams = this.getFilteredStreams("all");
-    const filtered = this.getFilteredStreams();
-    if (!this.applyAddonFilterDomState(filtered, allStreams)) {
-      return false;
-    }
-
     this.renderedMarkup = null;
     this.streamFocusDomCache = null;
     this.restoreScrollPosition();
@@ -2786,20 +2798,35 @@ export const StreamScreen = {
       return false;
     }
     const markup = this.buildSourceChipMarkup();
-    if (track.innerHTML === markup) {
-      return true;
+    const markupChanged = track.innerHTML !== markup;
+    if (markupChanged) {
+      track.innerHTML = markup;
+      this.renderedMarkup = null;
+      this._filteredStreamsCache = null;
+      this.streamFocusDomCache = null;
+      // New chip nodes need the same indexes assigned during a full render for
+      // generic focus helpers; StreamScreen's own focus state is then reapplied.
+      ScreenUtils.indexFocusables(this.container, ".focusable:not([hidden])");
+      if (this.focusState?.zone === "filter") {
+        this.applyFocus();
+      }
     }
-    track.innerHTML = markup;
-    this.renderedMarkup = null;
-    this._filteredStreamsCache = null;
-    this.streamFocusDomCache = null;
-    // New chip nodes need the same indexes assigned during a full render for
-    // generic focus helpers; StreamScreen's own focus state is then reapplied.
-    ScreenUtils.indexFocusables(this.container, ".focusable:not([hidden])");
-    if (this.focusState?.zone === "filter") {
-      this.applyFocus();
+    if (
+      filterReset ||
+      !this.renderedStreamListStable ||
+      this.renderedStreamListStreams !== this.streams
+    ) {
+      this.renderedMarkup = null;
+      return false;
     }
-    return !filterReset;
+    const allStreams = this.getFilteredStreams("all");
+    const filtered = this.getFilteredStreams();
+    if (!this.applyAddonFilterDomState(filtered, allStreams)) {
+      this.renderedMarkup = null;
+      return false;
+    }
+    this.renderedStreamListSourceChips = this.sourceChips;
+    return true;
   },
 
   renderChip(name, selected, status) {
@@ -2925,7 +2952,7 @@ export const StreamScreen = {
   },
 
   renderStableStreamEmptyState() {
-    return `<div class="stream-route-empty" data-stream-empty hidden>No sources found for this filter.</div>`;
+    return `<div class="stream-route-empty" data-stream-empty hidden>${escapeHtml(t("sources_no_streams", {}, "No streams found"))}</div>`;
   },
 
   render() {
@@ -2970,7 +2997,6 @@ export const StreamScreen = {
     const filtered = this.getFilteredStreams();
     const allStreams = this.getFilteredStreams("all");
     const hasPendingForFilter = this.hasPendingSourceLoads();
-    const hasAnyStreams = this.streams.length > 0;
     const streamBadgesEnabled = DebridSettingsStore.get().streamBadgesEnabled !== false;
     const badgeSettings = StreamBadgeSettingsStore.snapshot();
     const showAddonLogo = badgeSettings.showAddonLogo === true;
@@ -3029,7 +3055,7 @@ export const StreamScreen = {
           this.renderStreamCard(stream, index, streamBadgesEnabled, badgeSettings)
         )
         .join("");
-      if (this.loading || this.sourceChips.some((chip) => chip.status === "loading")) {
+      if (hasPendingForFilter) {
         body += this.renderStableStreamLoadingRow();
       }
       body += this.renderStableStreamEmptyState();
@@ -3045,12 +3071,12 @@ export const StreamScreen = {
     } else if (filtered.length && showAddonLogo) {
       this.requestAddonLogoPrerender(filtered);
       body = this.renderLoadingCards(Math.min(3, filtered.length));
-    } else if ((this.loading && !hasAnyStreams) || hasPendingForFilter) {
+    } else if (hasPendingForFilter) {
       body = this.renderLoadingCards();
     } else if (this.error) {
       body = `<div class="stream-route-empty">${escapeHtml(this.error)}</div>`;
     } else if (!filtered.length) {
-      body = `<div class="stream-route-empty">No sources found for this filter.</div>`;
+      body = `<div class="stream-route-empty">${escapeHtml(t("sources_no_streams", {}, "No streams found"))}</div>`;
     }
 
     const routeContent = this.autoResumeUiActive

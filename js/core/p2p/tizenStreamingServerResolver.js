@@ -1,5 +1,6 @@
 import { Platform } from "../../platform/index.js";
 import { TizenEngineFsService } from "../../platform/tizen/tizenEngineFsService.js";
+import { TizenCapabilities } from "../../platform/tizen/tizenCapabilities.js";
 
 const TIZEN_STREAMING_KIND = "tizen-streaming-server";
 const CREATE_TIMEOUT_MS = 60000;
@@ -360,7 +361,15 @@ function buildResolvedStream(
 
 export const TizenStreamingServerResolver = {
   canResolveStream(stream = {}) {
-    return Platform.isTizen() && Boolean(getInfoHash(stream));
+    return Platform.isTizen() && TizenCapabilities.canUseP2p() && Boolean(getInfoHash(stream));
+  },
+
+  isTorrentStream(stream = {}) {
+    return Boolean(getInfoHash(stream));
+  },
+
+  isUnsupportedOnCurrentTizen(stream = {}) {
+    return Platform.isTizen() && this.isTorrentStream(stream) && !TizenCapabilities.canUseP2p();
   },
 
   getResolvedStreamState(stream = {}) {
@@ -451,6 +460,9 @@ export const TizenStreamingServerResolver = {
     if (!Platform.isTizen()) {
       return { status: "unsupported" };
     }
+    if (!TizenCapabilities.canUseP2p()) {
+      return { status: "unsupported", detail: "Tizen P2P streaming is not supported on this TV" };
+    }
     const infoHash = getInfoHash(stream);
     if (!infoHash) {
       return { status: "unsupported", detail: "Missing torrent infoHash" };
@@ -459,7 +471,7 @@ export const TizenStreamingServerResolver = {
     try {
       let baseUrl = "";
       let baseUrlKind = "local-service";
-      const localService = await TizenEngineFsService.ensureStarted();
+      const localService = await TizenEngineFsService.ensureStarted({ purpose: "p2p" });
       if (localService.status === "success" && localService.baseUrl) {
         baseUrl = localService.baseUrl;
         baseUrlKind = "local-service";

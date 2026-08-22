@@ -2339,4 +2339,12 @@
     <string name="layout_overall_ratings">ஒட்டுமொத்த மதிப்பீடுகள்</string>
     <string name="layout_overall_ratings_sub_on">நிலையான மற்றும் TMDB மதிப்பீடுகள் காட்டப்படும்.</string>
     <string name="layout_overall_ratings_sub_off">நிலையான மற்றும் TMDB மதிப்பீடுகள் மறைக்கப்பட்டுள்ளன. விவரப் பக்கங்களில் MDBList வழங்குநர் அமைப்புகளுக்கு முன்னுரிமை உண்டு.</string>
+    <string name="settings_p2p_unsupported_subtitle">இந்த டிவியில் ஆதரிக்கப்படாது.</string>
+    <string name="player_audio_tizen_dash_unsupported">DASH ஆடியோ தடங்களை மாற்றுவது இந்த டிவியில் ஆதரிக்கப்படாது.</string>
+    <string name="player_subtitle_tizen_advanced_unsupported">மேம்பட்ட வசன பாணிகள் இந்த டிவியில் முழுமையாக ஆதரிக்கப்படாமல் இருக்கலாம்.</string>
+    <string name="player_subtitle_tizen_dash_unsupported">DASH ஸ்ட்ரீம்களுக்கான வசன மாற்றத்தை இந்த டிவி ஆதரிக்காமல் இருக்கலாம்.</string>
+    <string name="player_subtitle_tizen_advanced_unavailable_short">இந்த டிவியில் முழுமையாக ஆதரிக்கப்படாது</string>
+    <string name="player_error_tizen_p2p_unsupported">Torrent/P2P ஸ்ட்ரீமிங் இந்த டிவியில் ஆதரிக்கப்படாது.</string>
+    <string name="player_tizen_mkv_subtitles_unavailable">உட்பொதிக்கப்பட்ட MKV வசனங்கள் இந்த டிவியின் வலை இயக்கியில் கிடைக்காது.</string>
+    <string name="player_tizen_mkv_audio_unavailable">உட்பொதிக்கப்பட்ட MKV ஆடியோ தடங்கள் இந்த டிவியின் வலை இயக்கியில் கிடைக்காது.</string>
 </resources>

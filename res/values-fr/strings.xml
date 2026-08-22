@@ -2610,4 +2610,12 @@
     <string name="layout_overall_ratings">Notes globales</string>
     <string name="layout_overall_ratings_sub_on">Les notes standard et TMDB sont affichées.</string>
     <string name="layout_overall_ratings_sub_off">Les notes standard et TMDB sont masquées. Les paramètres du fournisseur MDBList sont prioritaires sur les pages de détails.</string>
+    <string name="settings_p2p_unsupported_subtitle">Non pris en charge sur ce téléviseur.</string>
+    <string name="player_audio_tizen_dash_unsupported">Le changement de piste audio DASH n’est pas pris en charge sur ce téléviseur.</string>
+    <string name="player_subtitle_tizen_advanced_unsupported">Le style avancé des sous-titres peut ne pas être entièrement pris en charge sur ce téléviseur.</string>
+    <string name="player_subtitle_tizen_dash_unsupported">Le changement de sous-titres pour les flux DASH peut ne pas être pris en charge par ce téléviseur.</string>
+    <string name="player_subtitle_tizen_advanced_unavailable_short">Pas entièrement pris en charge sur ce téléviseur</string>
+    <string name="player_error_tizen_p2p_unsupported">La lecture Torrent/P2P n’est pas prise en charge sur ce téléviseur.</string>
+    <string name="player_tizen_mkv_subtitles_unavailable">Les sous-titres MKV intégrés ne sont pas exposés par le lecteur web de ce téléviseur.</string>
+    <string name="player_tizen_mkv_audio_unavailable">Les pistes audio MKV intégrées ne sont pas exposées par le lecteur web de ce téléviseur.</string>
 </resources>

@@ -2688,4 +2688,12 @@
     <string name="layout_overall_ratings">Genel Puanlar</string>
     <string name="layout_overall_ratings_sub_on">Standart ve TMDB puanları gösterilir.</string>
     <string name="layout_overall_ratings_sub_off">Standart ve TMDB puanları gizlenir. Ayrıntı sayfalarında MDBList sağlayıcısının ayarları önceliklidir.</string>
+    <string name="settings_p2p_unsupported_subtitle">Bu TV'de desteklenmiyor.</string>
+    <string name="player_audio_tizen_dash_unsupported">DASH ses parçaları arasında geçiş bu TV'de desteklenmiyor.</string>
+    <string name="player_subtitle_tizen_advanced_unsupported">Gelişmiş altyazı biçimlendirmesi bu TV'de tamamen desteklenmeyebilir.</string>
+    <string name="player_subtitle_tizen_dash_unsupported">DASH akışlarında altyazı değiştirme bu TV tarafından desteklenmeyebilir.</string>
+    <string name="player_subtitle_tizen_advanced_unavailable_short">Bu TV'de tam olarak desteklenmiyor</string>
+    <string name="player_error_tizen_p2p_unsupported">Torrent/P2P oynatma bu TV'de desteklenmiyor.</string>
+    <string name="player_tizen_mkv_subtitles_unavailable">Bu TV'nin web oynatıcısı gömülü MKV altyazılarını sunmuyor.</string>
+    <string name="player_tizen_mkv_audio_unavailable">Bu TV'nin web oynatıcısı gömülü MKV ses parçalarını sunmuyor.</string>
 </resources>

@@ -2854,6 +2854,10 @@ export const PlayerController = {
     return fields.join("; ");
   },
 
+  getLastHlsErrorDiagnostic() {
+    return this.lastHlsErrorDiagnostic ? { ...this.lastHlsErrorDiagnostic } : null;
+  },
+
   forceAvPlayFallbackForCurrentSource(reason = "fallback") {
     const url = String(
       this.currentPlaybackUrl || this.video?.currentSrc || this.video?.src || ""

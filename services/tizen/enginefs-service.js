@@ -121,7 +121,12 @@ module.exports.onStart = function () {
   }
 };
 
-module.exports.onStop = function () {
+function stopEngineFsRuntime() {
   log("stopping local EngineFS runtime");
   requestRemoveAll();
-};
+}
+
+// onExit is the documented Tizen Web Service lifecycle callback. Keep onStop
+// as a harmless compatibility alias for older service runtimes.
+module.exports.onExit = stopEngineFsRuntime;
+module.exports.onStop = stopEngineFsRuntime;

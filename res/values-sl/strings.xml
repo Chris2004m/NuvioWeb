@@ -2455,4 +2455,12 @@
     <string name="layout_overall_ratings">Skupne ocene</string>
     <string name="layout_overall_ratings_sub_on">Standardne ocene in ocene TMDB so prikazane.</string>
     <string name="layout_overall_ratings_sub_off">Standardne ocene in ocene TMDB so skrite. Nastavitve ponudnika MDBList imajo na straneh s podrobnostmi prednost.</string>
+    <string name="settings_p2p_unsupported_subtitle">Na tem televizorju ni podprto.</string>
+    <string name="player_audio_tizen_dash_unsupported">Preklapljanje zvočnih posnetkov DASH na tem televizorju ni podprto.</string>
+    <string name="player_subtitle_tizen_advanced_unsupported">Napredni slogi podnapisov na tem televizorju morda niso v celoti podprti.</string>
+    <string name="player_subtitle_tizen_dash_unsupported">Preklapljanje podnapisov za tokove DASH ta televizor morda ne podpira.</string>
+    <string name="player_subtitle_tizen_advanced_unavailable_short">Na tem televizorju ni v celoti podprto</string>
+    <string name="player_error_tizen_p2p_unsupported">Predvajanje Torrent/P2P na tem televizorju ni podprto.</string>
+    <string name="player_tizen_mkv_subtitles_unavailable">Vdelani podnapisi MKV niso na voljo v spletnem predvajalniku tega televizorja.</string>
+    <string name="player_tizen_mkv_audio_unavailable">Vdelani zvočni posnetki MKV niso na voljo v spletnem predvajalniku tega televizorja.</string>
 </resources>

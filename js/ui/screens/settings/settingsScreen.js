@@ -55,6 +55,7 @@ import { ProfileManager } from "../../../core/profile/profileManager.js";
 import { AuthManager } from "../../../core/auth/authManager.js";
 import { SupabaseApi } from "../../../data/remote/supabase/supabaseApi.js";
 import { Platform } from "../../../platform/index.js";
+import { TizenCapabilities } from "../../../platform/tizen/tizenCapabilities.js";
 import { isFastHorizontalNavigationEnabled } from "../../../platform/sharedKeys.js";
 import { CW_DISPLAY_SNAPSHOT_KEY, CW_ENRICHMENT_CACHE_KEY } from "../home/homeConstants.js";
 import { I18n } from "../../../i18n/index.js";
@@ -2434,6 +2435,7 @@ export const SettingsScreen = {
     return `
       <button class="settings-action-row settings-content-focusable focusable${classes ? ` ${classes}` : ""}${inert ? " is-disabled" : ""}${planned ? " is-planned" : ""}"
               data-zone="content"
+              aria-disabled="${inert ? "true" : "false"}"
               ${this.registerAction(focusKey, inert ? () => {} : this.actionMap.get(focusKey))}
               data-role="action">
         ${leadingIconSrc ? `<img class="settings-row-leading-image" src="${escapeHtml(leadingIconSrc)}" alt="" aria-hidden="true">` : leadingIcon ? `<span class="settings-row-leading-icon material-icons" aria-hidden="true">${escapeHtml(leadingIcon)}</span>` : ""}
@@ -2458,6 +2460,7 @@ export const SettingsScreen = {
     return `
       <button class="settings-action-row settings-toggle-row settings-content-focusable focusable${inert ? " is-disabled" : ""}${planned ? " is-planned" : ""}"
               data-zone="content"
+              aria-disabled="${inert ? "true" : "false"}"
               ${this.registerAction(focusKey, inert ? () => {} : this.actionMap.get(focusKey))}
               data-role="toggle">
         <span class="settings-row-copy">
@@ -5605,6 +5608,10 @@ export const SettingsScreen = {
     this.ensureExpandedState("playback");
     const expanded = this.expandedSections.playback;
     const torrentSettings = model.torrent || TorrentSettingsStore.get();
+    const tizenP2pUnsupported = TizenCapabilities.isP2pUnsupported();
+    const p2pUnavailableSubtitle = tizenP2pUnsupported
+      ? t("settings_p2p_unsupported_subtitle", {}, "Not supported on this TV.")
+      : t("settings_p2p_subtitle");
 
     this.actionMap.set("playback:toggle:general", () => {
       this.toggleExpandedSection("playback", "general");
@@ -6069,6 +6076,9 @@ export const SettingsScreen = {
       });
     });
     this.actionMap.set("playback:p2pEnabled", () => {
+      if (TizenCapabilities.isP2pUnsupported()) {
+        return;
+      }
       const current = TorrentSettingsStore.get();
       if (current.p2pEnabled) {
         TorrentSettingsStore.setP2pEnabled(false);
@@ -6093,6 +6103,9 @@ export const SettingsScreen = {
       });
     });
     this.actionMap.set("playback:hideTorrentStats", () => {
+      if (TizenCapabilities.isP2pUnsupported()) {
+        return;
+      }
       TorrentSettingsStore.setHideTorrentStats(!TorrentSettingsStore.get().hideTorrentStats);
     });
 
@@ -6139,12 +6152,15 @@ export const SettingsScreen = {
           ${this.renderToggleRow({
             focusKey: "playback:p2pEnabled",
             title: t("essential_p2p_streams", {}, "P2P streams"),
-            subtitle: t(
-              "essential_p2p_streams_subtitle",
-              {},
-              "Allow peer-to-peer stream playback."
-            ),
-            checked: Boolean(torrentSettings.p2pEnabled)
+            subtitle: tizenP2pUnsupported
+              ? p2pUnavailableSubtitle
+              : t(
+                  "essential_p2p_streams_subtitle",
+                  {},
+                  "Allow peer-to-peer stream playback."
+                ),
+            checked: tizenP2pUnsupported ? false : Boolean(torrentSettings.p2pEnabled),
+            disabled: tizenP2pUnsupported
           })}
         </div></div>
         <div class="settings-group-heading"><div class="settings-group-title">${escapeHtml(t("essential_subtitles_and_audio", {}, "Subtitles & audio"))}</div></div>
@@ -6634,14 +6650,18 @@ export const SettingsScreen = {
         ${this.renderToggleRow({
           focusKey: "playback:p2pEnabled",
           title: t("settings_p2p_title"),
-          subtitle: t("settings_p2p_subtitle"),
-          checked: Boolean(torrentSettings.p2pEnabled)
+          subtitle: p2pUnavailableSubtitle,
+          checked: tizenP2pUnsupported ? false : Boolean(torrentSettings.p2pEnabled),
+          disabled: tizenP2pUnsupported
         })}
         ${this.renderToggleRow({
           focusKey: "playback:hideTorrentStats",
           title: t("settings_p2p_hide_stats_title"),
-          subtitle: t("settings_p2p_hide_stats_subtitle"),
-          checked: Boolean(torrentSettings.hideTorrentStats)
+          subtitle: tizenP2pUnsupported
+            ? p2pUnavailableSubtitle
+            : t("settings_p2p_hide_stats_subtitle"),
+          checked: tizenP2pUnsupported ? false : Boolean(torrentSettings.hideTorrentStats),
+          disabled: tizenP2pUnsupported
         })}
       </div>
     `;

@@ -1832,4 +1832,12 @@
     <string name="layout_overall_ratings">التقييمات العامة</string>
     <string name="layout_overall_ratings_sub_on">يتم عرض التقييمات القياسية وتقييمات TMDB.</string>
     <string name="layout_overall_ratings_sub_off">التقييمات القياسية وتقييمات TMDB مخفية. تكون إعدادات مزود MDBList لها الأولوية في صفحات التفاصيل.</string>
+    <string name="settings_p2p_unsupported_subtitle">غير مدعوم على هذا التلفاز.</string>
+    <string name="player_audio_tizen_dash_unsupported">تبديل مسارات الصوت DASH غير مدعوم على هذا التلفاز.</string>
+    <string name="player_subtitle_tizen_advanced_unsupported">قد لا تكون تنسيقات الترجمة المتقدمة مدعومة بالكامل على هذا التلفاز.</string>
+    <string name="player_subtitle_tizen_dash_unsupported">قد لا يدعم هذا التلفاز تبديل الترجمة في تدفقات DASH.</string>
+    <string name="player_subtitle_tizen_advanced_unavailable_short">غير مدعوم بالكامل على هذا التلفاز</string>
+    <string name="player_error_tizen_p2p_unsupported">تشغيل Torrent/P2P غير مدعوم على هذا التلفاز.</string>
+    <string name="player_tizen_mkv_subtitles_unavailable">لا يعرض مشغل الويب في هذا التلفاز ترجمات MKV المضمّنة.</string>
+    <string name="player_tizen_mkv_audio_unavailable">لا يعرض مشغل الويب في هذا التلفاز مسارات صوت MKV المضمّنة.</string>
 </resources>

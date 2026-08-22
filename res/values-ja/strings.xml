@@ -1777,4 +1777,12 @@
     <string name="layout_overall_ratings">総合評価</string>
     <string name="layout_overall_ratings_sub_on">標準評価とTMDBの評価を表示します。</string>
     <string name="layout_overall_ratings_sub_off">標準評価とTMDBの評価は非表示です。詳細ページではMDBListプロバイダーの設定が優先されます。</string>
+    <string name="settings_p2p_unsupported_subtitle">このテレビではサポートされていません。</string>
+    <string name="player_audio_tizen_dash_unsupported">DASH音声トラックの切り替えはこのテレビでサポートされていません。</string>
+    <string name="player_subtitle_tizen_advanced_unsupported">高度な字幕スタイルはこのテレビで完全にはサポートされない場合があります。</string>
+    <string name="player_subtitle_tizen_dash_unsupported">DASHストリームの字幕切り替えはこのテレビでサポートされない場合があります。</string>
+    <string name="player_subtitle_tizen_advanced_unavailable_short">このテレビでは完全にはサポートされていません</string>
+    <string name="player_error_tizen_p2p_unsupported">Torrent/P2Pストリーミングはこのテレビでサポートされていません。</string>
+    <string name="player_tizen_mkv_subtitles_unavailable">このテレビのWebプレーヤーでは埋め込みMKV字幕を利用できません。</string>
+    <string name="player_tizen_mkv_audio_unavailable">このテレビのWebプレーヤーでは埋め込みMKV音声トラックを利用できません。</string>
 </resources>

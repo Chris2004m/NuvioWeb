@@ -2456,4 +2456,12 @@
     <string name="layout_overall_ratings">总体评分</string>
     <string name="layout_overall_ratings_sub_on">显示标准评分和 TMDB 评分。</string>
     <string name="layout_overall_ratings_sub_off">标准评分和 TMDB 评分已隐藏。在详情页面上，MDBList 提供商设置优先。</string>
+    <string name="settings_p2p_unsupported_subtitle">此电视不支持。</string>
+    <string name="player_audio_tizen_dash_unsupported">此电视不支持切换 DASH 音轨。</string>
+    <string name="player_subtitle_tizen_advanced_unsupported">此电视可能无法完全支持高级字幕样式。</string>
+    <string name="player_subtitle_tizen_dash_unsupported">此电视可能不支持 DASH 流的字幕切换。</string>
+    <string name="player_subtitle_tizen_advanced_unavailable_short">此电视不完全支持</string>
+    <string name="player_error_tizen_p2p_unsupported">此电视不支持 Torrent/P2P 播放。</string>
+    <string name="player_tizen_mkv_subtitles_unavailable">此电视的 Web 播放器无法提供嵌入式 MKV 字幕。</string>
+    <string name="player_tizen_mkv_audio_unavailable">此电视的 Web 播放器无法提供嵌入式 MKV 音轨。</string>
 </resources>

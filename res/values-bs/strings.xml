@@ -1632,4 +1632,12 @@
     <string name="layout_overall_ratings">Ukupne ocjene</string>
     <string name="layout_overall_ratings_sub_on">Standardne i TMDB ocjene su prikazane.</string>
     <string name="layout_overall_ratings_sub_off">Standardne i TMDB ocjene su skrivene. Postavke provajdera MDBList imaju prednost na stranicama s detaljima.</string>
+    <string name="settings_p2p_unsupported_subtitle">Nije podržano na ovom TV-u.</string>
+    <string name="player_audio_tizen_dash_unsupported">Promjena DASH audio zapisa nije podržana na ovom TV-u.</string>
+    <string name="player_subtitle_tizen_advanced_unsupported">Napredni stilovi titlova možda neće biti u potpunosti podržani na ovom TV-u.</string>
+    <string name="player_subtitle_tizen_dash_unsupported">Promjena titlova za DASH streamove možda nije podržana na ovom TV-u.</string>
+    <string name="player_subtitle_tizen_advanced_unavailable_short">Nije u potpunosti podržano na ovom TV-u</string>
+    <string name="player_error_tizen_p2p_unsupported">Torrent/P2P streaming nije podržan na ovom TV-u.</string>
+    <string name="player_tizen_mkv_subtitles_unavailable">Ugrađeni MKV titlovi nisu dostupni u web playeru ovog TV-a.</string>
+    <string name="player_tizen_mkv_audio_unavailable">Ugrađeni MKV audio zapisi nisu dostupni u web playeru ovog TV-a.</string>
 </resources>

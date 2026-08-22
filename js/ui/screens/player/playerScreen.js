@@ -13,7 +13,10 @@ import {
   selectStartupAudioFallbackOption,
   shouldAllowNativePlaybackDuringStartupAudioGate
 } from "../../../core/player/startupAudioGatePolicy.js";
-import { isTerminalHlsHttpStatus } from "../../../core/player/hlsNetworkErrorPolicy.js";
+import {
+  isRecoverableHlsFragmentTimeout,
+  isTerminalHlsHttpStatus
+} from "../../../core/player/hlsNetworkErrorPolicy.js";
 import { deltaMsForKeyRepeat } from "../../../core/player/playerScrubRates.js";
 import { buildClockFormatOptions, resolveSystemHour12 } from "../../../core/player/clockFormat.js";
 import { resolveSubtitleStyleControlAvailability } from "../../../core/player/subtitlePresentationCapabilities.js";
@@ -49,6 +52,7 @@ import { selectAutoPlayStream } from "../../../core/streams/streamAutoPlaySelect
 import { metaRepository } from "../../../data/repository/metaRepository.js";
 import { I18n } from "../../../i18n/index.js";
 import { Environment } from "../../../platform/environment.js";
+import { TizenCapabilities } from "../../../platform/tizen/tizenCapabilities.js";
 import { Router } from "../../navigation/router.js";
 import { renderLoadingIndicator } from "../../components/loadingIndicator.js";
 import { DirectDebridResolver } from "../../../core/debrid/directDebridResolver.js";
@@ -109,6 +113,8 @@ const STARTUP_AUDIO_PREFERENCE_RETRY_WINDOW_MS = 6000;
 const STARTUP_AUDIO_PREFERENCE_RETRY_INTERVAL_MS = 250;
 const WEBOS_REMOTE_MKV_AUDIO_GATE_MAX_WAIT_MS = 30000;
 const WEBOS_NATIVE_STARTUP_LOADING_EXTENSION_MS = 120000;
+const WEBOS_HLS_REBUFFER_STALL_TIMEOUT_MS = 20000;
+const WEBOS_HLS_PLAYBACK_RECOVERY_MAX_ATTEMPTS = 1;
 const EPISODE_PANEL_TRANSITION_MS = 220;
 const activeEngineFsPlaybackClaims = new Map();
 const deferredEngineFsRemovalTimers = new Map();
@@ -2519,6 +2525,8 @@ export const PlayerScreen = {
     this.engineFsStallExtensions = 0;
     this.webOsNativeStartupLoadingExtended = false;
     this.webOsNativeReadyStartupRetries = 0;
+    this.playbackRecoveryActive = false;
+    this.playbackRecoveryAttempts = 0;
     this.lastEngineFsStallStats = null;
     this.lastEngineFsStartupErrorStats = null;
     this.engineFsKeepAliveHandle = null;
@@ -4199,6 +4207,25 @@ export const PlayerScreen = {
     );
   },
 
+  isCurrentSourceLikelyDash(
+    url = this.getTrackProbeUrl(),
+    streamCandidate = this.getCurrentStreamCandidate()
+  ) {
+    const isLikelyDashMimeType = PlayerController.isLikelyDashMimeType;
+    if (typeof isLikelyDashMimeType !== "function") {
+      return false;
+    }
+    const declaredSourceType = this.resolvePlaybackMediaSourceType(streamCandidate);
+    const inferredSourceType =
+      typeof PlayerController.guessMediaMimeType === "function"
+        ? PlayerController.guessMediaMimeType(url)
+        : null;
+    return Boolean(
+      isLikelyDashMimeType.call(PlayerController, declaredSourceType) ||
+        isLikelyDashMimeType.call(PlayerController, inferredSourceType)
+    );
+  },
+
   isCurrentSourceLikelyHls(
     url = this.getTrackProbeUrl(),
     streamCandidate = this.getCurrentStreamCandidate()
@@ -4413,15 +4440,79 @@ export const PlayerScreen = {
         : false;
     if (!usingAvPlay && this.isCurrentSourceLikelyMkv()) {
       if (kind === "subtitle") {
+        if (Environment.isTizen()) {
+          return t(
+            "player_tizen_mkv_subtitles_unavailable",
+            {},
+            "Embedded MKV subtitles are not exposed by this TV's web player."
+          );
+        }
         return Environment.isWebOS()
           ? "No embedded subtitle tracks detected."
-          : "MKV internal subtitles are not exposed by the webOS web player.";
+          : "MKV internal subtitles are not exposed by the web player.";
+      }
+      if (Environment.isTizen()) {
+        return t(
+          "player_tizen_mkv_audio_unavailable",
+          {},
+          "Embedded MKV audio tracks are not exposed by this TV's web player."
+        );
       }
       return Environment.isWebOS()
         ? "No embedded audio tracks detected."
-        : "MKV internal audio tracks are not exposed by the webOS web player.";
+        : "MKV internal audio tracks are not exposed by the web player.";
     }
     return kind === "subtitle" ? "No subtitle tracks available." : "No audio tracks available.";
+  },
+
+  isTizenDashAudioSwitchingUnsupported() {
+    return TizenCapabilities.isDashAudioSwitchingUnsupported({
+      dashManifest: this.isCurrentSourceLikelyDash(),
+      usingAvPlay:
+        typeof PlayerController.isUsingAvPlay === "function" && PlayerController.isUsingAvPlay()
+    });
+  },
+
+  isTizenDashSubtitleSwitchingUnsupported() {
+    return Boolean(
+      Environment.isTizen() &&
+        this.isCurrentSourceLikelyDash() &&
+        typeof PlayerController.isUsingAvPlay === "function" &&
+        PlayerController.isUsingAvPlay()
+    );
+  },
+
+  getAudioDialogSupportNotice() {
+    return this.isTizenDashAudioSwitchingUnsupported()
+      ? t(
+          "player_audio_tizen_dash_unsupported",
+          {},
+          "Changing DASH audio tracks is not supported on this TV."
+        )
+      : "";
+  },
+
+  getSubtitleDialogSupportNotice() {
+    const notices = [];
+    if (TizenCapabilities.isAdvancedSubtitleStylingLimited()) {
+      notices.push(
+        t(
+          "player_subtitle_tizen_advanced_unsupported",
+          {},
+          "Advanced subtitle styling may not be fully supported on this TV."
+        )
+      );
+    }
+    if (this.isTizenDashSubtitleSwitchingUnsupported()) {
+      notices.push(
+        t(
+          "player_subtitle_tizen_dash_unsupported",
+          {},
+          "Subtitle switching for DASH streams may not be supported by this TV."
+        )
+      );
+    }
+    return notices.join(" ");
   },
 
   getVideoTextTrackList() {
@@ -5088,6 +5179,8 @@ export const PlayerScreen = {
     this.activePlaybackUrl = targetUrl;
     const currentStreamCandidate = this.getCurrentStreamCandidate();
     this.paused = false;
+    this.playbackRecoveryActive = false;
+    this.playbackRecoveryAttempts = 0;
     this.hasPresentedPlaybackFrame = false;
     this.startupPlaybackBaselineSeconds = null;
     this.startupPlaybackHasAdvanced = false;
@@ -8657,6 +8750,8 @@ export const PlayerScreen = {
         }
         this.loadingVisible = true;
       }
+      this.playbackRecoveryActive = false;
+      this.playbackRecoveryAttempts = 0;
       this.bufferingActive = false;
       this.clearBufferingSpinnerTimer();
       if (this.seekLoading) {
@@ -10798,6 +10893,7 @@ export const PlayerScreen = {
       preservePlaybackState = false,
       preservePendingRestore = false,
       preserveStartupRecoveryState = false,
+      preservePlaybackRecoveryState = false,
       forceEngine = null,
       sourceCandidate: explicitSourceCandidate = null,
       mountToken = null
@@ -10863,7 +10959,15 @@ export const PlayerScreen = {
       this.lastEngineFsStartupErrorStats = null;
     }
 
-    this.hasPresentedPlaybackFrame = false;
+    const preservePresentedPlaybackFrame = Boolean(
+      preservePlaybackRecoveryState && this.hasPresentedPlaybackFrame
+    );
+    if (!preservePlaybackRecoveryState) {
+      this.playbackRecoveryActive = false;
+      this.playbackRecoveryAttempts = 0;
+    }
+    this.playbackRecoveryActive = preservePresentedPlaybackFrame;
+    this.hasPresentedPlaybackFrame = preservePresentedPlaybackFrame;
     this.webOsNativeStartupLoadingExtended = false;
     if (!preserveStartupRecoveryState) {
       this.webOsNativeReadyStartupRetries = 0;
@@ -11038,6 +11142,8 @@ export const PlayerScreen = {
       const canUseEngineFs = WebOsEngineFsResolver.canResolveStream(streamCandidate);
       const canUseTizenP2p = TizenStreamingServerResolver.canResolveStream(streamCandidate);
       const canResolveP2p = canUseEngineFs || canUseTizenP2p;
+      const tizenP2pUnsupported =
+        TizenStreamingServerResolver.isUnsupportedOnCurrentTizen(streamCandidate);
       const p2pEnabled = Boolean(TorrentSettingsStore.get().p2pEnabled);
       const canUseP2p = p2pEnabled && canResolveP2p;
       let fallbackError = "";
@@ -11146,7 +11252,13 @@ export const PlayerScreen = {
         }
         const startupMessage =
           fallbackError ||
-          (!p2pEnabled && canResolveP2p
+          (tizenP2pUnsupported
+            ? t(
+                "player_error_tizen_p2p_unsupported",
+                {},
+                "Torrent/P2P streaming is not supported on this TV."
+              )
+            : !p2pEnabled && canResolveP2p
             ? t(
                 "player_error_p2p_disabled",
                 {},
@@ -11163,7 +11275,9 @@ export const PlayerScreen = {
           this.showStartupError(startupMessage, {
             streamCandidate,
             reason:
-              !p2pEnabled && canResolveP2p
+              tizenP2pUnsupported
+                ? "tizen-p2p-unsupported"
+                : !p2pEnabled && canResolveP2p
                 ? "p2p-disabled"
                 : canUseP2p
                   ? "p2p-resolve"
@@ -11174,7 +11288,13 @@ export const PlayerScreen = {
           return;
         }
         const sourceErrorMessage =
-          !p2pEnabled && canResolveP2p
+          tizenP2pUnsupported
+            ? t(
+                "player_error_tizen_p2p_unsupported",
+                {},
+                "Torrent/P2P streaming is not supported on this TV."
+              )
+            : !p2pEnabled && canResolveP2p
             ? t(
                 "player_error_p2p_disabled",
                 {},
@@ -11191,7 +11311,9 @@ export const PlayerScreen = {
         this.sourcesError = this.formatPlaybackErrorForSources(sourceErrorMessage, {
           streamCandidate,
           reason:
-            !p2pEnabled && canResolveP2p
+            tizenP2pUnsupported
+              ? "tizen-p2p-unsupported"
+              : !p2pEnabled && canResolveP2p
               ? "p2p-disabled"
               : canUseP2p
                 ? "p2p-resolve"
@@ -11601,6 +11723,11 @@ export const PlayerScreen = {
       return playbackEngine.endsWith("avplay") ? 22000 : 16000;
     }
     if (Environment.isWebOS()) {
+      if (playbackEngine === "hls.js") {
+        // hls.js waits 18 seconds for a fragment on webOS; let its internal
+        // retry run before the screen-level recovery policy takes over.
+        return WEBOS_HLS_REBUFFER_STALL_TIMEOUT_MS;
+      }
       return playbackEngine.endsWith("avplay") ? 16000 : 12000;
     }
     return 9000;
@@ -11668,6 +11795,10 @@ export const PlayerScreen = {
         startup && typeof PlayerController.getLastHlsErrorDetail === "function"
           ? PlayerController.getLastHlsErrorDetail()
           : "";
+      const lastHlsErrorDiagnostic =
+        typeof PlayerController.getLastHlsErrorDiagnostic === "function"
+          ? PlayerController.getLastHlsErrorDiagnostic()
+          : null;
       if (startup) {
         console.warn("[Nuvio playback] startup stall", {
           engine: String(PlayerController.playbackEngine || "unknown"),
@@ -11698,11 +11829,54 @@ export const PlayerScreen = {
         return;
       }
 
+      const currentPlaybackEngine = String(PlayerController.playbackEngine || "");
+      const recoverableHlsPlaybackStall =
+        !startup &&
+        Environment.isWebOS() &&
+        currentPlaybackEngine === "hls.js" &&
+        isRecoverableHlsFragmentTimeout(lastHlsErrorDiagnostic);
+      const sameEngineHlsRecoveryPending =
+        !startup &&
+        Environment.isWebOS() &&
+        currentPlaybackEngine === "hls.js" &&
+        (recoverableHlsPlaybackStall || this.playbackRecoveryActive);
+      let skipAutomaticPlaybackRecovery = false;
+      // Match Android's post-first-frame rebuffer behavior: keep the current
+      // playback engine for a transient network timeout and bound the retry.
+      if (sameEngineHlsRecoveryPending) {
+        if (Number(this.playbackRecoveryAttempts || 0) < WEBOS_HLS_PLAYBACK_RECOVERY_MAX_ATTEMPTS) {
+          const stalledPlaybackUrl = this.activePlaybackUrl;
+          const sourceCandidate =
+            this.getStreamCandidateByUrl(stalledPlaybackUrl) || this.getCurrentStreamCandidate();
+          const recoveryAttempt = Number(this.playbackRecoveryAttempts || 0) + 1;
+          this.playbackRecoveryAttempts = recoveryAttempt;
+          this.playbackRecoveryActive = true;
+          console.warn("webOS HLS playback stalled; retrying the current hls.js engine", {
+            url: stalledPlaybackUrl,
+            engine: currentPlaybackEngine,
+            attempt: recoveryAttempt,
+            limit: WEBOS_HLS_PLAYBACK_RECOVERY_MAX_ATTEMPTS,
+            hlsError: lastHlsErrorDiagnostic?.details || null
+          });
+          void this.playStreamByUrl(stalledPlaybackUrl, {
+            preservePanel: true,
+            preservePlaybackState: true,
+            resetSilentAudioState: false,
+            preservePlaybackRecoveryState: true,
+            forceEngine: "hls.js",
+            sourceCandidate
+          });
+          return;
+        }
+        this.playbackRecoveryActive = false;
+        skipAutomaticPlaybackRecovery = true;
+      }
+
       const targetEngine =
         typeof PlayerController.getAlternativePlaybackEngine === "function"
           ? PlayerController.getAlternativePlaybackEngine(this.activePlaybackUrl)
           : null;
-      if (targetEngine) {
+      if (targetEngine && !skipAutomaticPlaybackRecovery) {
         console.warn("Playback stalled; switching player engine", {
           url: this.activePlaybackUrl,
           from: PlayerController.playbackEngine,
@@ -11779,7 +11953,7 @@ export const PlayerScreen = {
         return;
       }
 
-      if (Environment.isWebOS()) {
+      if (Environment.isWebOS() && !skipAutomaticPlaybackRecovery) {
         const stalledPlaybackUrl = this.activePlaybackUrl;
         const sourceCandidate =
           this.getStreamCandidateByUrl(stalledPlaybackUrl) || this.getCurrentStreamCandidate();
@@ -14080,6 +14254,7 @@ export const PlayerScreen = {
 
     if (tab === "builtIn") {
       if (avplaySubtitleTracks.length) {
+        const dashTextSwitchingUnsupported = this.isTizenDashSubtitleSwitchingUnsupported();
         return [
           {
             id: "subtitle-off",
@@ -14106,6 +14281,8 @@ export const PlayerScreen = {
               track: mergedTrack,
               isForced: isForcedSubtitleTrack(mergedTrack),
               selected: normalizedTrackIndex === selectedAvPlaySubtitleTrack,
+              disabled: dashTextSwitchingUnsupported,
+              unsupportedReason: dashTextSwitchingUnsupported ? "tizen-dash-text" : null,
               trackIndex: null,
               avplaySubtitleTrackIndex: normalizedTrackIndex
             };
@@ -14341,7 +14518,7 @@ export const PlayerScreen = {
       return cachedOptions;
     }
     const builtInEntries = this.getSubtitleEntries("builtIn").filter(
-      (entry) => !entry?.disabled || entry?.id === "subtitle-off"
+      (entry) => !entry?.disabled || entry?.id === "subtitle-off" || entry?.unsupportedReason
     );
     const addonEntries = this.getSubtitleEntries("addons").filter((entry) => !entry?.disabled);
     const options = [];
@@ -14383,6 +14560,16 @@ export const PlayerScreen = {
       if (isForced) {
         pushUniqueText(metaParts, t("sub_forced_lang", {}, "Forced"));
       }
+      if (entry.unsupportedReason === "tizen-dash-text") {
+        pushUniqueText(
+          metaParts,
+          t(
+            "player_subtitle_tizen_dash_unsupported",
+            {},
+            "Subtitle switching for DASH streams may not be supported by this TV."
+          )
+        );
+      }
       options.push({
         id: entry.id,
         languageKey,
@@ -14392,6 +14579,7 @@ export const PlayerScreen = {
         meta: metaParts.join(" • "),
         secondary: metaParts.join(" • "),
         selected: Boolean(entry.selected),
+        disabled: Boolean(entry.disabled),
         sourceType: "internal",
         isForced,
         entry
@@ -14544,7 +14732,12 @@ export const PlayerScreen = {
   },
 
   selectSubtitleOption(option, { focusOptions = true } = {}) {
-    if (!option?.entry || !option.languageKey || option.languageKey === SUBTITLE_LANGUAGE_OFF_KEY) {
+    if (
+      !option?.entry ||
+      option.disabled ||
+      !option.languageKey ||
+      option.languageKey === SUBTITLE_LANGUAGE_OFF_KEY
+    ) {
       return false;
     }
     const languages = this.getSubtitleLanguageRailItems();
@@ -14572,7 +14765,8 @@ export const PlayerScreen = {
     if (!options.length) {
       return false;
     }
-    return this.selectSubtitleOption(options[0], { focusOptions });
+    const firstAvailable = options.find((option) => !option?.disabled);
+    return this.selectSubtitleOption(firstAvailable, { focusOptions });
   },
 
   scrollSubtitleRailNodeIntoView(node, { center = false } = {}) {
@@ -15444,11 +15638,13 @@ export const PlayerScreen = {
       rendererMode,
       supportsExternalDelay: PlayerController.supportsAvPlayExternalSubtitleDelay?.() === true
     });
-    const unavailableValue = t(
-      "subtitle_style_unavailable_native",
-      {},
-      "Unavailable with native subtitles"
-    );
+    const unavailableValue = TizenCapabilities.isAdvancedSubtitleStylingLimited()
+      ? t(
+          "player_subtitle_tizen_advanced_unavailable_short",
+          {},
+          "Not fully supported on this TV"
+        )
+      : t("subtitle_style_unavailable_native", {}, "Unavailable with native subtitles");
     return [
       {
         id: "delay",
@@ -16250,6 +16446,7 @@ export const PlayerScreen = {
     );
     const showOptionsRail = activeLanguage !== SUBTITLE_LANGUAGE_OFF_KEY || subtitleLoadingVisible;
     const focusedStyleSide = this.subtitleStyleControlSide === "plus" ? "plus" : "minus";
+    const supportNotice = this.getSubtitleDialogSupportNotice();
     const emptySubtitleOptionsMarkup = subtitleLoadingVisible
       ? `
         <div class="player-dialog-empty player-dialog-loading">
@@ -16261,6 +16458,7 @@ export const PlayerScreen = {
 
     dialog.innerHTML = `
       <div class="player-dialog-title">${escapeHtml(t("subtitle_dialog_title", {}, "Subtitles"))}</div>
+      ${supportNotice ? `<div class="player-dialog-support-message" role="status">${escapeHtml(supportNotice)}</div>` : ""}
       <div class="player-subtitle-overlay-grid">
         <div class="player-subtitle-rail player-subtitle-language-rail">
           ${languages
@@ -16280,7 +16478,7 @@ export const PlayerScreen = {
               ? options
                   .map(
                     (item, index) => `
-            <div class="player-dialog-item focusable${item.selected ? " selected" : ""}${this.subtitleFocusedRail === "options" && index === this.subtitleOptionRailIndex ? " focused" : ""}" data-subtitle-rail="options" data-subtitle-index="${index}">
+            <div class="player-dialog-item focusable${item.selected ? " selected" : ""}${item.disabled ? " disabled" : ""}${this.subtitleFocusedRail === "options" && index === this.subtitleOptionRailIndex ? " focused" : ""}" data-subtitle-rail="options" data-subtitle-index="${index}" aria-disabled="${item.disabled ? "true" : "false"}">
               <div class="player-subtitle-option-copy">
                 <span class="player-subtitle-source-chip">${escapeHtml(item.sourceLabel || "")}</span>
                 <div class="player-dialog-item-main">${escapeHtml(item.title || "")}</div>
@@ -16564,7 +16762,9 @@ export const PlayerScreen = {
           : -1;
       entries = avplayAudioTracks.map((track, index) => {
         const mergedTrack = this.mergeAvPlayAudioTrackMetadata(track, index);
-        const support = getAudioTrackSupportState(mergedTrack);
+        const support = this.isTizenDashAudioSwitchingUnsupported()
+          ? { supported: false, unsupportedReason: "tizen-dash-audio" }
+          : getAudioTrackSupportState(mergedTrack);
         const avplayTrackIndex = Number(track?.avplayTrackIndex);
         const normalizedTrackIndex = Number.isFinite(avplayTrackIndex) ? avplayTrackIndex : index;
         const display = formatAudioTrackDisplay(mergedTrack, index);
@@ -17089,6 +17289,7 @@ export const PlayerScreen = {
 
     const entries = this.getAudioEntries();
     const hasSupportedEntries = entries.some((entry) => entry?.supported !== false);
+    const supportNotice = this.getAudioDialogSupportNotice();
     const audioControls = [
       {
         id: "amplification",
@@ -17132,6 +17333,7 @@ export const PlayerScreen = {
         : this.getUnavailableTrackMessage("audio");
       dialog.innerHTML = `
         <div class="player-dialog-title">${escapeHtml(t("audio_dialog_title", {}, "Audio"))}</div>
+        ${supportNotice ? `<div class="player-dialog-support-message" role="status">${escapeHtml(supportNotice)}</div>` : ""}
         <div class="player-dialog-empty${loading ? " player-dialog-loading" : ""}">
           ${loading ? renderLoadingIndicator() : ""}
           <span>${escapeHtml(emptyMessage)}</span>
@@ -17146,7 +17348,8 @@ export const PlayerScreen = {
     this.audioDialogIndex = clamp(this.audioDialogIndex, 0, entries.length - 1);
     dialog.innerHTML = `
       <div class="player-dialog-title">${escapeHtml(t("audio_dialog_title", {}, "Audio"))}</div>
-      ${hasSupportedEntries ? "" : `<div class="player-audio-support-message">${escapeHtml(t("player.audio.noSupportedTracks", {}, "No supported audio tracks available"))}</div>`}
+      ${supportNotice ? `<div class="player-dialog-support-message" role="status">${escapeHtml(supportNotice)}</div>` : ""}
+      ${hasSupportedEntries ? "" : `<div class="player-audio-support-message" role="status">${escapeHtml(t("player.audio.noSupportedTracks", {}, "No supported audio tracks available"))}</div>`}
       <div class="player-audio-overlay-grid">
         <div class="player-dialog-list player-audio-track-list">
           ${entries
@@ -17156,13 +17359,21 @@ export const PlayerScreen = {
                 this.audioFocusedColumn === "tracks" && index === this.audioDialogIndex;
               const disabled = entry.supported === false;
               const pending = this.isAudioEntryPending(entry);
+              const unsupportedText =
+                entry.unsupportedReason === "tizen-dash-audio"
+                  ? t(
+                      "player_audio_tizen_dash_unsupported",
+                      {},
+                      "Changing DASH audio tracks is not supported on this TV."
+                    )
+                  : t("player.audio.unsupportedCodec", {}, "Codec not supported by this device");
               const label = disabled
                 ? `${entry.label || ""} · ${t("player.audio.unsupported", {}, "Unsupported")}`
                 : entry.label || "";
               const secondary = disabled
                 ? [
                     entry.secondary,
-                    t("player.audio.unsupportedCodec", {}, "Codec not supported by this device")
+                    unsupportedText
                   ]
                     .filter(Boolean)
                     .join(" · ")
@@ -20272,6 +20483,8 @@ export const PlayerScreen = {
   cleanup() {
     try {
       this.playerRouteActive = false;
+      this.playbackRecoveryActive = false;
+      this.playbackRecoveryAttempts = 0;
       this.playerMountToken = Number(this.playerMountToken || 0) + 1;
       this.nextEpisodeLaunchToken = Number(this.nextEpisodeLaunchToken || 0) + 1;
       this.nextEpisodeLaunching = false;

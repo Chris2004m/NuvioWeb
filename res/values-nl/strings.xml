@@ -1181,4 +1181,12 @@
     <string name="layout_overall_ratings">Algemene beoordelingen</string>
     <string name="layout_overall_ratings_sub_on">Standaard- en TMDB-beoordelingen worden weergegeven.</string>
     <string name="layout_overall_ratings_sub_off">Standaard- en TMDB-beoordelingen zijn verborgen. Op detailpagina's hebben de instellingen van de MDBList-provider voorrang.</string>
+    <string name="settings_p2p_unsupported_subtitle">Niet ondersteund op deze tv.</string>
+    <string name="player_audio_tizen_dash_unsupported">Het wisselen van DASH-audiosporen wordt niet ondersteund op deze tv.</string>
+    <string name="player_subtitle_tizen_advanced_unsupported">Geavanceerde ondertitelopmaak wordt mogelijk niet volledig ondersteund op deze tv.</string>
+    <string name="player_subtitle_tizen_dash_unsupported">Het wisselen van ondertitels voor DASH-streams wordt mogelijk niet ondersteund door deze tv.</string>
+    <string name="player_subtitle_tizen_advanced_unavailable_short">Niet volledig ondersteund op deze tv</string>
+    <string name="player_error_tizen_p2p_unsupported">Torrent-/P2P-streaming wordt niet ondersteund op deze tv.</string>
+    <string name="player_tizen_mkv_subtitles_unavailable">Ingebouwde MKV-ondertitels worden niet aangeboden door de webplayer van deze tv.</string>
+    <string name="player_tizen_mkv_audio_unavailable">Ingebouwde MKV-audiosporen worden niet aangeboden door de webplayer van deze tv.</string>
 </resources>

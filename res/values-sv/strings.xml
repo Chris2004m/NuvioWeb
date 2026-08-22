@@ -1681,4 +1681,12 @@
     <string name="layout_overall_ratings">Övergripande betyg</string>
     <string name="layout_overall_ratings_sub_on">Standard- och TMDB-betyg visas.</string>
     <string name="layout_overall_ratings_sub_off">Standard- och TMDB-betyg är dolda. Inställningarna för MDBList-leverantören har företräde på detaljsidor.</string>
+    <string name="settings_p2p_unsupported_subtitle">Stöds inte på denna TV.</string>
+    <string name="player_audio_tizen_dash_unsupported">Byte av DASH-ljudspår stöds inte på denna TV.</string>
+    <string name="player_subtitle_tizen_advanced_unsupported">Avancerad undertextformatering kanske inte stöds fullt ut på denna TV.</string>
+    <string name="player_subtitle_tizen_dash_unsupported">Byte av undertexter för DASH-strömmar kanske inte stöds av denna TV.</string>
+    <string name="player_subtitle_tizen_advanced_unavailable_short">Stöds inte fullt ut på denna TV</string>
+    <string name="player_error_tizen_p2p_unsupported">Torrent-/P2P-strömning stöds inte på denna TV.</string>
+    <string name="player_tizen_mkv_subtitles_unavailable">Inbäddade MKV-undertexter exponeras inte av denna TV:s webbläsarspelare.</string>
+    <string name="player_tizen_mkv_audio_unavailable">Inbäddade MKV-ljudspår exponeras inte av denna TV:s webbläsarspelare.</string>
 </resources>

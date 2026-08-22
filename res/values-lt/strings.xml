@@ -1183,4 +1183,12 @@ Klaida: Bandomoji simuliuojama klaida — tai nėra tikras gedimas. Šaltinis gr
     <string name="layout_overall_ratings">Bendri įvertinimai</string>
     <string name="layout_overall_ratings_sub_on">Rodomi standartiniai ir TMDB įvertinimai.</string>
     <string name="layout_overall_ratings_sub_off">Standartiniai ir TMDB įvertinimai paslėpti. Išsamios informacijos puslapiuose pirmenybė teikiama MDBList teikėjo nustatymams.</string>
+    <string name="settings_p2p_unsupported_subtitle">Nepalaikoma šiame televizoriuje.</string>
+    <string name="player_audio_tizen_dash_unsupported">DASH garso takelių keitimas šiame televizoriuje nepalaikomas.</string>
+    <string name="player_subtitle_tizen_advanced_unsupported">Pažangus subtitrų stilius šiame televizoriuje gali būti palaikomas ne visiškai.</string>
+    <string name="player_subtitle_tizen_dash_unsupported">DASH srautų subtitrų keitimas šiame televizoriuje gali būti nepalaikomas.</string>
+    <string name="player_subtitle_tizen_advanced_unavailable_short">Šiame televizoriuje palaikoma ne visiškai</string>
+    <string name="player_error_tizen_p2p_unsupported">Torrent/P2P transliacija šiame televizoriuje nepalaikoma.</string>
+    <string name="player_tizen_mkv_subtitles_unavailable">Įterpti MKV subtitrai nepasiekiami šio televizoriaus žiniatinklio leistuve.</string>
+    <string name="player_tizen_mkv_audio_unavailable">Įterpti MKV garso takeliai nepasiekiami šio televizoriaus žiniatinklio leistuve.</string>
 </resources>

@@ -1,4 +1,5 @@
 import { Platform } from "../index.js";
+import { TizenCapabilities } from "./tizenCapabilities.js";
 
 const LOCAL_BASE_URLS = [
   "http://127.0.0.1:2710",
@@ -9,6 +10,7 @@ const LOCAL_BASE_URLS = [
 
 const START_TIMEOUT_MS = 12000;
 const PROBE_TIMEOUT_MS = 2500;
+const TIZEN_DEFAULT_OPERATION = "http://tizen.org/appcontrol/operation/default";
 
 let startPromise = null;
 
@@ -72,6 +74,20 @@ function invokeCallbackApi(fn, args = []) {
   });
 }
 
+async function startViaApplicationControl(serviceId, operation = TIZEN_DEFAULT_OPERATION) {
+  const application = globalThis.tizen?.application;
+  const ApplicationControl = globalThis.tizen?.ApplicationControl;
+  if (!application || typeof application.launchAppControl !== "function") {
+    throw new Error("tizen.application.launchAppControl unavailable");
+  }
+  if (typeof ApplicationControl !== "function") {
+    throw new Error("tizen.ApplicationControl unavailable");
+  }
+
+  const appControl = new ApplicationControl(operation);
+  return invokeCallbackApi(application.launchAppControl.bind(application), [appControl, serviceId]);
+}
+
 async function startViaWrtService(serviceId) {
   const wrtService =
     globalThis.wrt?.service || globalThis.webapis?.wrt?.service || globalThis.webapis?.service;
@@ -105,17 +121,28 @@ async function startViaTizenApplication(serviceId) {
 
 async function requestServiceStart(serviceId) {
   const errors = [];
-  try {
-    await startViaWrtService(serviceId);
-    return { method: "wrt-service" };
-  } catch (error) {
-    errors.push(`wrt-service: ${error?.message || error}`);
-  }
-  try {
-    await startViaTizenApplication(serviceId);
-    return { method: "tizen-application" };
-  } catch (error) {
-    errors.push(`tizen-application: ${error?.message || error}`);
+  const attempts = [
+    {
+      method: "tizen-application-control-default",
+      start: () => startViaApplicationControl(serviceId, TIZEN_DEFAULT_OPERATION)
+    },
+    {
+      method: "tizen-application-launch",
+      start: () => startViaTizenApplication(serviceId)
+    },
+    {
+      method: "wrt-service-legacy",
+      start: () => startViaWrtService(serviceId)
+    }
+  ];
+
+  for (const attempt of attempts) {
+    try {
+      await attempt.start();
+      return { method: attempt.method };
+    } catch (error) {
+      errors.push(`${attempt.method}: ${error?.message || error}`);
+    }
   }
   throw new Error(errors.join("; "));
 }
@@ -180,9 +207,21 @@ export const TizenEngineFsService = {
     return findReachableLocalBaseUrl(timeoutMs);
   },
 
-  async ensureStarted() {
+  async ensureStarted({ purpose = "generic" } = {}) {
     if (!Platform.isTizen()) {
       return { status: "unsupported", detail: "Not running on Tizen" };
+    }
+    if (!TizenCapabilities.supportsWebService()) {
+      return {
+        status: "unsupported",
+        detail: "Tizen web service support is unavailable on this TV"
+      };
+    }
+    if (purpose === "p2p" && !TizenCapabilities.canUseP2p()) {
+      return {
+        status: "unsupported",
+        detail: "Tizen P2P streaming is not supported on this TV"
+      };
     }
     try {
       const existing = await findReachableLocalBaseUrl();

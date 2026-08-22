@@ -2710,4 +2710,12 @@
     <string name="layout_overall_ratings">Oceny ogólne</string>
     <string name="layout_overall_ratings_sub_on">Wyświetlane są standardowe oceny oraz oceny TMDB.</string>
     <string name="layout_overall_ratings_sub_off">Standardowe oceny oraz oceny TMDB są ukryte. Na stronach szczegółów priorytet mają ustawienia dostawcy MDBList.</string>
+    <string name="settings_p2p_unsupported_subtitle">Nieobsługiwane na tym telewizorze.</string>
+    <string name="player_audio_tizen_dash_unsupported">Zmiana ścieżek audio DASH nie jest obsługiwana na tym telewizorze.</string>
+    <string name="player_subtitle_tizen_advanced_unsupported">Zaawansowane formatowanie napisów może nie być w pełni obsługiwane na tym telewizorze.</string>
+    <string name="player_subtitle_tizen_dash_unsupported">Zmiana napisów dla strumieni DASH może nie być obsługiwana przez ten telewizor.</string>
+    <string name="player_subtitle_tizen_advanced_unavailable_short">Nie w pełni obsługiwane na tym telewizorze</string>
+    <string name="player_error_tizen_p2p_unsupported">Odtwarzanie Torrent/P2P nie jest obsługiwane na tym telewizorze.</string>
+    <string name="player_tizen_mkv_subtitles_unavailable">Wbudowane napisy MKV nie są udostępniane przez odtwarzacz webowy tego telewizora.</string>
+    <string name="player_tizen_mkv_audio_unavailable">Wbudowane ścieżki audio MKV nie są udostępniane przez odtwarzacz webowy tego telewizora.</string>
 </resources>

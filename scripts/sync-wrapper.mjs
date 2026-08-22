@@ -449,6 +449,15 @@ function upsertTizenFeature(xml, featureName) {
   return insertIntoWidget(xml, `<feature name="${featureName}"/>`);
 }
 
+function upsertTizenPrivilege(xml, privilegeName) {
+  const escaped = privilegeName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const privilegePattern = new RegExp(`<tizen:privilege\\b[^>]*name="${escaped}"[^>]*/>`);
+  if (privilegePattern.test(xml)) {
+    return xml;
+  }
+  return insertIntoWidget(xml, `<tizen:privilege name="${privilegeName}"/>`);
+}
+
 function readTizenApplicationId(xml) {
   const match = String(xml || "").match(/<tizen:application\b[^>]*\bid="([^"]+)"/);
   return match ? match[1] : "";
@@ -517,6 +526,7 @@ async function updateTizenMetadata(targetDir) {
   configXml = upsertTizenWidgetVersion(configXml, appVersion);
   configXml = upsertTizenRequiredVersion(configXml, compatibilityPolicy.tizenRequiredVersion);
   configXml = upsertTizenFeature(configXml, "http://tizen.org/feature/web.service");
+  configXml = upsertTizenPrivilege(configXml, "http://tizen.org/privilege/application.launch");
   const tizenAppId = readTizenApplicationId(configXml);
   const engineFsServiceId = tizenAppId ? `${tizenAppId}.EngineFsService` : "";
   if (engineFsServiceId) {

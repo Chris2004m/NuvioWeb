@@ -1199,4 +1199,12 @@
     <string name="layout_overall_ratings">Xếp hạng tổng thể</string>
     <string name="layout_overall_ratings_sub_on">Xếp hạng tiêu chuẩn và TMDB được hiển thị.</string>
     <string name="layout_overall_ratings_sub_off">Xếp hạng tiêu chuẩn và TMDB bị ẩn. Trên các trang chi tiết, cài đặt nhà cung cấp MDBList được ưu tiên.</string>
+    <string name="settings_p2p_unsupported_subtitle">Không được hỗ trợ trên TV này.</string>
+    <string name="player_audio_tizen_dash_unsupported">TV này không hỗ trợ chuyển đổi các kênh âm thanh DASH.</string>
+    <string name="player_subtitle_tizen_advanced_unsupported">TV này có thể không hỗ trợ đầy đủ kiểu phụ đề nâng cao.</string>
+    <string name="player_subtitle_tizen_dash_unsupported">TV này có thể không hỗ trợ chuyển phụ đề cho luồng DASH.</string>
+    <string name="player_subtitle_tizen_advanced_unavailable_short">Không được hỗ trợ đầy đủ trên TV này</string>
+    <string name="player_error_tizen_p2p_unsupported">TV này không hỗ trợ phát Torrent/P2P.</string>
+    <string name="player_tizen_mkv_subtitles_unavailable">Trình phát web của TV này không cung cấp phụ đề MKV nhúng.</string>
+    <string name="player_tizen_mkv_audio_unavailable">Trình phát web của TV này không cung cấp các kênh âm thanh MKV nhúng.</string>
 </resources>

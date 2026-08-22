@@ -1270,4 +1270,12 @@
     <string name="layout_overall_ratings">Összesített értékelések</string>
     <string name="layout_overall_ratings_sub_on">A standard és TMDB-értékelések megjelennek.</string>
     <string name="layout_overall_ratings_sub_off">A standard és TMDB-értékelések rejtve vannak. A részletező oldalakon az MDBList-szolgáltató beállításai élveznek elsőbbséget.</string>
+    <string name="settings_p2p_unsupported_subtitle">Nem támogatott ezen a TV-n.</string>
+    <string name="player_audio_tizen_dash_unsupported">A DASH hangsávok váltása nem támogatott ezen a TV-n.</string>
+    <string name="player_subtitle_tizen_advanced_unsupported">Előfordulhat, hogy a fejlett feliratstílusok nem teljesen támogatottak ezen a TV-n.</string>
+    <string name="player_subtitle_tizen_dash_unsupported">A DASH-adatfolyamok feliratváltását ez a TV nem feltétlenül támogatja.</string>
+    <string name="player_subtitle_tizen_advanced_unavailable_short">Nem teljesen támogatott ezen a TV-n</string>
+    <string name="player_error_tizen_p2p_unsupported">A Torrent/P2P lejátszás nem támogatott ezen a TV-n.</string>
+    <string name="player_tizen_mkv_subtitles_unavailable">A beágyazott MKV-feliratokat ennek a TV-nek a webes lejátszója nem teszi elérhetővé.</string>
+    <string name="player_tizen_mkv_audio_unavailable">A beágyazott MKV-hangsávokat ennek a TV-nek a webes lejátszója nem teszi elérhetővé.</string>
 </resources>

@@ -13927,13 +13927,15 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
   height: 48px;
 }
 
-.player-audio-support-message {
+.player-audio-support-message,
+.player-dialog-support-message {
   margin-bottom: min(0.83vw, 16px);
   padding: min(0.63vw, 12px) min(0.83vw, 16px);
   border-radius: min(0.83vw, 16px);
   background: rgba(245, 158, 11, 0.12);
   color: rgba(255, 231, 181, 0.92);
   font-size: min(1.15vw, 22px);
+  line-height: 1.3;
 }
 
 .player-sources-panel {

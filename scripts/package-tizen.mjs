@@ -64,6 +64,7 @@ function buildConfigXml({ appId, packageId, version }) {
   <icon src="icon.png"/>
   <name>${appName}</name>
   <tizen:privilege name="http://tizen.org/privilege/internet"/>
+  <tizen:privilege name="http://tizen.org/privilege/application.launch"/>
   <tizen:privilege name="http://developer.samsung.com/privilege/network.public"/>
   <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
   <tizen:service id="${engineFsServiceId}" auto-restart="true" on-boot="false">
