@@ -2,6 +2,8 @@
 
 This checklist separates repository changes from information that must come from the Samsung Seller Office, LG Seller Lounge, or the publisher. It must not contain certificates, private keys, passwords, or test-account credentials.
 
+The locally prepared visual and metadata draft is in [`store-assets/`](../store-assets/README.md): Samsung/LG icons, 1920x1080 screenshots, Samsung UI Description PPTX, store copy, Samsung setup notes, and LG UX/self-checklist notes.
+
 ## Technical status
 
 ### Samsung Tizen
@@ -30,6 +32,7 @@ If Samsung confirms that the publisher is an approved TV partner and authorizes 
 - Final store title, descriptions, supported languages, support email, privacy-policy URL, content rating, and market/model-group selection.
 - Four JPG screenshots in an accepted resolution and file size.
 - 1920x1080 logo/background material, 512x423 icon material, and the UI Description PPTX.
+- Draft files: [`store-assets/samsung/`](../store-assets/samsung/) and [`store-assets/docs/store-copy.md`](../store-assets/docs/store-copy.md). Replace the screenshots/copy only if Seller Office requests a different resolution, language, or content treatment.
 - A working test account and any provider/add-on configuration required for QA.
 
 Official references: [launch checklist](https://developer.samsung.com/tv-seller-office/checklists-for-distribution/launch-checklist.html), [registering applications](https://developer.samsung.com/tv-seller-office/guides/applications/registering-application.html), and [Tizen CLI packaging](https://developer.samsung.com/smarttv/develop/getting-started/using-sdk/command-line-interface.html?device=signage).
@@ -38,6 +41,7 @@ Official references: [launch checklist](https://developer.samsung.com/tv-seller-
 
 - Separate 400x400 Seller Lounge icon.
 - Final store title, description, supported languages, screenshots, privacy/support details, and content information.
+- Draft files: [`store-assets/lg/`](../store-assets/lg/) and [`store-assets/docs/lg-submission-data.md`](../store-assets/docs/lg-submission-data.md).
 - A working test account and any required add-on/provider setup.
 - Completed UX scenario and App Self Checklist.
 - Seller Lounge app registration, country/market selection, and release contact information.
