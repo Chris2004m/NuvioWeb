@@ -13122,13 +13122,16 @@ export const PlayerScreen = {
 
   createSubtitleObjectUrl(body, sourceUrl = "", contentType = "") {
     const normalizedContentType = String(contentType || "").toLowerCase();
+    const assBody = isAssSubtitle(body, { sourceUrl, contentType: normalizedContentType });
     const shouldConvertToVtt =
       this.isLikelySrtSubtitleUrl(sourceUrl) ||
       normalizedContentType.includes("subrip") ||
       (!normalizedContentType.includes("vtt") && !/^\s*WEBVTT/i.test(body));
-    const vttText = shouldConvertToVtt
-      ? this.convertSrtToVtt(body)
-      : this.applySubtitleAssAlignmentToVtt(body);
+    const vttText = assBody
+      ? convertAssBodyToVtt(body)
+      : shouldConvertToVtt
+        ? this.convertSrtToVtt(body)
+        : this.applySubtitleAssAlignmentToVtt(body);
     const objectUrl = URL.createObjectURL(new Blob([vttText], { type: "text/vtt" }));
     this.externalSubtitleObjectUrls.push(objectUrl);
     return objectUrl;
@@ -14229,6 +14232,33 @@ export const PlayerScreen = {
     render();
   },
 
+  isAvPlaySubtitleControlPayload(value = "") {
+    const text = String(value || "").trim();
+    if (!text) {
+      return false;
+    }
+    // AVPlay may expose the complete SSA event or its positional CSV fields.
+    // Strip only the control prefix for structural validation; plain cue text
+    // such as "Dialogue: hello" must remain renderable.
+    const payload = text.replace(/^\s*(?:Dialogue|Comment)\s*:\s*/i, "");
+    const hasAssTiming =
+      /^(?:(?:\d+|Marked\s*=\s*\d+)\s*,\s*)?\d+:\d{1,2}:\d{1,2}[.,]\d{1,3}\s*,\s*\d+:\d{1,2}:\d{1,2}[.,]\d{1,3}\s*,/i.test(
+        payload
+      );
+    if (hasAssTiming) {
+      return true;
+    }
+    if (/[.!?\u00C0-\u024F]/.test(text)) {
+      return false;
+    }
+    // Require the numeric prefix and a known AVPlay style token so ordinary
+    // comma-containing dialogue remains valid.
+    return (
+      /^\s*\d+\s*,\s*\d+\s*,\s*(?:Onscreen\d*|Screen)\s*,/i.test(payload) &&
+      payload.split(",").length >= 6
+    );
+  },
+
   renderAvPlaySubtitleChange(detail = {}) {
     if (
       !Environment.isTizen() ||
@@ -14252,11 +14282,14 @@ export const PlayerScreen = {
       .replace(/<br\s*\/?>/gi, "\n")
       .replace(/\r\n/g, "\n")
       .replace(/\r/g, "\n");
+    // Samsung AVPlay can expose SSA/ASS fields instead of dialogue text.
+    // Never project that control payload into the video overlay.
     const text = this.parseSubtitleCueText(rawText);
-    if (!text) {
+    if (!text || this.isAvPlaySubtitleControlPayload(rawText)) {
       this.renderHtmlSubtitleOverlayCue([]);
       return;
     }
+
     this.htmlSubtitleCues = [];
     this.htmlSubtitleSelectedId = "avplay-native";
     const alignment = this.getSubtitleAssAlignment(rawText);

@@ -995,6 +995,18 @@ function isAssTimestamp(value) {
   return /^\s*\d+:\d{1,2}:\d{1,2}[.:]\d{1,3}\s*$/.test(String(value || ""));
 }
 
+function isRawAssControlPayload(value) {
+  var text = String(value || "").trim();
+  if (!text) return false;
+  var payload = text.replace(/^\s*(?:Dialogue|Comment)\s*:\s*/i, "");
+  // Timed Dialogue/Comment rows are valid ASS subtitle events and must be
+  // parsed below; only positional AVPlay control CSV is rejected here.
+  return (
+    /^\s*\d+\s*,\s*\d+\s*,\s*(?:Onscreen\d*|Screen)\s*,/i.test(payload) &&
+    payload.split(",").length >= 6
+  );
+}
+
 function parseAssTimestampMs(value) {
   var match = String(value || "")
     .trim()
@@ -1050,8 +1062,15 @@ function normalizeTextSubtitlePayload(track, payload) {
   var text = decodeTextSubtitlePayload(payload);
   if (!text) return "";
 
+  // Inspect the original payload before removing Dialogue:/Comment: so
+  // structured ASS control rows are filtered without dropping plain cue text.
+  if (isAssTextSubtitleTrack(track) && isRawAssControlPayload(text)) {
+    return "";
+  }
   var assEvent = text.replace(/^\s*Dialogue\s*:\s*/i, "");
+  // ASS-specific parsing follows the original-payload control check above.
   var fields = assEvent.split(",");
+
   var hasLayeredAssTiming =
     fields.length >= 3 &&
     /^(?:marked\s*=\s*)?-?\d+$/i.test(String(fields[0] || "").trim()) &&
@@ -1060,12 +1079,13 @@ function normalizeTextSubtitlePayload(track, payload) {
   var hasShortAssTiming =
     fields.length >= 3 && isAssTimestamp(fields[0]) && isAssTimestamp(fields[1]);
   if (hasLayeredAssTiming) {
-    text = textAfterCommaCount(assEvent, 9) || assEvent;
+    text = textAfterCommaCount(assEvent, 9) || "";
   } else if (hasShortAssTiming) {
-    text = textAfterCommaCount(assEvent, fields.length >= 9 ? 8 : 2) || assEvent;
+    text = textAfterCommaCount(assEvent, fields.length >= 9 ? 8 : 2) || "";
   } else if (isAssTextSubtitleTrack(track)) {
     text = assEvent;
   }
+
   return text.replace(/\n{2,}/g, "\n").trim();
 }
 
