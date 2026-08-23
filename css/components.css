@@ -19943,11 +19943,6 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
   --modern-hero-copy-right: 72px;
 }
 
-.legacy-tizen .home-screen-shell.home-layout-modern .home-modern-rows-viewport {
-  bottom: 28px;
-  height: calc(var(--modern-rows-viewport-height) - 28px);
-}
-
 .legacy-tizen .home-screen-shell.home-layout-modern .home-track {
   margin-left: calc(var(--modern-track-peek-extension) * -1);
   padding-left: calc(var(--home-content-start) + var(--modern-track-peek-extension));
