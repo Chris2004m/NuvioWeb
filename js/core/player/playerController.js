@@ -3507,15 +3507,34 @@ export const PlayerController = {
         return;
       }
       this.captureHlsErrorDiagnostic(data);
+      const responseCode = Number(data?.response?.code || data?.networkDetails?.status || 0);
+      const hlsErrorDetails = String(data?.details || "");
+      const isTransientPlaylist404 =
+        data.type === Hls.ErrorTypes.NETWORK_ERROR &&
+        responseCode === 404 &&
+        (hlsErrorDetails === "levelLoadError" || hlsErrorDetails === "audioTrackLoadError");
+      // hls.js reports an alternate-audio 404 as non-fatal. Recover only while
+      // startup has no media data; established playback must not be restarted
+      // because an optional track briefly disappears.
+      const isStartupAudioPlaylist404 =
+        !data?.fatal &&
+        isTransientPlaylist404 &&
+        hlsErrorDetails === "audioTrackLoadError" &&
+        Number(this.video?.readyState || 0) === 0 &&
+        !this.isPlaying;
+      if (isStartupAudioPlaylist404) {
+        if (
+          transientPlaylist404Retries[hlsErrorDetails] < HLS_TRANSIENT_PLAYLIST_404_RETRY_LIMIT &&
+          !transientPlaylist404RetryTimer
+        ) {
+          scheduleTransientPlaylist404Retry(hlsErrorDetails);
+        }
+        return;
+      }
       if (!data?.fatal) {
         return;
       }
       if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-        const responseCode = Number(data?.response?.code || data?.networkDetails?.status || 0);
-        const hlsErrorDetails = String(data?.details || "");
-        const isTransientPlaylist404 =
-          responseCode === 404 &&
-          (hlsErrorDetails === "levelLoadError" || hlsErrorDetails === "audioTrackLoadError");
         if (
           isTransientPlaylist404 &&
           transientPlaylist404Retries[hlsErrorDetails] < HLS_TRANSIENT_PLAYLIST_404_RETRY_LIMIT
