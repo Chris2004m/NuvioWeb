@@ -73,7 +73,7 @@ function buildConfigXml({
     : "";
   const serviceMetadata = serviceMetadataXml ? `\n    ${serviceMetadataXml}` : "";
   const engineFsService = includeEngineFsService
-    ? `  <tizen:service id="${engineFsServiceId}" auto-restart="false" on-boot="false">
+    ? `  <tizen:service id="${engineFsServiceId}" type="ui" auto-restart="false" on-boot="false">
     <tizen:content src="${tizenEngineFsServiceRelativePath}"/>${serviceMetadata}
     <tizen:name>Nuvio EngineFS Service</tizen:name>
     <tizen:icon src="icon.png"/>
