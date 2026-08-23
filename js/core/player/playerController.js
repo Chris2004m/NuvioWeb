@@ -30,8 +30,6 @@ const WEBOS_AUDIO_TRACK_SELECTION_TIMEOUT_MS = 4000;
 const AVPLAY_BUFFER_FOR_PLAY_SECONDS = 5;
 const AVPLAY_BUFFER_FOR_RESUME_SECONDS = 4;
 const AVPLAY_BUFFERING_TIMEOUT_SECONDS = 10;
-const HLS_TRANSIENT_PLAYLIST_404_RETRY_LIMIT = 2;
-const HLS_TRANSIENT_PLAYLIST_404_RETRY_BASE_DELAY_MS = 1500;
 
 function logEngineFsDebug(...args) {
   if (globalThis.__NUVIO_DEBUG_ENGINEFS__) {
@@ -3432,30 +3430,8 @@ export const PlayerController = {
     this.playbackEngine = "hls.js";
     let networkRecoveryAttempts = 0;
     let mediaRecoveryAttempts = 0;
-    const transientPlaylist404Retries = {
-      levelLoadError: 0,
-      audioTrackLoadError: 0
-    };
-    let transientPlaylist404RetryDetails = null;
-    let transientPlaylist404RetryTimer = null;
-
-    const clearTransientPlaylist404Retry = () => {
-      if (transientPlaylist404RetryTimer) {
-        clearTimeout(transientPlaylist404RetryTimer);
-        transientPlaylist404RetryTimer = null;
-      }
-      transientPlaylist404RetryDetails = null;
-    };
-
-    const resetTransientPlaylist404Retry = (details) => {
-      transientPlaylist404Retries[details] = 0;
-      if (transientPlaylist404RetryDetails === details) {
-        clearTransientPlaylist404Retry();
-      }
-    };
 
     const emitFatalHlsNetworkError = (data = {}, responseCode = 0) => {
-      clearTransientPlaylist404Retry();
       this.lastPlaybackErrorCode = 2;
       this.teardownHlsInstance();
       this.emitVideoEvent("error", {
@@ -3467,81 +3443,18 @@ export const PlayerController = {
       });
     };
 
-    const scheduleTransientPlaylist404Retry = (details) => {
-      const retryAttempt = (transientPlaylist404Retries[details] || 0) + 1;
-      transientPlaylist404Retries[details] = retryAttempt;
-      const retryDelayMs = HLS_TRANSIENT_PLAYLIST_404_RETRY_BASE_DELAY_MS * retryAttempt;
-      clearTransientPlaylist404Retry();
-      transientPlaylist404RetryDetails = details;
-      console.warn("[Nuvio playback] retrying transient HLS playlist 404", {
-        details,
-        attempt: retryAttempt,
-        limit: HLS_TRANSIENT_PLAYLIST_404_RETRY_LIMIT,
-        delayMs: retryDelayMs
-      });
-      transientPlaylist404RetryTimer = setTimeout(() => {
-        transientPlaylist404RetryTimer = null;
-        if (!this.isPlaybackRequestActive(playToken, url) || this.hlsInstance !== hls) {
-          return;
-        }
-        try {
-          // Reload the master manifest as bridge-generated playlist URLs can be
-          // temporarily unavailable or stale while a live window advances.
-          hls.loadSource(url);
-        } catch (error) {
-          console.warn("HLS playlist 404 retry failed", error);
-          this.lastPlaybackErrorCode = 2;
-          this.teardownHlsInstance();
-          this.emitVideoEvent("error", {
-            playbackEngine: "hls.js",
-            mediaErrorCode: 2,
-            hlsErrorType: "networkError",
-            hlsErrorDetails: details
-          });
-        }
-      }, retryDelayMs);
-    };
-
     hls.on(Hls.Events.ERROR, (_, data = {}) => {
       if (!this.isPlaybackRequestActive(playToken, url)) {
         return;
       }
       this.captureHlsErrorDiagnostic(data);
       const responseCode = Number(data?.response?.code || data?.networkDetails?.status || 0);
-      const hlsErrorDetails = String(data?.details || "");
-      const isTransientPlaylist404 =
-        data.type === Hls.ErrorTypes.NETWORK_ERROR &&
-        responseCode === 404 &&
-        (hlsErrorDetails === "levelLoadError" || hlsErrorDetails === "audioTrackLoadError");
-      // hls.js reports an alternate-audio 404 as non-fatal. Recover only while
-      // startup has no media data; established playback must not be restarted
-      // because an optional track briefly disappears.
-      const isStartupAudioPlaylist404 =
-        !data?.fatal &&
-        isTransientPlaylist404 &&
-        hlsErrorDetails === "audioTrackLoadError" &&
-        Number(this.video?.readyState || 0) === 0 &&
-        !this.isPlaying;
-      if (isStartupAudioPlaylist404) {
-        if (
-          transientPlaylist404Retries[hlsErrorDetails] < HLS_TRANSIENT_PLAYLIST_404_RETRY_LIMIT &&
-          !transientPlaylist404RetryTimer
-        ) {
-          scheduleTransientPlaylist404Retry(hlsErrorDetails);
-        }
-        return;
-      }
       if (!data?.fatal) {
         return;
       }
       if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-        if (
-          isTransientPlaylist404 &&
-          transientPlaylist404Retries[hlsErrorDetails] < HLS_TRANSIENT_PLAYLIST_404_RETRY_LIMIT
-        ) {
-          scheduleTransientPlaylist404Retry(hlsErrorDetails);
-          return;
-        }
+        // Keep terminal playlist HTTP statuses aligned with Android TV; a 404
+        // points to a missing bridge-generated playlist, not a recoverable load.
         if (isTerminalHlsHttpStatus(responseCode)) {
           emitFatalHlsNetworkError(data, responseCode);
           return;
@@ -3587,15 +3500,6 @@ export const PlayerController = {
         hlsErrorDetails: String(data.details || "")
       });
     });
-
-    hls.on(Hls.Events.LEVEL_LOADED, () => {
-      resetTransientPlaylist404Retry("levelLoadError");
-    });
-    if (Hls.Events.AUDIO_TRACK_LOADED) {
-      hls.on(Hls.Events.AUDIO_TRACK_LOADED, () => {
-        resetTransientPlaylist404Retry("audioTrackLoadError");
-      });
-    }
 
     hls.on(Hls.Events.MEDIA_ATTACHED, () => {
       if (!this.isPlaybackRequestActive(playToken, url)) {
