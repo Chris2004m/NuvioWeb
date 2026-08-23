@@ -30,6 +30,7 @@ import {
   requestJson as traktRequestJson,
   TraktAuthService
 } from "../../../data/repository/traktAuthService.js";
+import { toTraktImageUrl } from "../../../core/trakt/traktImageUrl.js";
 import { Environment } from "../../../platform/environment.js";
 import { Platform } from "../../../platform/index.js";
 import {
@@ -78,6 +79,10 @@ const LOCAL_YOUTUBE_PROXY_URL = "youtube-proxy.html";
 
 function t(key, params = {}, fallback = key) {
   return I18n.t(key, params, { fallback });
+}
+
+function detailImageLoadingMode() {
+  return Environment.isTizen() || Environment.isWebOS() ? "eager" : "lazy";
 }
 
 // Returns the first value that is a non-negative integer (number or numeric
@@ -191,10 +196,11 @@ function shouldSynthesizeAddonVideoEpisodes(contentType = "") {
   const normalizedType = String(contentType || "")
     .trim()
     .toLowerCase();
-  return (
-    normalizedType !== "" &&
-    !["movie", "film", "series", "tv", "show", "tvshow", "channel"].includes(normalizedType)
-  );
+  // Match Android TV: a non-empty videos array is enough to expose an
+  // episodic detail, and missing season/episode fields become S1E<n>.
+  // Keep movie/film/channel metadata non-episodic so live TV without videos
+  // continues through the direct `tv` stream path.
+  return normalizedType !== "" && !["movie", "film", "channel"].includes(normalizedType);
 }
 
 function sortEpisodeEntries(episodes = []) {
@@ -444,7 +450,7 @@ function extractCast(meta = {}) {
     if (raw.startsWith("/")) {
       return `https://image.tmdb.org/t/p/w300${raw}`;
     }
-    return raw;
+    return toTraktImageUrl(raw);
   };
   const normalizeCastValue = (value) =>
     String(value || "")
@@ -957,14 +963,38 @@ function normalizePreviewItem(item = {}, fallbackType = "movie") {
 
 function bestTraktArtwork(images = {}, kind) {
   const candidates = images?.[kind];
+  const normalize = (value) => toTraktImageUrl(value);
   if (Array.isArray(candidates)) {
-    return candidates.find((entry) => typeof entry === "string" && entry) || "";
+    return (
+      candidates
+        .filter((entry) => typeof entry === "string" && entry.trim())
+        .map(normalize)
+        .find(Boolean) || ""
+    );
   }
-  if (typeof candidates === "string") return candidates;
+  if (typeof candidates === "string") return normalize(candidates);
   if (candidates && typeof candidates === "object") {
-    return candidates.full || candidates.medium || candidates.thumb || "";
+    return (
+      [candidates.full, candidates.medium, candidates.thumb].map(normalize).find(Boolean) || ""
+    );
   }
   return "";
+}
+
+function bestTraktLandscapeArtwork(images = {}) {
+  return (
+    ["thumb", "fanart", "banner", "poster"]
+      .map((kind) => bestTraktArtwork(images, kind))
+      .find(Boolean) || ""
+  );
+}
+
+function bestTraktBackdropArtwork(images = {}) {
+  return (
+    ["fanart", "banner", "thumb", "poster"]
+      .map((kind) => bestTraktArtwork(images, kind))
+      .find(Boolean) || ""
+  );
 }
 
 function traktRelatedPreview(media = {}, type = "movie") {
@@ -977,15 +1007,16 @@ function traktRelatedPreview(media = {}, type = "movie") {
         ? `trakt:${ids.trakt}`
         : "";
   if (!id || !(media.title || media.original_title)) return null;
-  const landscape = bestTraktArtwork(media.images, "fanart");
-  const poster = bestTraktArtwork(media.images, "poster");
+  const landscape = bestTraktLandscapeArtwork(media.images);
+  const backdrop = bestTraktBackdropArtwork(media.images);
   return normalizePreviewItem(
     {
       id,
       name: media.title || media.original_title,
       type,
-      poster: landscape || poster,
-      landscapePoster: landscape || poster,
+      poster: landscape,
+      background: backdrop,
+      landscapePoster: backdrop || landscape,
       releaseInfo: media.year == null ? "" : String(media.year)
     },
     type
@@ -3681,21 +3712,31 @@ export const MetaDetailsScreen = {
     const className = kind === "movie" ? "movie-cast-track" : "series-cast-track";
     const cards = this.castItems
       .slice(0, 18)
-      .map(
-        (person) => `
+      .map((person) => {
+        const name = String(person.name || "").trim();
+        const initial = name.charAt(0).toUpperCase() || "?";
+        const photo = String(person.photo || "").trim();
+        return `
       <article class="movie-cast-card focusable series-cast-card"
                data-action="openCastDetail"
                data-cast-id="${person.tmdbId || ""}"
-               data-cast-key="${escapeHtml(String(person.tmdbId || `${person.name || ""}:${person.character || ""}`))}"
-               data-cast-name="${escapeHtml(person.name || "")}"
+               data-cast-key="${escapeHtml(String(person.tmdbId || `${name}:${person.character || ""}`))}"
+               data-cast-name="${escapeHtml(name)}"
                data-cast-role="${escapeHtml(person.character || "")}"
-               data-cast-photo="${escapeHtml(person.photo || "")}">
-        <div class="movie-cast-avatar"${person.photo ? ` style="background-image:url('${String(person.photo).replace(/'/g, "%27")}')"` : ""}></div>
-        <div class="movie-cast-name">${escapeHtml(person.name || "")}</div>
+               data-cast-photo="${escapeHtml(photo)}">
+        <div class="movie-cast-avatar">
+          <span class="movie-cast-avatar-fallback" aria-hidden="true">${escapeHtml(initial)}</span>
+          ${
+            photo
+              ? `<img class="movie-cast-avatar-image" src="${escapeAttribute(photo)}" alt="${escapeAttribute(name || "Cast")}" loading="${detailImageLoadingMode()}" decoding="async" onerror="this.hidden=true" />`
+              : ""
+          }
+        </div>
+        <div class="movie-cast-name">${escapeHtml(name)}</div>
         <div class="movie-cast-role">${escapeHtml(person.character || "")}</div>
       </article>
-    `
-      )
+    `;
+      })
       .join("");
     return `<div class="${className}" data-scroll-key="cast:${kind}">${cards}</div>`;
   },
@@ -5614,7 +5655,7 @@ export const MetaDetailsScreen = {
         <div class="detail-morelike-poster-wrap">
           ${
             primaryImage
-              ? `<img class="detail-morelike-poster-image" src="${escapeHtml(primaryImage)}" alt="${escapeHtml(item.name || "content")}" loading="lazy" decoding="async"${fallbackImage ? ` data-fallback-src="${escapeHtml(fallbackImage)}"` : ""} onerror="var next=this.dataset.fallbackSrc||''; if(next && this.src !== next){ this.src = next; this.dataset.fallbackSrc=''; return; } this.hidden = true; var placeholder = this.nextElementSibling; if(placeholder){ placeholder.hidden = false; }" />`
+              ? `<img class="detail-morelike-poster-image" src="${escapeHtml(primaryImage)}" alt="${escapeHtml(item.name || "content")}" loading="${detailImageLoadingMode()}" decoding="async"${fallbackImage ? ` data-fallback-src="${escapeHtml(fallbackImage)}"` : ""} onerror="var next=this.dataset.fallbackSrc||''; if(next && this.src !== next){ this.src = next; this.dataset.fallbackSrc=''; return; } this.hidden = true; var placeholder = this.nextElementSibling; if(placeholder){ placeholder.hidden = false; }" />`
               : ""
           }
           <div class="detail-morelike-poster placeholder"${primaryImage ? " hidden" : ""}></div>
