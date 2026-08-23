@@ -18,6 +18,13 @@ import {
   isTerminalHlsHttpStatus
 } from "../../../core/player/hlsNetworkErrorPolicy.js";
 import { deltaMsForKeyRepeat } from "../../../core/player/playerScrubRates.js";
+import {
+  ASPECT_MODE_DEFINITIONS,
+  aspectModeIndex,
+  normalizeAspectMode,
+  parseAspectRatio,
+  resolveAspectRender
+} from "../../../core/player/playerAspect.js";
 import { buildClockFormatOptions, resolveSystemHour12 } from "../../../core/player/clockFormat.js";
 import { resolveSubtitleStyleControlAvailability } from "../../../core/player/subtitlePresentationCapabilities.js";
 import { shouldTreatAsNaturalPlaybackCompletion } from "../../../core/player/naturalPlaybackCompletion.js";
@@ -43,6 +50,7 @@ import { addonRepository } from "../../../data/repository/addonRepository.js";
 import { parentalGuideRepository } from "../../../data/repository/parentalGuideRepository.js";
 import { skipIntroRepository } from "../../../data/repository/skipIntroRepository.js";
 import { PlayerSettingsStore } from "../../../data/local/playerSettingsStore.js";
+import { DeviceLocalPlayerPreferences } from "../../../data/local/deviceLocalPlayerPreferences.js";
 import { StreamBadgeSettingsStore } from "../../../data/local/streamBadgeSettingsStore.js";
 import { TorrentSettingsStore } from "../../../data/local/torrentSettingsStore.js";
 import { WebOsAudioCompatibilityStore } from "../../../data/local/webOsAudioCompatibilityStore.js";
@@ -2290,11 +2298,10 @@ export const PlayerScreen = {
       void ensureWebOsImageProxyReady();
     }
 
-    this.aspectModes = [
-      { objectFit: "contain", label: t("player_aspect_fit", {}, "Fit") },
-      { objectFit: "cover", label: t("player_aspect_fill", {}, "Fill") },
-      { objectFit: "fill", label: t("player_aspect_stretch", {}, "Stretch") }
-    ];
+    this.aspectModes = ASPECT_MODE_DEFINITIONS.map((definition) => ({
+      ...definition,
+      label: t(definition.labelKey, {}, definition.fallbackLabel)
+    }));
 
     this.streamCandidates = this.normalizeStreamCandidates(
       Array.isArray(params.streamCandidates) ? params.streamCandidates : []
@@ -2439,7 +2446,7 @@ export const PlayerScreen = {
     this.streamCandidatesByVideoId = new Map();
     this.streamCandidatesLoadPromises = new Map();
 
-    this.aspectModeIndex = 0;
+    this.aspectModeIndex = aspectModeIndex(DeviceLocalPlayerPreferences.getAspectMode());
     this.aspectToastTimer = null;
     this.speedDialogVisible = false;
     this.speedDialogIndex = Math.max(0, PLAYER_SPEEDS.indexOf(1));
@@ -9051,6 +9058,7 @@ export const PlayerScreen = {
     };
 
     const onTrackListChanged = () => {
+      this.applyAspectMode({ showToast: false });
       this.refreshTrackDialogs();
       if (this.refreshSubtitleCueStyles()) {
         this.refreshWebOsEmbeddedSubtitleAfterCueMutation();
@@ -9358,6 +9366,16 @@ export const PlayerScreen = {
       video.addEventListener(eventName, handler);
       this.videoListeners.push({ target: video, eventName, handler });
     });
+
+    if (typeof window?.addEventListener === "function") {
+      const onViewportResize = () => this.applyAspectMode({ showToast: false });
+      window.addEventListener("resize", onViewportResize);
+      this.videoListeners.push({
+        target: window,
+        eventName: "resize",
+        handler: onViewportResize
+      });
+    }
 
     const trackTargets = [this.getVideoTextTrackList(), this.getVideoAudioTrackList()].filter(
       Boolean
@@ -13764,8 +13782,10 @@ export const PlayerScreen = {
     const sizeScale = normalizeSubtitleFontSize(style.fontSize) / 100;
     const verticalOffsetPx =
       splitSubtitleVerticalOffset(style.verticalOffset).value * -0.02 * viewportHeight;
-    const mode = this.aspectModes[this.aspectModeIndex] || this.aspectModes[0];
-    const rect = this.calculateAspectRect(mode.objectFit, PlayerController.video);
+    const mode = this.getAspectModeDefinition();
+    const rect = this.calculateAspectRect(mode.id, PlayerController.video);
+    const modeScaleX = Number(rect.scaleX || 1);
+    const modeScaleY = Number(rect.scaleY || 1);
     const renderKey = [
       frame.key,
       viewportWidth,
@@ -13774,6 +13794,8 @@ export const PlayerScreen = {
       Math.round(rect.y),
       Math.round(rect.width),
       Math.round(rect.height),
+      modeScaleX,
+      modeScaleY,
       sizeScale,
       verticalOffsetPx
     ].join(":");
@@ -13809,8 +13831,8 @@ export const PlayerScreen = {
     if (!scratchContext) {
       return false;
     }
-    const scaleX = rect.width / frame.screenWidth;
-    const scaleY = rect.height / frame.screenHeight;
+    const contentScaleX = rect.width / frame.screenWidth;
+    const contentScaleY = rect.height / frame.screenHeight;
     let renderedCompositions = 0;
     compositions.forEach((composition) => {
       if (
@@ -13825,11 +13847,13 @@ export const PlayerScreen = {
       const imageData = scratchContext.createImageData(composition.width, composition.height);
       imageData.data.set(composition.rgba);
       scratchContext.putImageData(imageData, 0, 0);
-      const targetWidth = composition.width * scaleX * sizeScale;
-      const targetHeight = composition.height * scaleY * sizeScale;
-      const targetCenterX = rect.x + (composition.x + composition.width / 2) * scaleX;
+      const targetWidth = composition.width * contentScaleX * sizeScale * modeScaleX;
+      const targetHeight = composition.height * contentScaleY * sizeScale * modeScaleY;
+      const baseCenterX = rect.x + (composition.x + composition.width / 2) * contentScaleX;
+      const baseCenterY = rect.y + (composition.y + composition.height / 2) * contentScaleY;
+      const targetCenterX = viewportWidth / 2 + (baseCenterX - viewportWidth / 2) * modeScaleX;
       const targetCenterY =
-        rect.y + (composition.y + composition.height / 2) * scaleY + verticalOffsetPx;
+        viewportHeight / 2 + (baseCenterY - viewportHeight / 2) * modeScaleY + verticalOffsetPx;
       context.drawImage(
         scratch,
         targetCenterX - targetWidth / 2,
@@ -18322,11 +18346,65 @@ export const PlayerScreen = {
     }, 1400);
   },
 
+  getAspectModeDefinition(mode = this.aspectModes?.[this.aspectModeIndex]) {
+    const modeId = normalizeAspectMode(typeof mode === "object" ? mode?.id : mode);
+    return (
+      this.aspectModes?.find((candidate) => candidate.id === modeId) ||
+      this.aspectModes?.[0] ||
+      ASPECT_MODE_DEFINITIONS[0]
+    );
+  },
+
+  getVideoAspectRatio(video = PlayerController.video) {
+    const explicitAspectCandidates = [
+      video?.pixelWidthHeightRatio,
+      video?.pixelAspectRatio,
+      video?.videoAspectRatio,
+      video?.displayAspectRatio,
+      video?.aspectRatio
+    ];
+    for (const candidate of explicitAspectCandidates) {
+      const aspect = parseAspectRatio(candidate);
+      if (aspect && aspect > 0) {
+        const width = Number(video?.videoWidth || 0);
+        const height = Number(video?.videoHeight || 0);
+        if (candidate === video?.pixelWidthHeightRatio && width > 0 && height > 0) {
+          return (width / height) * aspect;
+        }
+        if (candidate === video?.pixelWidthHeightRatio) {
+          continue;
+        }
+        return aspect;
+      }
+    }
+
+    const videoWidth = Number(video?.videoWidth || 0);
+    const videoHeight = Number(video?.videoHeight || 0);
+    if (videoWidth > 0 && videoHeight > 0) {
+      return videoWidth / videoHeight;
+    }
+
+    const avplayDimensions =
+      typeof PlayerController.getAvPlayVideoDimensions === "function"
+        ? PlayerController.getAvPlayVideoDimensions()
+        : null;
+    const avplayAspect = parseAspectRatio(avplayDimensions?.aspect);
+    if (avplayAspect && avplayAspect > 0) {
+      return avplayAspect;
+    }
+    const avplayWidth = Number(avplayDimensions?.width || 0);
+    const avplayHeight = Number(avplayDimensions?.height || 0);
+    return avplayWidth > 0 && avplayHeight > 0 ? avplayWidth / avplayHeight : null;
+  },
+
   applyAspectMode({ showToast = false } = {}) {
-    const mode = this.aspectModes[this.aspectModeIndex] || this.aspectModes[0];
+    const mode = this.getAspectModeDefinition();
     const video = PlayerController.video;
     if (video) {
-      const rect = this.calculateAspectRect(mode.objectFit, video);
+      const rect = this.calculateAspectRect(mode.id, video);
+      const usingTizenAvPlay = Boolean(Environment.isTizen() && PlayerController.isUsingAvPlay?.());
+      const canTransformVideo = !Environment.isWebOS() && !usingTizenAvPlay;
+      const videoRect = usingTizenAvPlay ? rect.displayRect : rect;
       video.style.position = "fixed";
       if (Environment.isWebOS()) {
         // webOS suppresses its screensaver only when the video element itself
@@ -18337,17 +18415,22 @@ export const PlayerScreen = {
         video.style.height = "100vh";
         video.style.objectFit = mode.objectFit;
       } else {
-        video.style.left = `${Math.round(rect.x)}px`;
-        video.style.top = `${Math.round(rect.y)}px`;
-        video.style.width = `${Math.round(rect.width)}px`;
-        video.style.height = `${Math.round(rect.height)}px`;
+        video.style.left = `${Math.round(videoRect.x)}px`;
+        video.style.top = `${Math.round(videoRect.y)}px`;
+        video.style.width = `${Math.round(videoRect.width)}px`;
+        video.style.height = `${Math.round(videoRect.height)}px`;
         video.style.objectFit = "fill";
       }
       video.style.maxWidth = "none";
       video.style.maxHeight = "none";
       video.style.background = "black";
+      video.style.transformOrigin = "center center";
+      video.style.transform =
+        !canTransformVideo || (rect.scaleX === 1 && rect.scaleY === 1)
+          ? "none"
+          : `scale(${rect.scaleX}, ${rect.scaleY})`;
       if (typeof PlayerController.setAvPlayDisplayRect === "function") {
-        PlayerController.setAvPlayDisplayRect(rect, rect.displayMethod);
+        PlayerController.setAvPlayDisplayRect(rect.displayRect, rect.displayMethod);
       }
     }
     if (showToast) {
@@ -18356,7 +18439,7 @@ export const PlayerScreen = {
     this.renderBitmapSubtitleAtCurrentTime({ force: true });
   },
 
-  calculateAspectRect(objectFit = "contain", video = PlayerController.video) {
+  calculateAspectRect(mode = "ORIGINAL", video = PlayerController.video) {
     const viewport =
       typeof PlayerController.getPlayerViewportSize === "function"
         ? PlayerController.getPlayerViewportSize()
@@ -18382,42 +18465,28 @@ export const PlayerScreen = {
           };
     const viewportWidth = viewport.width;
     const viewportHeight = viewport.height;
-    if (objectFit === "fill") {
-      return {
-        x: 0,
-        y: 0,
-        width: viewportWidth,
-        height: viewportHeight,
-        displayMethod: "PLAYER_DISPLAY_MODE_FULL_SCREEN"
-      };
-    }
-
-    const avplayDimensions =
-      typeof PlayerController.getAvPlayVideoDimensions === "function"
-        ? PlayerController.getAvPlayVideoDimensions()
-        : null;
-    const videoWidth = Number(video?.videoWidth || avplayDimensions?.width || 0);
-    const videoHeight = Number(video?.videoHeight || avplayDimensions?.height || 0);
-    const mediaRatio = videoWidth > 0 && videoHeight > 0 ? videoWidth / videoHeight : 16 / 9;
-    const viewportRatio = viewportWidth / viewportHeight;
-    const shouldCover = objectFit === "cover";
-    const widthLimited = shouldCover ? viewportRatio > mediaRatio : viewportRatio < mediaRatio;
-    const width = widthLimited ? viewportWidth : viewportHeight * mediaRatio;
-    const height = widthLimited ? viewportWidth / mediaRatio : viewportHeight;
-
+    const normalizedMode = normalizeAspectMode(typeof mode === "object" ? mode?.id : mode);
+    const videoAspect = this.getVideoAspectRatio(video);
+    const render = resolveAspectRender(normalizedMode, viewportWidth, viewportHeight, videoAspect);
+    const displayRect = Environment.isTizen()
+      ? { x: 0, y: 0, width: viewportWidth, height: viewportHeight }
+      : {
+          x: render.x,
+          y: render.y,
+          width: render.width,
+          height: render.height
+        };
     return {
-      x: (viewportWidth - width) / 2,
-      y: (viewportHeight - height) / 2,
-      width,
-      height,
-      displayMethod: shouldCover
-        ? "PLAYER_DISPLAY_MODE_FULL_SCREEN"
-        : "PLAYER_DISPLAY_MODE_LETTER_BOX"
+      ...render,
+      mode: normalizedMode,
+      displayRect
     };
   },
 
   cycleAspectMode() {
     this.aspectModeIndex = (this.aspectModeIndex + 1) % this.aspectModes.length;
+    const mode = this.getAspectModeDefinition();
+    DeviceLocalPlayerPreferences.setAspectMode(mode.id);
     this.applyAspectMode({ showToast: true });
   },
   renderParentalGuideOverlay() {

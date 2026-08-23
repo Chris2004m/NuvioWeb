@@ -23,6 +23,7 @@ import { WebOsLunaService } from "../../platform/webos/webosLunaService.js";
 import { WebOSPlayerExtensions } from "../../platform/webos/webosPlayerExtensions.js";
 import { loadStreamingLibs } from "../../runtime/loadStreamingLibs.js";
 import { WATCH_PROGRESS_UNKNOWN_DURATION_PERCENT } from "../../domain/model/watchProgress.js";
+import { parseAspectRatio } from "./playerAspect.js";
 
 const MIN_PROGRESS_SYNC_DURATION_MS = 1000;
 const WEBOS_AUDIO_TRACK_SELECTION_TIMEOUT_MS = 4000;
@@ -2162,6 +2163,28 @@ export const PlayerController = {
       extraInfo.videoHeight,
       extraInfo.video_height
     ];
+    const displayAspectCandidates = [
+      videoTrack.display_aspect_ratio,
+      videoTrack.displayAspectRatio,
+      videoTrack.video_aspect_ratio,
+      videoTrack.videoAspectRatio,
+      videoTrack.dar,
+      videoTrack.aspect,
+      extraInfo.display_aspect_ratio,
+      extraInfo.displayAspectRatio,
+      extraInfo.video_aspect_ratio,
+      extraInfo.videoAspectRatio,
+      extraInfo.dar,
+      extraInfo.aspect
+    ];
+    const pixelAspectCandidates = [
+      videoTrack.pixel_aspect_ratio,
+      videoTrack.pixelAspectRatio,
+      videoTrack.par,
+      extraInfo.pixel_aspect_ratio,
+      extraInfo.pixelAspectRatio,
+      extraInfo.par
+    ];
     let width =
       widthCandidates.map(Number).find((value) => Number.isFinite(value) && value > 0) || 0;
     let height =
@@ -2180,7 +2203,16 @@ export const PlayerController = {
         height = Number(match[2]);
       }
     }
-    return width > 0 && height > 0 ? { width, height } : null;
+    if (!width || !height) {
+      return null;
+    }
+    const displayAspect = displayAspectCandidates.map(parseAspectRatio).find(Boolean) || null;
+    const pixelAspect = pixelAspectCandidates.map(parseAspectRatio).find(Boolean) || 1;
+    return {
+      width,
+      height,
+      aspect: displayAspect || (width / height) * pixelAspect
+    };
   },
 
   mapAvPlayErrorToMediaCode(errorValue) {
