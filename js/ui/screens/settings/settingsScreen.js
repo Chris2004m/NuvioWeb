@@ -7152,7 +7152,7 @@ export const SettingsScreen = {
         const update = await getLatestAppUpdate({ currentVersion: CURRENT_APP_VERSION });
         this.aboutUpdateStatus = update
           ? String(update.tag || "")
-          : t("update_up_to_date", {}, "System is up to date.");
+          : t("update_latest_version", {}, "You’re using the latest version.");
         if (update) showAppUpdatePrompt(update);
       } catch (_) {
         this.aboutUpdateStatus = t("update_error_check_failed", {}, "Update check failed");

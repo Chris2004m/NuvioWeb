@@ -1838,6 +1838,7 @@
     <string name="cd_expand_sidebar">Expand sidebar</string>
     <string name="update_checking">Checking for updates…</string>
     <string name="update_download_complete">Download complete. Ready to install.</string>
+    <string name="update_latest_version">You’re using the latest version.</string>
     <string name="update_up_to_date">System is up to date. Latest changes:</string>
     <string name="update_close">Close</string>
     <string name="update_open_settings">Open Settings</string>

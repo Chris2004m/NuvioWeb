@@ -1271,6 +1271,7 @@
     <string name="cd_expand_sidebar">Espandi barra laterale</string>
     <string name="update_checking">Controllo aggiornamenti…</string>
     <string name="update_download_complete">Download completato. Pronto per l\'installazione.</string>
+    <string name="update_latest_version">Stai usando la versione più recente.</string>
     <string name="update_up_to_date">Il sistema è aggiornato. Ultime modifiche:</string>
     <string name="update_close">Chiudi</string>
     <string name="update_open_settings">Apri Impostazioni</string>
