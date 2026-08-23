@@ -14,8 +14,6 @@ import { TraktCredentialSyncService } from "./traktCredentialSyncService.js";
 import { SimklCredentialSyncService } from "./simklCredentialSyncService.js";
 import { ProviderCredentialSyncService } from "./providerCredentialSyncService.js";
 import { SimklSyncService } from "../../data/repository/simklSyncService.js";
-import { watchProgressRepository } from "../../data/repository/watchProgressRepository.js";
-import { TraktSettingsStore, WatchProgressSource } from "../../data/local/traktSettingsStore.js";
 import { CollectionSyncService } from "./collectionSyncService.js";
 import { HomeCatalogSettingsSyncService } from "./homeCatalogSettingsSyncService.js";
 import { ThemeManager } from "../../ui/theme/themeManager.js";
@@ -35,35 +33,11 @@ const MAX_PULL_ATTEMPTS = 3;
 const FORCE_RESYNC_MIN_INTERVAL_MS = 30000;
 const FULL_STARTUP_PULL_TTL_MS = 6 * 60 * 60 * 1000;
 const STARTUP_SYNC_STATE_KEY = "startupSyncState";
-// Home must not remain behind a remote Continue Watching preflight forever.
-// Keep the underlying sync alive so it can still update local state, but let
-// the initial Home load fall back to its local snapshot/progress reads when a
-// TV network request is slow or unavailable.
-const HOME_CONTINUE_WATCHING_PREFLIGHT_TIMEOUT_MS = 12000;
 const syncPullCompletedListeners = new Set();
 
 function sleep(ms) {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
-  });
-}
-
-function withTimeout(promise, timeoutMs, fallback) {
-  const durationMs = Math.max(0, Number(timeoutMs || 0));
-  if (!durationMs) {
-    return Promise.resolve(fallback);
-  }
-
-  let timer = null;
-  return Promise.race([
-    Promise.resolve(promise),
-    new Promise((resolve) => {
-      timer = setTimeout(() => resolve(fallback), durationMs);
-    })
-  ]).finally(() => {
-    if (timer) {
-      clearTimeout(timer);
-    }
   });
 }
 
@@ -139,8 +113,6 @@ export const StartupSyncService = {
   inFlight: false,
   inFlightPromise: null,
   inFlightGeneration: 0,
-  continueWatchingInFlightPromise: null,
-  continueWatchingInFlightGeneration: 0,
   watchStateInFlightPromise: null,
   watchStateInFlightGeneration: 0,
   libraryInFlightPromise: null,
@@ -148,6 +120,7 @@ export const StartupSyncService = {
   profileScopedSyncEnabled: false,
   addonPushTimer: null,
   backoffRetryTimer: null,
+  backoffRetryNotifyPullCompleted: false,
   unsubscribeAddonChanges: null,
   pendingSyncRequest: null,
   runGeneration: 0,
@@ -166,18 +139,30 @@ export const StartupSyncService = {
     );
   },
 
-  scheduleBackoffRetry() {
-    if (!this.started || !AuthManager.isAuthenticated || this.backoffRetryTimer) {
+  scheduleBackoffRetry({ notifyPullCompleted = false } = {}) {
+    if (!this.started || !AuthManager.isAuthenticated) {
       return;
     }
     const remainingMs = getSyncBackoffRemainingMs();
     if (remainingMs <= 0) {
       return;
     }
+    this.backoffRetryNotifyPullCompleted = Boolean(
+      this.backoffRetryNotifyPullCompleted || notifyPullCompleted
+    );
+    if (this.backoffRetryTimer) {
+      return;
+    }
     this.backoffRetryTimer = setTimeout(
       () => {
         this.backoffRetryTimer = null;
-        void this.requestSyncNow({ force: true, includeProfileSettings: true }).catch((error) => {
+        const shouldNotifyPullCompleted = Boolean(this.backoffRetryNotifyPullCompleted);
+        this.backoffRetryNotifyPullCompleted = false;
+        void this.requestSyncNow({
+          force: true,
+          includeProfileSettings: true,
+          notifyPullCompleted: shouldNotifyPullCompleted
+        }).catch((error) => {
           console.warn("Scheduled startup sync retry failed", error);
         });
       },
@@ -275,6 +260,7 @@ export const StartupSyncService = {
       clearTimeout(this.backoffRetryTimer);
       this.backoffRetryTimer = null;
     }
+    this.backoffRetryNotifyPullCompleted = false;
     if (this.unsubscribeAddonChanges) {
       this.unsubscribeAddonChanges();
       this.unsubscribeAddonChanges = null;
@@ -314,23 +300,8 @@ export const StartupSyncService = {
       });
       return this.inFlightPromise;
     }
-    if (
-      this.continueWatchingInFlightPromise &&
-      this.continueWatchingInFlightGeneration === generation
-    ) {
-      await this.continueWatchingInFlightPromise.catch(() => false);
-      if (this.inFlightPromise && this.inFlightGeneration === generation) {
-        this.queuePendingSyncRequest({
-          force,
-          includeProfileSettings,
-          pushAfterPull,
-          notifyPullCompleted
-        });
-        return this.inFlightPromise;
-      }
-    }
     if (!this.isCurrentRun(generation) || isSyncBackoffActive()) {
-      this.scheduleBackoffRetry();
+      this.scheduleBackoffRetry({ notifyPullCompleted });
       return false;
     }
 
@@ -373,7 +344,7 @@ export const StartupSyncService = {
             break;
           }
           if (isSyncBackoffActive()) {
-            this.scheduleBackoffRetry();
+            this.scheduleBackoffRetry({ notifyPullCompleted });
             break;
           }
 
@@ -401,11 +372,11 @@ export const StartupSyncService = {
               }
               break;
             }
-            this.scheduleBackoffRetry();
+            this.scheduleBackoffRetry({ notifyPullCompleted });
             break;
           }
           if (isSyncBackoffActive()) {
-            this.scheduleBackoffRetry();
+            this.scheduleBackoffRetry({ notifyPullCompleted });
             break;
           }
           if (attempt < MAX_PULL_ATTEMPTS) {
@@ -434,98 +405,6 @@ export const StartupSyncService = {
     this.inFlightPromise = requestPromise;
     this.inFlightGeneration = generation;
     return requestPromise;
-  },
-
-  async requestContinueWatchingSyncNow() {
-    if (!this.started || !AuthManager.isAuthenticated) {
-      return false;
-    }
-    const generation = this.runGeneration;
-    if (this.inFlightPromise && this.inFlightGeneration === generation) {
-      return this.inFlightPromise;
-    }
-    if (
-      this.continueWatchingInFlightPromise &&
-      this.continueWatchingInFlightGeneration === generation
-    ) {
-      return this.continueWatchingInFlightPromise;
-    }
-    if (isSyncBackoffActive()) {
-      this.scheduleBackoffRetry();
-      return false;
-    }
-
-    let requestPromise = null;
-    requestPromise = (async () => {
-      try {
-        const activeProfileId = ProfileManager.getActiveProfileId();
-        const profileKey = currentSyncKey(activeProfileId);
-        await ProfileSettingsSyncService.pull(activeProfileId);
-        if (!this.isCurrentProfile(activeProfileId, profileKey)) {
-          return false;
-        }
-
-        const requestedSource = TraktSettingsStore.get().watchProgressSource;
-        const credentialTasks = [];
-        if (requestedSource === WatchProgressSource.TRAKT) {
-          credentialTasks.push(
-            runSurface("Trakt Continue Watching credentials", () =>
-              TraktCredentialSyncService.pullFromRemote(activeProfileId)
-            )
-          );
-        } else if (requestedSource === WatchProgressSource.SIMKL) {
-          credentialTasks.push(
-            runSurface("Simkl Continue Watching credentials", () =>
-              SimklCredentialSyncService.pullFromRemote(activeProfileId)
-            )
-          );
-        }
-        await Promise.all(credentialTasks);
-
-        if (
-          watchProgressRepository.getContinueWatchingSource() === WatchProgressSource.NUVIO_SYNC
-        ) {
-          await runSurface("Continue Watching progress", () => WatchProgressSyncService.pull());
-        }
-        if (isSyncBackoffActive()) {
-          this.scheduleBackoffRetry();
-          return false;
-        }
-        return this.isCurrentRun(generation) && this.isCurrentProfile(activeProfileId, profileKey);
-      } catch (error) {
-        console.warn("Continue Watching sync failed", error);
-        return false;
-      } finally {
-        if (this.continueWatchingInFlightPromise === requestPromise) {
-          this.continueWatchingInFlightPromise = null;
-          this.continueWatchingInFlightGeneration = 0;
-        }
-      }
-    })();
-    this.continueWatchingInFlightPromise = requestPromise;
-    this.continueWatchingInFlightGeneration = generation;
-    return requestPromise;
-  },
-
-  async requestHomeSyncNow() {
-    const deadline = Date.now() + HOME_CONTINUE_WATCHING_PREFLIGHT_TIMEOUT_MS;
-    const remainingTime = () => Math.max(0, deadline - Date.now());
-    const synced = await withTimeout(this.requestContinueWatchingSyncNow(), remainingTime(), false);
-    if (!synced) {
-      return false;
-    }
-
-    // Warm the same repository Home reads so the first Home render does not
-    // race the provider snapshot request for Trakt or Simkl profiles.
-    await withTimeout(
-      watchProgressRepository.getAllForContinueWatching().catch((error) => {
-        console.warn("Initial Continue Watching warm-up failed", error);
-        return null;
-      }),
-      remainingTime(),
-      null
-    );
-    return true;
   },
 
   async syncPull({
