@@ -2102,7 +2102,7 @@ export const StreamScreen = {
       const visible = isStreamEmptyStateVisible({
         filteredStreams: visibleStreams,
         isLoading: this.loading,
-        hasPendingSourceLoads: this.hasPendingSourceLoads(targetFilter)
+        hasPendingSourceLoads: this.hasPendingSourceLoads("all")
       });
       emptyState.hidden = !visible;
       emptyState.style.display = visible ? "" : "none";
@@ -2938,7 +2938,7 @@ export const StreamScreen = {
 
   renderStableStreamLoadingRow() {
     return `
-      <div class="stream-route-card-row" data-stream-loading-row hidden>
+      <div class="stream-route-card-row" data-stream-loading-row hidden style="display:none">
         <div class="stream-route-card skeleton">
           <div class="stream-route-card-copy">
             <div class="stream-route-skeleton-line"></div>
@@ -2952,7 +2952,7 @@ export const StreamScreen = {
   },
 
   renderStableStreamEmptyState() {
-    return `<div class="stream-route-empty" data-stream-empty hidden>${escapeHtml(t("sources_no_streams", {}, "No streams found"))}</div>`;
+    return `<div class="stream-route-empty" data-stream-empty hidden style="display:none">${escapeHtml(t("sources_no_streams", {}, "No streams found"))}</div>`;
   },
 
   render() {
@@ -2997,6 +2997,9 @@ export const StreamScreen = {
     const filtered = this.getFilteredStreams();
     const allStreams = this.getFilteredStreams("all");
     const hasPendingForFilter = this.hasPendingSourceLoads();
+    // Keep the empty state global: a selected source can be empty while
+    // another compatible addon is still resolving and may provide streams.
+    const hasPendingForAllSources = this.hasPendingSourceLoads("all");
     const streamBadgesEnabled = DebridSettingsStore.get().streamBadgesEnabled !== false;
     const badgeSettings = StreamBadgeSettingsStore.snapshot();
     const showAddonLogo = badgeSettings.showAddonLogo === true;
@@ -3071,7 +3074,7 @@ export const StreamScreen = {
     } else if (filtered.length && showAddonLogo) {
       this.requestAddonLogoPrerender(filtered);
       body = this.renderLoadingCards(Math.min(3, filtered.length));
-    } else if (hasPendingForFilter) {
+    } else if (hasPendingForFilter || hasPendingForAllSources) {
       body = this.renderLoadingCards();
     } else if (this.error) {
       body = `<div class="stream-route-empty">${escapeHtml(this.error)}</div>`;

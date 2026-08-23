@@ -69,6 +69,7 @@ import { StreamPreferencesStore } from "../../../data/local/streamPreferencesSto
 import { buildStreamResumeIdentity } from "../../../core/streams/streamResumeIdentity.js";
 import { TrackPreferencesStore } from "../../../data/local/trackPreferencesStore.js";
 import {
+  hasEpisodeAired as hasEpisodeAiredRule,
   shouldEnterStillWatchingPrompt,
   shouldShowNextEpisodeCard as shouldShowNextEpisodeCardRule
 } from "./playerNextEpisodeRules.js";
@@ -2486,6 +2487,8 @@ export const PlayerScreen = {
     this.nextEpisodeLaunchToken = Number(this.nextEpisodeLaunchToken || 0) + 1;
     this.nextEpisodeCardTriggered = false;
     this.nextEpisodeCardRenderedKey = "";
+    this.nextEpisodeCardFocusCycleKey = "";
+    this.nextEpisodeCardPlacedFocused = false;
     this.nextEpisodeCardSearching = false;
     this.nextEpisodeCardSourceName = "";
     this.nextEpisodeCardCountdownSec = null;
@@ -3403,7 +3406,7 @@ export const PlayerScreen = {
 
   isNextEpisodeCardFocusable() {
     const card = this.uiRefs?.nextEpisodeCard;
-    const target = card?.querySelector(".player-next-episode-card-inner.is-playable");
+    const target = card?.querySelector(".player-next-episode-card-inner");
     return Boolean(target && target.isConnected && !card.classList.contains("hidden"));
   },
 
@@ -3437,7 +3440,7 @@ export const PlayerScreen = {
 
   syncNextEpisodeCardFocusState() {
     const card = this.uiRefs?.nextEpisodeCard;
-    const target = card?.querySelector(".player-next-episode-card-inner.is-playable");
+    const target = card?.querySelector(".player-next-episode-card-inner");
     if (!target) {
       return;
     }
@@ -3490,6 +3493,10 @@ export const PlayerScreen = {
   focusNextEpisodeCard() {
     if (!this.isNextEpisodeCardFocusable()) {
       return false;
+    }
+    if (this.skipIntroFocusFrame != null && typeof cancelAnimationFrame === "function") {
+      cancelAnimationFrame(this.skipIntroFocusFrame);
+      this.skipIntroFocusFrame = null;
     }
     this.stickyProgressFocus = false;
     this.autoHideControlsAfterSeek = false;
@@ -3577,6 +3584,9 @@ export const PlayerScreen = {
           this.skipIntroFocusFrame = null;
           const focusTarget = this.uiRefs?.skipIntro?.querySelector(".player-skip-intro-btn");
           if (!focusTarget || !focusTarget.isConnected) {
+            return;
+          }
+          if (this.controlFocusZone === "nextEpisode") {
             return;
           }
           if (document.activeElement === focusTarget) {
@@ -6944,16 +6954,7 @@ export const PlayerScreen = {
   },
 
   hasEpisodeAired(released) {
-    const raw = String(released || "").trim();
-    if (!raw) {
-      return true;
-    }
-    const datePortion = raw.match(/\b\d{4}-\d{2}-\d{2}\b/)?.[0] || raw;
-    const parsedTime = Date.parse(datePortion);
-    if (!Number.isFinite(parsedTime)) {
-      return true;
-    }
-    return parsedTime <= Date.now();
+    return hasEpisodeAiredRule(released);
   },
 
   resolveNextEpisodeInfo() {
@@ -10438,11 +10439,23 @@ export const PlayerScreen = {
     this.ensureNextEpisodeStreamsPrefetch();
     const nextEpisode = this.resolveNextEpisodeInfo();
     const hidden = !this.isNextEpisodeCardVisible();
+    const focusCycleKey =
+      !hidden && nextEpisode
+        ? `${nextEpisode.videoId}|controls:${this.controlsVisible ? "visible" : "hidden"}`
+        : "";
+    if (focusCycleKey !== this.nextEpisodeCardFocusCycleKey) {
+      this.nextEpisodeCardFocusCycleKey = focusCycleKey;
+      this.nextEpisodeCardPlacedFocused = false;
+    }
 
     card.classList.toggle("hidden", hidden);
     if (hidden) {
       card.innerHTML = "";
       this.nextEpisodeCardRenderedKey = "";
+      if (this.controlFocusZone === "nextEpisode") {
+        this.controlFocusZone =
+          this.controlsVisible && this.isSeekBarAvailable() ? "progress" : "buttons";
+      }
       return;
     }
 
@@ -10480,7 +10493,7 @@ export const PlayerScreen = {
       !card.querySelector(".player-next-episode-card-inner")
     ) {
       card.innerHTML = `
-        <div class="player-next-episode-card-inner${nextEpisode.hasAired ? " focusable is-playable" : ""}${!this.controlsVisible ? " is-selected" : ""}"${nextEpisode.hasAired ? ' tabindex="-1" role="button" data-player-pointer-action="nextEpisode"' : ""}>
+        <div class="player-next-episode-card-inner focusable${nextEpisode.hasAired ? " is-playable" : ""}${!this.controlsVisible ? " is-selected" : ""}" tabindex="-1" role="button" data-player-pointer-action="nextEpisode">
           <div class="player-next-episode-thumb-wrap">
             ${thumb ? `<img class="player-next-episode-thumb" src="${escapeHtml(thumb)}" alt="" aria-hidden="true" />` : `<div class="player-next-episode-thumb player-next-episode-thumb-fallback"></div>`}
             <div class="player-next-episode-thumb-shade"></div>
@@ -10497,6 +10510,13 @@ export const PlayerScreen = {
         </div>
       `;
       this.nextEpisodeCardRenderedKey = renderKey;
+    }
+    if (!this.controlsVisible && !this.nextEpisodeCardPlacedFocused) {
+      this.nextEpisodeCardPlacedFocused = true;
+      this.stickyProgressFocus = false;
+      this.autoHideControlsAfterSeek = false;
+      this.controlFocusZone = "nextEpisode";
+      this.resetControlsAutoHide();
     }
     this.syncNextEpisodeCardFocusState();
   },
