@@ -5261,6 +5261,12 @@ button:focus-visible {
   height: 100%;
 }
 
+/* Provides the Android-style stable dark frame while an identified
+   constrained TV swaps a single hero image layer. */
+.home-screen-shell .home-hero-backdrop-wrap {
+  background: var(--bg-color);
+}
+
 .home-screen-shell .home-hero-backdrop {
   position: absolute;
   display: block;
@@ -5272,6 +5278,8 @@ button:focus-visible {
   height: 100%;
   object-fit: cover;
   opacity: 0.96;
+  /* Android legacy/grid HeroCarousel crossfade baseline. */
+  transition: opacity 300ms ease;
 }
 
 .home-screen-shell .home-hero-backdrop.placeholder {
@@ -5329,6 +5337,7 @@ button:focus-visible {
 }
 
 .home-screen-shell .home-hero-brand {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -5344,6 +5353,7 @@ button:focus-visible {
   max-width: 100%;
   max-height: 96px;
   object-fit: contain;
+  transition: opacity 300ms ease;
 }
 
 .home-screen-shell .home-hero-title-text {
@@ -6508,22 +6518,36 @@ button:focus-visible {
   transition: opacity 480ms ease;
 }
 
-.home-screen-shell.home-layout-modern .home-hero-backdrop.home-hero-backdrop-transition-enter {
+.home-screen-shell .home-hero-backdrop.home-hero-backdrop-transition-enter {
   opacity: 0;
+  transition-duration: 300ms;
+}
+
+.home-screen-shell.home-layout-modern .home-hero-backdrop.home-hero-backdrop-transition-enter {
   transition-duration: 400ms;
 }
 
-.home-screen-shell.home-layout-modern
-  .home-hero-backdrop.home-hero-backdrop-transition-enter.is-visible {
+.home-screen-shell .home-hero-backdrop.home-hero-backdrop-transition-enter.is-visible {
   opacity: 1;
+}
+
+.home-screen-shell .home-hero-backdrop-transition-ghost {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  inset: 0;
+  opacity: 1;
+  pointer-events: none;
+  transition: opacity 300ms ease;
 }
 
 .home-screen-shell.home-layout-modern .home-hero-backdrop-transition-ghost {
-  opacity: 1;
-  transition: opacity 400ms ease;
+  transition-duration: 400ms;
 }
 
-.home-screen-shell.home-layout-modern .home-hero-backdrop-transition-ghost.is-fading-out {
+.home-screen-shell .home-hero-backdrop-transition-ghost.is-fading-out {
   opacity: 0;
 }
 
@@ -6615,28 +6639,32 @@ button:focus-visible {
   object-position: left top;
 }
 
-.home-screen-shell.home-layout-modern .home-hero-logo {
-  transition: opacity 400ms ease;
-}
-
-.home-screen-shell.home-layout-modern .home-hero-logo.home-hero-logo-transition-enter {
+.home-screen-shell .home-hero-logo.home-hero-logo-transition-enter {
   opacity: 0;
 }
 
-.home-screen-shell.home-layout-modern .home-hero-logo.home-hero-logo-transition-enter.is-visible {
+.home-screen-shell.home-layout-modern .home-hero-logo {
+  transition-duration: 400ms;
+}
+
+.home-screen-shell .home-hero-logo.home-hero-logo-transition-enter.is-visible {
   opacity: 1;
 }
 
-.home-screen-shell.home-layout-modern .home-hero-logo-transition-ghost {
+.home-screen-shell .home-hero-logo-transition-ghost {
   position: absolute;
   left: 0;
   top: 0;
   opacity: 1;
   pointer-events: none;
-  transition: opacity 400ms ease;
+  transition: opacity 300ms ease;
 }
 
-.home-screen-shell.home-layout-modern .home-hero-logo-transition-ghost.is-fading-out {
+.home-screen-shell.home-layout-modern .home-hero-logo-transition-ghost {
+  transition-duration: 400ms;
+}
+
+.home-screen-shell .home-hero-logo-transition-ghost.is-fading-out {
   opacity: 0;
 }
 
@@ -15644,15 +15672,20 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
 }
 
 .movie-detail-shell .series-detail-vignette {
-  background:
-    linear-gradient(
-      90deg,
-      rgba(6, 9, 14, 0.96) 0%,
-      rgba(6, 9, 14, 0.86) 45%,
-      rgba(6, 9, 14, 0.66) 72%,
-      rgba(6, 9, 14, 0.5) 100%
-    ),
-    linear-gradient(180deg, rgba(0, 0, 0, 0.4) 0%, rgba(0, 0, 0, 0.18) 38%, rgba(0, 0, 0, 0.9) 100%);
+  /* Android TV BackdropLayer leftGradient: fadeWidth = 78% of screen. */
+  background: linear-gradient(
+    90deg,
+    rgb(var(--bg-color-rgb) / 1) 0%,
+    rgb(var(--bg-color-rgb) / 0.95) 7.8%,
+    rgb(var(--bg-color-rgb) / 0.84) 17.16%,
+    rgb(var(--bg-color-rgb) / 0.7) 28.08%,
+    rgb(var(--bg-color-rgb) / 0.52) 40.56%,
+    rgb(var(--bg-color-rgb) / 0.34) 51.48%,
+    rgb(var(--bg-color-rgb) / 0.18) 60.84%,
+    rgb(var(--bg-color-rgb) / 0.07) 70.2%,
+    rgb(var(--bg-color-rgb) / 0) 78%,
+    rgb(var(--bg-color-rgb) / 0) 100%
+  );
 }
 
 .movie-detail-content {
@@ -16304,17 +16337,20 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
   left: 0;
   inset: 0;
   z-index: 0;
-  /* Stronger scrim that never fully fades, so detail info/genres stay readable
-     over light backdrops. Classic rgba() for old Tizen/webOS browsers. */
-  background:
-    linear-gradient(
-      90deg,
-      rgba(6, 9, 14, 0.96) 0%,
-      rgba(6, 9, 14, 0.86) 45%,
-      rgba(6, 9, 14, 0.66) 72%,
-      rgba(6, 9, 14, 0.5) 100%
-    ),
-    linear-gradient(180deg, rgba(0, 0, 0, 0.4) 0%, rgba(0, 0, 0, 0.18) 38%, rgba(0, 0, 0, 0.9) 100%);
+  /* Android TV BackdropLayer leftGradient: fadeWidth = 78% of screen. */
+  background: linear-gradient(
+    90deg,
+    rgb(var(--bg-color-rgb) / 1) 0%,
+    rgb(var(--bg-color-rgb) / 0.95) 7.8%,
+    rgb(var(--bg-color-rgb) / 0.84) 17.16%,
+    rgb(var(--bg-color-rgb) / 0.7) 28.08%,
+    rgb(var(--bg-color-rgb) / 0.52) 40.56%,
+    rgb(var(--bg-color-rgb) / 0.34) 51.48%,
+    rgb(var(--bg-color-rgb) / 0.18) 60.84%,
+    rgb(var(--bg-color-rgb) / 0.07) 70.2%,
+    rgb(var(--bg-color-rgb) / 0) 78%,
+    rgb(var(--bg-color-rgb) / 0) 100%
+  );
   transition: opacity 800ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -17948,10 +17984,21 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
 .performance-constrained .home-screen-shell .home-content-card,
 .performance-constrained .home-screen-shell .home-continue-card,
 .performance-constrained .home-screen-shell .home-poster-frame,
-.performance-constrained .home-screen-shell .home-hero-card,
+.performance-constrained .home-screen-shell .home-hero-card {
+  transition: none !important;
+}
+
+/* Keep the Android-aligned Hero asset crossfade isolated from the broader
+   constrained-TV animation shutdown. It runs only after the next asset has
+   been preloaded; card, scroll and focus animations remain disabled. */
 .performance-constrained .home-screen-shell .home-hero-backdrop,
 .performance-constrained .home-screen-shell .home-hero-logo {
-  transition: none !important;
+  transition: opacity 300ms ease !important;
+}
+
+.performance-constrained .home-screen-shell.home-layout-modern .home-hero-backdrop,
+.performance-constrained .home-screen-shell.home-layout-modern .home-hero-logo {
+  transition-duration: 400ms !important;
 }
 
 .performance-constrained .home-screen-shell .home-content-card.focused,
@@ -20000,38 +20047,19 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
 }
 
 .legacy-tizen .series-detail-vignette {
-  background: rgba(0, 0, 0, 0.34);
-}
-
-.legacy-tizen .series-detail-vignette::before,
-.legacy-tizen .series-detail-vignette::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  inset: 0;
-  pointer-events: none;
-}
-
-.legacy-tizen .series-detail-vignette::before {
+  /* Keep the old-engine fallback on the same Android TV left gradient. */
   background: linear-gradient(
     90deg,
-    rgba(6, 9, 14, 0.98) 0%,
-    rgba(6, 9, 14, 0.94) 24%,
-    rgba(6, 9, 14, 0.78) 48%,
-    rgba(6, 9, 14, 0.58) 72%,
-    rgba(6, 9, 14, 0.42) 100%
-  );
-}
-
-.legacy-tizen .series-detail-vignette::after {
-  background: linear-gradient(
-    180deg,
-    rgba(0, 0, 0, 0.24) 0%,
-    rgba(0, 0, 0, 0.12) 42%,
-    rgba(0, 0, 0, 0.78) 100%
+    rgb(var(--bg-color-rgb) / 1) 0%,
+    rgb(var(--bg-color-rgb) / 0.95) 7.8%,
+    rgb(var(--bg-color-rgb) / 0.84) 17.16%,
+    rgb(var(--bg-color-rgb) / 0.7) 28.08%,
+    rgb(var(--bg-color-rgb) / 0.52) 40.56%,
+    rgb(var(--bg-color-rgb) / 0.34) 51.48%,
+    rgb(var(--bg-color-rgb) / 0.18) 60.84%,
+    rgb(var(--bg-color-rgb) / 0.07) 70.2%,
+    rgb(var(--bg-color-rgb) / 0) 78%,
+    rgb(var(--bg-color-rgb) / 0) 100%
   );
 }
 
@@ -22254,4 +22282,382 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
   display: block;
   width: 100%;
   margin: 0.65rem 0;
+}
+
+/* TMDB entity browse: the Android entity screen ported to the TV rails. */
+.tmdb-entity-shell {
+  width: 100vw;
+  height: 100vh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  background: var(--bg-color);
+  color: var(--text-color);
+  box-sizing: border-box;
+  padding-bottom: 56px;
+}
+
+.tmdb-entity-shell::-webkit-scrollbar {
+  display: none;
+}
+
+.tmdb-entity-shell-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.tmdb-entity-state,
+.tmdb-entity-empty {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 48px;
+  box-sizing: border-box;
+}
+
+.tmdb-entity-state {
+  color: var(--text-secondary);
+  font-size: 28px;
+}
+
+.tmdb-entity-state .nuvio-loading-indicator {
+  width: 96px;
+  height: 96px;
+  margin-bottom: 20px;
+}
+
+.tmdb-entity-state-title {
+  max-width: 900px;
+  color: var(--text-color);
+  font-size: 40px;
+  line-height: 1.2;
+  font-weight: 600;
+}
+
+.tmdb-entity-state-subtitle {
+  max-width: 760px;
+  margin-top: 14px;
+  color: var(--text-secondary);
+  font-size: 24px;
+  line-height: 1.4;
+}
+
+.tmdb-entity-retry {
+  min-height: 64px;
+  margin-top: 28px;
+  padding: 0 32px;
+  border: 1px solid rgb(var(--focus-color-rgb) / 0.22);
+  border-radius: 999px;
+  background: var(--card-bg);
+  color: var(--text-color);
+  font-size: 24px;
+}
+
+.tmdb-entity-retry.focused {
+  border-color: var(--focus-color);
+  box-shadow: 0 0 0 3px rgb(var(--focus-color-rgb) / 0.22);
+  background: var(--focus-bg);
+}
+
+.tmdb-entity-hero {
+  position: relative;
+  min-height: 520px;
+  overflow: hidden;
+  box-sizing: border-box;
+  background: var(--bg-color);
+}
+
+.tmdb-entity-hero-backdrop,
+.tmdb-entity-hero-scrim {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.tmdb-entity-hero-backdrop {
+  object-fit: cover;
+  opacity: 0.16;
+}
+
+.tmdb-entity-hero-scrim {
+  background: linear-gradient(
+    90deg,
+    rgb(var(--bg-color-rgb) / 1) 0%,
+    rgb(var(--bg-color-rgb) / 0.94) 26%,
+    rgb(var(--bg-color-rgb) / 0.72) 60%,
+    rgb(var(--bg-color-rgb) / 0.42) 100%
+  );
+}
+
+.tmdb-entity-hero-copy {
+  position: relative;
+  z-index: 1;
+  min-height: 520px;
+  max-width: 1050px;
+  padding: 74px 48px 66px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-end;
+  box-sizing: border-box;
+}
+
+.tmdb-entity-eyebrow {
+  margin-bottom: 12px;
+  color: var(--text-secondary);
+  font-size: 20px;
+  line-height: 1.25;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tmdb-entity-logo {
+  width: 280px;
+  height: 120px;
+  margin-bottom: 16px;
+  object-fit: contain;
+  object-position: left center;
+}
+
+.tmdb-entity-title {
+  max-width: 980px;
+  margin: 0;
+  color: #fff;
+  font-size: 64px;
+  line-height: 1.02;
+  font-weight: 700;
+}
+
+.tmdb-entity-meta {
+  margin-top: 16px;
+  color: rgb(255 255 255 / 0.78);
+  font-size: 25px;
+  line-height: 1.3;
+}
+
+.tmdb-entity-description {
+  max-width: 900px;
+  margin: 14px 0 0;
+  color: #fff;
+  font-size: 24px;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
+}
+
+.tmdb-entity-rails {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+  padding-top: 28px;
+}
+
+.tmdb-entity-rail {
+  min-width: 0;
+}
+
+.tmdb-entity-rail-title {
+  margin: 0 48px 14px;
+  color: var(--text-color);
+  font-size: 32px;
+  line-height: 1.25;
+  font-weight: 600;
+}
+
+.tmdb-entity-track {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  overflow-x: auto;
+  overflow-y: visible;
+  padding: 4px 48px 16px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  box-sizing: border-box;
+}
+
+.tmdb-entity-track::-webkit-scrollbar {
+  display: none;
+}
+
+.tmdb-entity-card {
+  flex: 0 0 248px;
+  width: 248px;
+  min-width: 248px;
+  overflow: visible;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-color);
+  box-sizing: border-box;
+}
+
+.tmdb-entity-card-poster-wrap {
+  position: relative;
+  width: 100%;
+  height: 372px;
+  overflow: hidden;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  background: var(--card-bg);
+  box-sizing: border-box;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    background-color 120ms ease;
+}
+
+.tmdb-entity-card-poster,
+.tmdb-entity-card-placeholder {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.tmdb-entity-card-poster {
+  object-fit: cover;
+}
+
+.tmdb-entity-card-placeholder {
+  background: var(--card-bg);
+}
+
+.tmdb-entity-card.focused .tmdb-entity-card-poster-wrap {
+  border-color: var(--secondary-color);
+  box-shadow: 0 0 0 2px var(--secondary-color);
+  background: var(--focus-bg);
+}
+
+.tmdb-entity-card-title {
+  width: 100%;
+  min-height: 34px;
+  margin-top: 10px;
+  padding: 0 2px;
+  color: var(--text-color);
+  font-size: 24px;
+  line-height: 1.2;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tmdb-entity-card-year {
+  margin-top: 4px;
+  padding: 0 2px;
+  color: var(--text-secondary);
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.tmdb-entity-card.focused .tmdb-entity-card-title {
+  color: #fff;
+}
+
+.tmdb-entity-card.focused .tmdb-entity-card-year {
+  color: rgb(255 255 255 / 0.82);
+}
+
+.tmdb-entity-rail-loading {
+  flex: 0 0 72px;
+  width: 72px;
+  height: 372px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+
+.tmdb-entity-rail-loading .nuvio-loading-indicator {
+  width: 52px;
+  height: 52px;
+}
+
+.no-flex-gap .tmdb-entity-rails > * + * {
+  margin-top: 30px;
+}
+
+.no-flex-gap .tmdb-entity-track > * + * {
+  margin-left: 16px;
+}
+
+.legacy-tizen .tmdb-entity-shell,
+.legacy-webos .tmdb-entity-shell {
+  background: #0d0d0d;
+}
+
+.legacy-tizen .tmdb-entity-hero-scrim,
+.legacy-webos .tmdb-entity-hero-scrim {
+  background: rgba(13, 13, 13, 0.86);
+}
+
+.legacy-tizen .tmdb-entity-card-poster-wrap,
+.legacy-webos .tmdb-entity-card-poster-wrap {
+  transition: none;
+}
+
+@media (min-width: 1520px) {
+  .tmdb-entity-hero {
+    min-height: 560px;
+  }
+
+  .tmdb-entity-hero-copy {
+    min-height: 560px;
+    padding-left: var(--tv-safe-gutter-wide, 96px);
+    padding-right: var(--tv-safe-gutter-wide, 96px);
+  }
+
+  .tmdb-entity-rail-title {
+    margin-left: var(--tv-safe-gutter-wide, 96px);
+    margin-right: var(--tv-safe-gutter-wide, 96px);
+    font-size: clamp(28px, 1.7vw, 40px);
+  }
+
+  .tmdb-entity-track {
+    padding-left: var(--tv-safe-gutter-wide, 96px);
+    padding-right: var(--tv-safe-gutter-wide, 96px);
+    gap: 24px;
+  }
+
+  .tmdb-entity-card {
+    flex-basis: 280px;
+    width: 280px;
+    min-width: 280px;
+  }
+
+  .tmdb-entity-card-poster-wrap {
+    height: 420px;
+  }
+
+  .tmdb-entity-card-title {
+    font-size: var(--tv-body-text, 28px);
+  }
+
+  .tmdb-entity-card-year {
+    font-size: var(--tv-caption-text, 22px);
+  }
+
+  .tmdb-entity-rail-loading {
+    height: 420px;
+  }
+
+  .no-flex-gap .tmdb-entity-track > * + * {
+    margin-left: 24px;
+  }
 }

@@ -33,6 +33,7 @@ import {
 import { toTraktImageUrl } from "../../../core/trakt/traktImageUrl.js";
 import { Environment } from "../../../platform/environment.js";
 import { Platform } from "../../../platform/index.js";
+import { getTvRuntimePerformanceProfile } from "../../../platform/tvRuntimePerformance.js";
 import {
   TMDB_API_KEY,
   TRAKT_API_URL,
@@ -82,7 +83,7 @@ function t(key, params = {}, fallback = key) {
 }
 
 function detailImageLoadingMode() {
-  return Environment.isTizen() || Environment.isWebOS() ? "eager" : "lazy";
+  return getTvRuntimePerformanceProfile().isPerformanceConstrained ? "eager" : "lazy";
 }
 
 // Returns the first value that is a non-negative integer (number or numeric
@@ -3344,11 +3345,13 @@ export const MetaDetailsScreen = {
   renderCompanySections(meta = {}) {
     const production = this.renderCompanyLogosSection(
       meta.productionCompanies || meta.production_companies || [],
-      t("detail.productionCompanies", {}, "Production")
+      t("detail.productionCompanies", {}, "Production"),
+      "company"
     );
     const networks = this.renderCompanyLogosSection(
       meta.networks || [],
-      t("detail.networks", {}, "Network")
+      t("detail.networks", {}, "Network"),
+      "network"
     );
     if (meta.type === "series" || meta.type === "tv") {
       return `${networks}${production}`;
@@ -4971,6 +4974,22 @@ export const MetaDetailsScreen = {
     });
   },
 
+  openTmdbEntityFromNode(node) {
+    const entityId = String(node?.dataset?.tmdbId || "").trim();
+    if (!/^\d+$/.test(entityId) || Number(entityId) <= 0) {
+      // Keep cards without a TMDB id focusable, as on Android TV, but make
+      // Enter a safe no-op instead of guessing an entity from its name.
+      return false;
+    }
+    Router.navigate("tmdbEntityBrowse", {
+      entityKind: node.dataset.entityKind || "company",
+      entityId,
+      entityName: node.dataset.companyName || "",
+      sourceType: this.meta?.type || this.params?.itemType || "tv"
+    });
+    return true;
+  },
+
   moveEpisodeFocus(direction) {
     if (direction !== "left" && direction !== "right") {
       return false;
@@ -5673,7 +5692,7 @@ export const MetaDetailsScreen = {
     return this.renderPreviewRail(this.moreLikeThisItems, this.params?.itemType || "movie");
   },
 
-  renderCompanyLogosSection(rawCompanies = [], title = "Studios") {
+  renderCompanyLogosSection(rawCompanies = [], title = "Studios", entityKind = "company") {
     const toLogo = (logo) => {
       const value = String(logo || "").trim();
       if (!value) {
@@ -5690,7 +5709,8 @@ export const MetaDetailsScreen = {
     const companies = rawCompanies
       .map((entry) => ({
         name: entry?.name || "",
-        logo: toLogo(entry?.logo || entry?.logoPath || entry?.logo_path || "")
+        logo: toLogo(entry?.logo || entry?.logoPath || entry?.logo_path || ""),
+        tmdbId: Number(entry?.tmdbId || entry?.tmdb_id || entry?.id || 0) || null
       }))
       .filter((entry) => entry.logo || entry.name);
     if (!companies.length) {
@@ -5701,7 +5721,12 @@ export const MetaDetailsScreen = {
       .map(
         (company) => `
       <article class="detail-company-card focusable"
-               data-company-name="${escapeHtml(company.name || "")}">
+               data-action="openTmdbEntity"
+               data-entity-kind="${escapeHtml(entityKind)}"
+               data-tmdb-id="${escapeHtml(company.tmdbId || "")}"
+               data-company-key="${escapeHtml(`${entityKind}:${company.tmdbId || company.name || ""}`)}"
+               data-company-name="${escapeHtml(company.name || "")}"
+               aria-label="${escapeHtml(company.name || title || "Company")}">
         ${company.logo ? `<img src="${company.logo}" alt="${escapeHtml(company.name || "Company")}" loading="lazy" decoding="async" />` : `<span>${escapeHtml(company.name || "")}</span>`}
       </article>
     `
@@ -5975,6 +6000,12 @@ export const MetaDetailsScreen = {
     }
     if (target.matches(".detail-company-card.focusable")) {
       const companyName = String(target.dataset.companyName || "");
+      const companyKey = String(target.dataset.companyKey || "");
+      if (companyKey) {
+        return {
+          selector: `.detail-company-card[data-company-key="${escapeSelectorValue(companyKey)}"]`
+        };
+      }
       return companyName
         ? {
             selector: `.detail-company-card[data-company-name="${escapeSelectorValue(companyName)}"]`
@@ -6000,18 +6031,14 @@ export const MetaDetailsScreen = {
   },
 
   isPerformanceConstrained() {
-    return Boolean(globalThis.document?.body?.classList?.contains("performance-constrained"));
+    return Boolean(
+      getTvRuntimePerformanceProfile().isPerformanceConstrained ||
+      globalThis.document?.body?.classList?.contains("performance-constrained")
+    );
   },
 
   isLegacyTvRuntime() {
-    if (Environment.isTizen()) {
-      return true;
-    }
-    if (!Environment.isWebOS()) {
-      return false;
-    }
-    const webOsMajor = Number(Platform.getWebOsMajorVersion?.() || 0);
-    return webOsMajor > 0 && webOsMajor <= 5;
+    return Boolean(getTvRuntimePerformanceProfile().isLegacyTvRuntime);
   },
 
   shouldSuppressTrailerAutoplay() {
@@ -9048,6 +9075,11 @@ export const MetaDetailsScreen = {
       return;
     }
 
+    if (action === "openTmdbEntity") {
+      this.openTmdbEntityFromNode(current);
+      return;
+    }
+
     if (action === "toggleLibrary") {
       await this.toggleLibraryFromHero();
       return;
@@ -9190,6 +9222,9 @@ export const MetaDetailsScreen = {
         preserveSource: true
       });
       return true;
+    }
+    if (action === "openTmdbEntity") {
+      return this.openTmdbEntityFromNode(actionTarget);
     }
     return false;
   },

@@ -3,7 +3,7 @@ import { ProfileManager } from "../../core/profile/profileManager.js";
 import { AvatarRepository } from "../../data/remote/supabase/avatarRepository.js";
 import { MemberAccessRepository } from "../../data/remote/supabase/memberAccessRepository.js";
 import { I18n } from "../../i18n/index.js";
-import { Platform } from "../../platform/index.js";
+import { getTvRuntimePerformanceProfile } from "../../platform/tvRuntimePerformance.js";
 
 const ROOT_SIDEBAR_ITEMS = [
   {
@@ -325,7 +325,7 @@ export function renderLegacySidebar({ selectedRoute = "home", profile = null, la
     profileState.showProfileSelector && profileState.activeProfileName
   );
   const collapsible = Boolean(layout?.collapseSidebar);
-  const performanceConstrained = Platform.isWebOS() || Platform.isTizen();
+  const performanceConstrained = getTvRuntimePerformanceProfile().isPerformanceConstrained;
 
   return `
     <aside class="home-sidebar root-sidebar root-sidebar-legacy${performanceConstrained ? " performance-constrained" : ""}"
@@ -388,7 +388,7 @@ export function renderModernSidebar({
   const { keepPillExpanded } = getModernSidebarPresentation(selectedRoute);
   const showPill = selectedItem.route !== "search";
   const selectedLabel = itemLabel(selectedItem);
-  const performanceConstrained = Platform.isWebOS() || Platform.isTizen();
+  const performanceConstrained = getTvRuntimePerformanceProfile().isPerformanceConstrained;
 
   return `
     <div class="modern-sidebar-shell${expanded ? " expanded panel-visible" : ""}${blurEnabled ? " blur-enabled" : ""}${keepPillExpanded ? " keep-pill-expanded" : ""}${performanceConstrained ? " performance-constrained" : ""}" data-selected-route="${selectedRoute}">

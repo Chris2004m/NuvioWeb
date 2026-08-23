@@ -12,7 +12,7 @@ import { I18n } from "../../i18n/index.js";
 import { NuvioDialog } from "../../ui/components/nuvioDialog.js";
 import { detailWatchedEnrichmentService } from "../../data/repository/detailWatchedEnrichmentService.js";
 import { resolveExperienceRoute } from "./experienceModeRouting.js";
-import { Platform } from "../../platform/index.js";
+import { getTvRuntimePerformanceProfile } from "../../platform/tvRuntimePerformance.js";
 
 const PINNED_AVATAR_CATEGORIES = ["anime", "animation", "tv", "movie", "gaming"];
 const DEFAULT_PROFILE_COLOR = "#f5f5f5";
@@ -1519,8 +1519,7 @@ export const ProfileSelectionScreen = {
     }
 
     if (
-      Platform.isTizen() ||
-      Platform.isWebOS() ||
+      getTvRuntimePerformanceProfile().isPerformanceConstrained ||
       globalThis.document?.body?.classList?.contains("performance-constrained")
     ) {
       this._bgCurrentColor = targetColor;

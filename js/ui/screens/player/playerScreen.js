@@ -19906,6 +19906,7 @@ export const PlayerScreen = {
       return;
     }
     this.performControlAction(current.action || "");
+    this.resetControlsAutoHide();
   },
 
   performControlAction(action) {
@@ -20213,6 +20214,7 @@ export const PlayerScreen = {
     const controlButton = target.closest?.(".player-control-btn[data-action]");
     if (controlButton) {
       this.performControlAction(controlButton.dataset.action || "");
+      this.resetControlsAutoHide();
       return true;
     }
 

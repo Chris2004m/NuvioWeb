@@ -1,6 +1,7 @@
 import { Router } from "../../navigation/router.js";
 import { ScreenUtils } from "../../navigation/screen.js";
 import { Environment } from "../../../platform/environment.js";
+import { getTvRuntimePerformanceProfile } from "../../../platform/tvRuntimePerformance.js";
 import { addonRepository } from "../../../data/repository/addonRepository.js";
 import { catalogRepository } from "../../../data/repository/catalogRepository.js";
 import { watchedItemsRepository } from "../../../data/repository/watchedItemsRepository.js";
@@ -76,7 +77,7 @@ function firstNonEmpty(...values) {
 }
 
 function folderPosterLoadingMode() {
-  return Environment.isTizen() || Environment.isWebOS() ? "eager" : "lazy";
+  return getTvRuntimePerformanceProfile().isPerformanceConstrained ? "eager" : "lazy";
 }
 
 function toImageUrl(path, kind = "poster") {

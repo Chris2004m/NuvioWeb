@@ -23,10 +23,34 @@ import { I18n } from "../../i18n/index.js";
 const SYNC_INTERVAL_MS = 120000;
 const ADDON_PUSH_DEBOUNCE_MS = 1000;
 const MAX_PULL_ATTEMPTS = 3;
+// Home must not remain behind a remote Continue Watching preflight forever.
+// Keep the underlying sync alive so it can still update local state, but let
+// the initial Home load fall back to its local snapshot/progress reads when a
+// TV network request is slow or unavailable.
+const HOME_CONTINUE_WATCHING_PREFLIGHT_TIMEOUT_MS = 12000;
 
 function sleep(ms) {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
+  });
+}
+
+function withTimeout(promise, timeoutMs, fallback) {
+  const durationMs = Math.max(0, Number(timeoutMs || 0));
+  if (!durationMs) {
+    return Promise.resolve(fallback);
+  }
+
+  let timer = null;
+  return Promise.race([
+    Promise.resolve(promise),
+    new Promise((resolve) => {
+      timer = setTimeout(() => resolve(fallback), durationMs);
+    })
+  ]).finally(() => {
+    if (timer) {
+      clearTimeout(timer);
+    }
   });
 }
 
@@ -193,16 +217,23 @@ export const StartupSyncService = {
   },
 
   async requestHomeSyncNow() {
-    const synced = await this.requestContinueWatchingSyncNow();
+    const deadline = Date.now() + HOME_CONTINUE_WATCHING_PREFLIGHT_TIMEOUT_MS;
+    const remainingTime = () => Math.max(0, deadline - Date.now());
+    const synced = await withTimeout(this.requestContinueWatchingSyncNow(), remainingTime(), false);
     if (!synced) {
       return false;
     }
 
     // Warm the same repository Home reads so the first Home render does not
     // race the provider snapshot request for Trakt or Simkl profiles.
-    await watchProgressRepository.getAllForContinueWatching().catch((error) => {
-      console.warn("Initial Continue Watching warm-up failed", error);
-    });
+    await withTimeout(
+      watchProgressRepository.getAllForContinueWatching().catch((error) => {
+        console.warn("Initial Continue Watching warm-up failed", error);
+        return null;
+      }),
+      remainingTime(),
+      null
+    );
     return true;
   },
 
