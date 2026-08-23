@@ -20847,12 +20847,18 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
   border-radius: 18px;
   padding: 10px;
   background: var(--bg-elevated);
+  /* Tizen 5 Chromium does not parse the modern rgb(var(...) / alpha)
+     notation. Keep a valid border so the focused border-color below has a
+     visible box on legacy TVs; modern runtimes override it with the themed
+     declaration immediately after. */
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border: 1px solid rgb(var(--focus-color-rgb) / 0.12);
 }
 
 .cast-credit-card.focused {
   transform: none;
   border-color: var(--focus-color);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.2);
   box-shadow: 0 0 0 3px rgb(var(--focus-color-rgb) / 0.2);
 }
 
