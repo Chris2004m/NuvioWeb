@@ -17,8 +17,8 @@ const WATCHED_ITEMS_PAGE_SIZE = 900;
 let lastPullStatus = "idle";
 let lastPullHadUnsynced = false;
 
-function resolveProfileId() {
-  const raw = Number(ProfileManager.getActiveProfileId() || 1);
+function resolveProfileId(profileId = null) {
+  const raw = Number(profileId ?? ProfileManager.getActiveProfileId() ?? 1);
   return Number.isFinite(raw) && raw > 0 ? Math.trunc(raw) : 1;
 }
 
@@ -156,7 +156,12 @@ async function pullRemoteWatchedItems(profileId) {
       },
       true
     );
-    const pageRows = Array.isArray(rows) ? rows : [];
+    if (!Array.isArray(rows)) {
+      const error = new Error("Watched items sync returned an invalid page");
+      error.code = "INVALID_SYNC_PAGE";
+      throw error;
+    }
+    const pageRows = rows;
     allRows.push(...pageRows);
     if (pageRows.length < WATCHED_ITEMS_PAGE_SIZE) {
       return allRows;
@@ -174,7 +179,7 @@ export const WatchedItemsSyncService = {
     return lastPullHadUnsynced;
   },
 
-  async pull() {
+  async pull(profileId = null) {
     if (isSyncBackoffActive()) {
       lastPullStatus = "deferred";
       lastPullHadUnsynced = false;
@@ -182,6 +187,7 @@ export const WatchedItemsSyncService = {
     }
     lastPullStatus = "loading";
     lastPullHadUnsynced = false;
+    let localItems = [];
     try {
       if (!AuthManager.isAuthenticated) {
         lastPullStatus = "signed-out";
@@ -191,12 +197,12 @@ export const WatchedItemsSyncService = {
         lastPullStatus = "skipped";
         return [];
       }
-      const profileId = resolveProfileId();
-      const localItems = await watchedItemsRepository.getAll(5000);
+      const resolvedProfileId = resolveProfileId(profileId);
+      localItems = await watchedItemsRepository.getAll(5000, resolvedProfileId);
       const lastSuccessfulPushAt = Number(
-        watchedStateForProfile(profileId).lastSuccessfulPushAt || 0
+        watchedStateForProfile(resolvedProfileId).lastSuccessfulPushAt || 0
       );
-      const rows = await pullRemoteWatchedItems(profileId);
+      const rows = await pullRemoteWatchedItems(resolvedProfileId);
       const remoteItems = (rows || [])
         .map((row) => mapRemoteItem(row))
         .filter((item) => Boolean(item.contentId));
@@ -208,18 +214,18 @@ export const WatchedItemsSyncService = {
         return localItems;
       }
       const mergedItems = mergeWatchedItems(localItems, remoteItems, lastSuccessfulPushAt);
-      await watchedItemsRepository.replaceAll(mergedItems);
+      await watchedItemsRepository.replaceAll(mergedItems, resolvedProfileId);
       lastPullHadUnsynced = hasUnsyncedLocalItems(localItems, remoteItems, lastSuccessfulPushAt);
       lastPullStatus = "ok";
       return mergedItems;
     } catch (error) {
       lastPullStatus = "error";
       console.warn("Watched items sync pull failed", error);
-      return [];
+      return localItems;
     }
   },
 
-  async push() {
+  async push(profileId = null) {
     if (isSyncBackoffActive()) {
       return false;
     }
@@ -230,16 +236,23 @@ export const WatchedItemsSyncService = {
       if (!shouldUseSupabaseWatchProgressSync()) {
         return true;
       }
-      const items = await watchedItemsRepository.getAll(5000);
+      const resolvedProfileId = resolveProfileId(profileId);
+      const items = await watchedItemsRepository.getAll(5000, resolvedProfileId);
+      if (!items.length) {
+        // Android does not send an empty full snapshot. An empty payload must
+        // never be allowed to mean "delete everything" on the server.
+        lastPullHadUnsynced = false;
+        return true;
+      }
       await SupabaseApi.rpc(
         PUSH_RPC,
         {
-          p_profile_id: resolveProfileId(),
+          p_profile_id: resolvedProfileId,
           p_items: items.map((item) => toRemoteItem(item))
         },
         true
       );
-      writeWatchedStateForProfile(resolveProfileId(), { lastSuccessfulPushAt: Date.now() });
+      writeWatchedStateForProfile(resolvedProfileId, { lastSuccessfulPushAt: Date.now() });
       lastPullHadUnsynced = false;
       return true;
     } catch (error) {
@@ -248,7 +261,7 @@ export const WatchedItemsSyncService = {
     }
   },
 
-  async deleteItems(items = []) {
+  async deleteItems(items = [], profileId = null) {
     try {
       if (isSyncBackoffActive()) {
         return false;
@@ -259,6 +272,7 @@ export const WatchedItemsSyncService = {
       if (!shouldUseSupabaseWatchProgressSync()) {
         return true;
       }
+      const resolvedProfileId = resolveProfileId(profileId);
       const keys = (Array.isArray(items) ? items : [])
         .filter((item) => Boolean(item?.contentId))
         .map((item) => toDeleteKey(item));
@@ -268,12 +282,12 @@ export const WatchedItemsSyncService = {
       await SupabaseApi.rpc(
         DELETE_RPC,
         {
-          p_profile_id: resolveProfileId(),
+          p_profile_id: resolvedProfileId,
           p_keys: keys
         },
         true
       );
-      writeWatchedStateForProfile(resolveProfileId(), { lastSuccessfulPushAt: Date.now() });
+      writeWatchedStateForProfile(resolvedProfileId, { lastSuccessfulPushAt: Date.now() });
       return true;
     } catch (error) {
       console.warn("Watched items sync delete failed", error);

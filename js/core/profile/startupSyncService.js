@@ -497,11 +497,11 @@ export const StartupSyncService = {
     if (!this.isCurrentRun(generation) || isSyncBackoffActive()) {
       return false;
     }
-    await runSurface("watched items", () => WatchedItemsSyncService.pull());
+    await runSurface("watched items", () => WatchedItemsSyncService.pull(activeProfileId));
     if (!this.isCurrentRun(generation) || isSyncBackoffActive()) {
       return false;
     }
-    await runSurface("watch progress", () => WatchProgressSyncService.pull());
+    await runSurface("watch progress", () => WatchProgressSyncService.pull(activeProfileId));
     return this.isCurrentRun(generation) && !isSyncBackoffActive();
   },
 
@@ -527,28 +527,32 @@ export const StartupSyncService = {
           return false;
         }
         const watchedResult = await runSurface("periodic watched items", () =>
-          WatchedItemsSyncService.pull()
+          WatchedItemsSyncService.pull(profileId)
         );
         if (
           watchedResult.ok &&
           WatchedItemsSyncService.getLastPullHadUnsynced?.() &&
           !isSyncBackoffActive()
         ) {
-          await runSurface("periodic watched items push", () => WatchedItemsSyncService.push());
+          await runSurface("periodic watched items push", () =>
+            WatchedItemsSyncService.push(profileId)
+          );
         }
         if (!isSyncBackoffActive()) {
           if (!this.isCurrentProfile(profileId, profileKey)) {
             return false;
           }
           const progressResult = await runSurface("periodic watch progress", () =>
-            WatchProgressSyncService.pull()
+            WatchProgressSyncService.pull(profileId)
           );
           if (
             progressResult.ok &&
             WatchProgressSyncService.getLastPullHadUnsynced?.() &&
             !isSyncBackoffActive()
           ) {
-            await runSurface("periodic watch progress push", () => WatchProgressSyncService.push());
+            await runSurface("periodic watch progress push", () =>
+              WatchProgressSyncService.push(profileId)
+            );
           }
         }
         if (isSyncBackoffActive()) {
@@ -591,7 +595,7 @@ export const StartupSyncService = {
         }
         await Promise.all([
           runSurface("periodic addons", () => LibrarySyncService.pull()),
-          runSurface("periodic saved library", () => SavedLibrarySyncService.pull())
+          runSurface("periodic saved library", () => SavedLibrarySyncService.pull(profileId))
         ]);
         if (isSyncBackoffActive()) {
           this.scheduleBackoffRetry();
@@ -639,9 +643,9 @@ export const StartupSyncService = {
       ["home catalog settings push", () => HomeCatalogSettingsSyncService.push()],
       ["plugins push", () => PluginSyncService.push()],
       ["addons push", () => LibrarySyncService.push()],
-      ["saved library push", () => SavedLibrarySyncService.push()],
-      ["watched items push", () => WatchedItemsSyncService.push()],
-      ["watch progress push", () => WatchProgressSyncService.push()]
+      ["saved library push", () => SavedLibrarySyncService.push(profileId)],
+      ["watched items push", () => WatchedItemsSyncService.push(profileId)],
+      ["watch progress push", () => WatchProgressSyncService.push(profileId)]
     ];
     for (const [label, task] of surfaces) {
       if (

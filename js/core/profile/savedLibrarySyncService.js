@@ -70,15 +70,16 @@ function toRemoteItem(item = {}) {
 
 export const SavedLibrarySyncService = {
   async pull(profileId = null) {
+    const resolvedProfileId = resolveProfileId(profileId);
+    let localItems = [];
     try {
       if (isSyncBackoffActive()) {
-        return savedLibraryRepository.getAll(1000, profileId ?? resolveProfileId());
+        return savedLibraryRepository.getAll(1000, resolvedProfileId);
       }
       if (!AuthManager.isAuthenticated) {
         return [];
       }
-      const resolvedProfileId = resolveProfileId(profileId);
-      const localItems = await savedLibraryRepository.getAll(1000, resolvedProfileId);
+      localItems = await savedLibraryRepository.getAll(1000, resolvedProfileId);
       const rows = [];
       for (let offset = 0; ; offset += PULL_PAGE_SIZE) {
         const page = await SupabaseApi.rpc(
@@ -90,7 +91,12 @@ export const SavedLibrarySyncService = {
           },
           true
         );
-        const pageRows = Array.isArray(page) ? page : [];
+        if (!Array.isArray(page)) {
+          const error = new Error("Saved library sync returned an invalid page");
+          error.code = "INVALID_SYNC_PAGE";
+          throw error;
+        }
+        const pageRows = page;
         rows.push(...pageRows);
         if (pageRows.length < PULL_PAGE_SIZE) {
           break;
@@ -106,7 +112,7 @@ export const SavedLibrarySyncService = {
       return remoteItems;
     } catch (error) {
       console.warn("Saved library sync pull failed", error);
-      return [];
+      return localItems;
     }
   },
 
