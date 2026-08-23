@@ -5,6 +5,7 @@
   "version": "0.3.40",
   "scripts": {
     "build": "node ./scripts/build.mjs",
+    "test": "node --test tests/*.test.mjs",
     "prepare": "husky || true",
     "build:on-release": "node ./scripts/release-build-poller.mjs",
     "install:webos": "node ./scripts/ares-install-webos.mjs",

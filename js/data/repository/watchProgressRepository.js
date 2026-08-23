@@ -14,6 +14,7 @@ import { SimklAuthStore } from "../local/simklAuthStore.js";
 import { SimklSyncService } from "./simklSyncService.js";
 import { metaRepository } from "./metaRepository.js";
 import { mapWithConcurrency } from "../../core/network/mapWithConcurrency.js";
+import { getSyncBackoffRemainingMs } from "../../core/sync/syncBackoffPolicy.js";
 import {
   WATCH_PROGRESS_COMPLETED_THRESHOLD,
   WATCH_PROGRESS_STARTED_THRESHOLD,
@@ -80,7 +81,13 @@ function queueWatchProgressCloudSync(delayMs = getWatchProgressSyncDebounceMs())
         .finally(() => {
           watchProgressSyncInFlight = null;
         });
-      await watchProgressSyncInFlight;
+      const didPush = await watchProgressSyncInFlight;
+      if (!didPush) {
+        const retryDelayMs = getSyncBackoffRemainingMs();
+        if (retryDelayMs > 0) {
+          queueWatchProgressCloudSync(Math.max(5000, retryDelayMs));
+        }
+      }
     };
     void runPush();
   }, delayMs);

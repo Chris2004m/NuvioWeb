@@ -141,6 +141,16 @@ export async function httpRequest(url, options = {}) {
         const text = await response.text();
         const error = new Error(text);
         error.status = response.status;
+        const retryAfter = response.headers?.get?.("retry-after");
+        if (retryAfter) {
+          const seconds = Number(retryAfter);
+          const retryDate = Date.parse(retryAfter);
+          if (Number.isFinite(seconds) && seconds > 0) {
+            error.retryAfterMs = seconds * 1000;
+          } else if (Number.isFinite(retryDate) && retryDate > Date.now()) {
+            error.retryAfterMs = retryDate - Date.now();
+          }
+        }
         try {
           const parsed = JSON.parse(text);
           if (parsed && typeof parsed === "object") {

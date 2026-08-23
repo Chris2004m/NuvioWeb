@@ -6,12 +6,16 @@ import { LocalStore } from "../storage/localStore.js";
 import { TraktAuthStore } from "../../data/local/traktAuthStore.js";
 import { SimklAuthStore } from "../../data/local/simklAuthStore.js";
 import { TraktSettingsStore, WatchProgressSource } from "../../data/local/traktSettingsStore.js";
+import { isSyncBackoffActive } from "../sync/syncBackoffPolicy.js";
 
 const PULL_RPC = "sync_pull_watched_items";
 const PUSH_RPC = "sync_push_watched_items";
 const DELETE_RPC = "sync_delete_watched_items";
 const SYNC_STATE_KEY = "watchedItemsSyncState";
 const WATCHED_ITEMS_PAGE_SIZE = 900;
+
+let lastPullStatus = "idle";
+let lastPullHadUnsynced = false;
 
 function resolveProfileId() {
   const raw = Number(ProfileManager.getActiveProfileId() || 1);
@@ -103,6 +107,18 @@ function mergeWatchedItems(localItems = [], remoteItems = [], lastSuccessfulPush
   );
 }
 
+function hasUnsyncedLocalItems(localItems = [], remoteItems = [], lastSuccessfulPushAt = 0) {
+  const remoteByKey = new Map(remoteItems.map((item) => [watchedItemKey(item), item]));
+  return localItems.some((item) => {
+    const watchedAt = Number(item.watchedAt || 0);
+    if (watchedAt <= Number(lastSuccessfulPushAt || 0)) {
+      return false;
+    }
+    const remote = remoteByKey.get(watchedItemKey(item));
+    return !remote || watchedAt > Number(remote.watchedAt || 0);
+  });
+}
+
 function toRemoteItem(item = {}) {
   return {
     content_id: item.contentId,
@@ -150,40 +166,69 @@ async function pullRemoteWatchedItems(profileId) {
 }
 
 export const WatchedItemsSyncService = {
+  getLastPullStatus() {
+    return lastPullStatus;
+  },
+
+  getLastPullHadUnsynced() {
+    return lastPullHadUnsynced;
+  },
+
   async pull() {
+    if (isSyncBackoffActive()) {
+      lastPullStatus = "deferred";
+      lastPullHadUnsynced = false;
+      return [];
+    }
+    lastPullStatus = "loading";
+    lastPullHadUnsynced = false;
     try {
       if (!AuthManager.isAuthenticated) {
+        lastPullStatus = "signed-out";
         return [];
       }
       if (!shouldUseSupabaseWatchProgressSync()) {
+        lastPullStatus = "skipped";
         return [];
       }
       const profileId = resolveProfileId();
       const localItems = await watchedItemsRepository.getAll(5000);
+      const lastSuccessfulPushAt = Number(
+        watchedStateForProfile(profileId).lastSuccessfulPushAt || 0
+      );
       const rows = await pullRemoteWatchedItems(profileId);
       const remoteItems = (rows || [])
         .map((row) => mapRemoteItem(row))
         .filter((item) => Boolean(item.contentId));
       if (!remoteItems.length && localItems.length) {
+        lastPullHadUnsynced = localItems.some(
+          (item) => Number(item.watchedAt || 0) > lastSuccessfulPushAt
+        );
+        lastPullStatus = "ok";
         return localItems;
       }
-      const mergedItems = mergeWatchedItems(
-        localItems,
-        remoteItems,
-        Number(watchedStateForProfile(profileId).lastSuccessfulPushAt || 0)
-      );
+      const mergedItems = mergeWatchedItems(localItems, remoteItems, lastSuccessfulPushAt);
       await watchedItemsRepository.replaceAll(mergedItems);
+      lastPullHadUnsynced = hasUnsyncedLocalItems(localItems, remoteItems, lastSuccessfulPushAt);
+      lastPullStatus = "ok";
       return mergedItems;
     } catch (error) {
+      lastPullStatus = "error";
       console.warn("Watched items sync pull failed", error);
       return [];
     }
   },
 
   async push() {
+    if (isSyncBackoffActive()) {
+      return false;
+    }
     try {
       if (!AuthManager.isAuthenticated) {
         return false;
+      }
+      if (!shouldUseSupabaseWatchProgressSync()) {
+        return true;
       }
       const items = await watchedItemsRepository.getAll(5000);
       await SupabaseApi.rpc(
@@ -195,6 +240,7 @@ export const WatchedItemsSyncService = {
         true
       );
       writeWatchedStateForProfile(resolveProfileId(), { lastSuccessfulPushAt: Date.now() });
+      lastPullHadUnsynced = false;
       return true;
     } catch (error) {
       console.warn("Watched items sync push failed", error);
@@ -204,6 +250,9 @@ export const WatchedItemsSyncService = {
 
   async deleteItems(items = []) {
     try {
+      if (isSyncBackoffActive()) {
+        return false;
+      }
       if (!AuthManager.isAuthenticated) {
         return false;
       }

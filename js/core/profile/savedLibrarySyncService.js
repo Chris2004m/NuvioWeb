@@ -2,6 +2,7 @@ import { AuthManager } from "../auth/authManager.js";
 import { SupabaseApi } from "../../data/remote/supabase/supabaseApi.js";
 import { savedLibraryRepository } from "../../data/repository/savedLibraryRepository.js";
 import { ProfileManager } from "./profileManager.js";
+import { isSyncBackoffActive } from "../sync/syncBackoffPolicy.js";
 
 const PULL_RPC = "sync_pull_library";
 const PUSH_RPC = "sync_push_library";
@@ -70,6 +71,9 @@ function toRemoteItem(item = {}) {
 export const SavedLibrarySyncService = {
   async pull(profileId = null) {
     try {
+      if (isSyncBackoffActive()) {
+        return savedLibraryRepository.getAll(1000, profileId ?? resolveProfileId());
+      }
       if (!AuthManager.isAuthenticated) {
         return [];
       }
@@ -108,6 +112,9 @@ export const SavedLibrarySyncService = {
 
   async push(profileId = null) {
     try {
+      if (isSyncBackoffActive()) {
+        return false;
+      }
       if (!AuthManager.isAuthenticated) {
         return false;
       }

@@ -12,6 +12,7 @@ import {
   buildCatalogOrderKey,
   catalogRequiresExtras
 } from "../addons/homeCatalogs.js";
+import { getSyncBackoffRemainingMs, isSyncBackoffActive } from "../sync/syncBackoffPolicy.js";
 
 const PULL_RPC = "sync_pull_home_catalog_settings";
 const PUSH_RPC = "sync_push_home_catalog_settings";
@@ -563,6 +564,9 @@ export const HomeCatalogSettingsSyncService = {
   },
 
   async pull(profileId = null) {
+    if (isSyncBackoffActive()) {
+      return false;
+    }
     if (!AuthManager.isAuthenticated) {
       return false;
     }
@@ -607,6 +611,9 @@ export const HomeCatalogSettingsSyncService = {
   },
 
   async push(profileId = null) {
+    if (isSyncBackoffActive()) {
+      return false;
+    }
     if (!AuthManager.isAuthenticated) {
       return false;
     }
@@ -636,7 +643,7 @@ export const HomeCatalogSettingsSyncService = {
     }
   },
 
-  triggerPush(profileId = null) {
+  triggerPush(profileId = null, delayMs = PUSH_DEBOUNCE_MS) {
     if (!AuthManager.isAuthenticated) {
       return;
     }
@@ -653,10 +660,19 @@ export const HomeCatalogSettingsSyncService = {
     if (existingTimer) {
       clearTimeout(existingTimer);
     }
-    const timerId = setTimeout(() => {
+    const cooldownMs = getSyncBackoffRemainingMs();
+    const effectiveDelayMs = Math.max(
+      PUSH_DEBOUNCE_MS,
+      Number(delayMs) || 0,
+      cooldownMs > 0 ? cooldownMs + 50 : 0
+    );
+    const timerId = setTimeout(async () => {
       this.pushTimers.delete(resolvedProfileId);
-      void this.push(resolvedProfileId);
-    }, PUSH_DEBOUNCE_MS);
+      const didPush = await this.push(resolvedProfileId);
+      if (!didPush && isSyncBackoffActive()) {
+        this.triggerPush(resolvedProfileId);
+      }
+    }, effectiveDelayMs);
     this.pushTimers.set(resolvedProfileId, timerId);
   }
 };

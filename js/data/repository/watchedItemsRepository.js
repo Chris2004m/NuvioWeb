@@ -4,6 +4,7 @@ import { TraktSettingsStore, WatchProgressSource } from "../local/traktSettingsS
 import { SimklAuthStore } from "../local/simklAuthStore.js";
 import { SimklSyncService } from "./simklSyncService.js";
 import { TraktAuthService, requestJson as traktRequestJson } from "./traktAuthService.js";
+import { getSyncBackoffRemainingMs } from "../../core/sync/syncBackoffPolicy.js";
 
 function activeProfileId() {
   return String(ProfileManager.getActiveProfileId() || "1");
@@ -101,7 +102,13 @@ function queueWatchedItemsCloudSync(delayMs = 250) {
         .finally(() => {
           watchedItemsSyncInFlight = null;
         });
-      await watchedItemsSyncInFlight;
+      const didPush = await watchedItemsSyncInFlight;
+      if (!didPush) {
+        const retryDelayMs = getSyncBackoffRemainingMs();
+        if (retryDelayMs > 0) {
+          queueWatchedItemsCloudSync(Math.max(5000, retryDelayMs));
+        }
+      }
     };
     void runPush();
   }, delayMs);

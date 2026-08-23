@@ -7,6 +7,7 @@ import { TraktAuthStore } from "../../data/local/traktAuthStore.js";
 import { SimklAuthStore } from "../../data/local/simklAuthStore.js";
 import { TraktSettingsStore, WatchProgressSource } from "../../data/local/traktSettingsStore.js";
 import { getSyncClientId } from "../sync/syncClientIdentity.js";
+import { isSyncBackoffActive } from "../sync/syncBackoffPolicy.js";
 
 const PULL_RPC = "sync_pull_watch_progress";
 const PUSH_RPC = "sync_push_watch_progress";
@@ -23,6 +24,8 @@ let pushAgainRequested = false;
 let lastSuccessfulPushSignature = "";
 let lastFailedPushSignature = "";
 let lastFailedPushAt = 0;
+let lastPullStatus = "idle";
+let lastPullHadUnsynced = false;
 
 function progressKey(item = {}) {
   return toProgressKey(item);
@@ -499,12 +502,29 @@ async function pushOnce() {
 }
 
 export const WatchProgressSyncService = {
+  getLastPullStatus() {
+    return lastPullStatus;
+  },
+
+  getLastPullHadUnsynced() {
+    return lastPullHadUnsynced;
+  },
+
   async pull() {
+    if (isSyncBackoffActive()) {
+      lastPullStatus = "deferred";
+      lastPullHadUnsynced = false;
+      return [];
+    }
+    lastPullStatus = "loading";
+    lastPullHadUnsynced = false;
     try {
       if (!AuthManager.isAuthenticated) {
+        lastPullStatus = "signed-out";
         return [];
       }
       if (!shouldUseSupabaseWatchProgressSync()) {
+        lastPullStatus = "skipped";
         return [];
       }
       const localItems = await watchProgressRepository.getAll();
@@ -523,19 +543,29 @@ export const WatchProgressSyncService = {
       const snapshotItems = normalizeProgressItems(remoteItems);
       const baselineItems = readBaselineItems(profileId);
       const mergedItems = mergeProgressItems(localItems, snapshotItems, baselineItems);
-      writeBaselineItems(profileId, snapshotItems);
-      lastSuccessfulPushSignature = buildPushSignature(
+      const remoteSignature = buildPushSignature(
         buildRemoteProgressEntries(coalesceSyncItems(snapshotItems))
       );
+      const mergedSignature = buildPushSignature(
+        buildRemoteProgressEntries(coalesceSyncItems(mergedItems))
+      );
+      lastPullHadUnsynced = mergedSignature !== remoteSignature;
+      writeBaselineItems(profileId, snapshotItems);
+      lastSuccessfulPushSignature = remoteSignature;
       await watchProgressRepository.replaceAll(mergedItems);
+      lastPullStatus = "ok";
       return mergedItems;
     } catch (error) {
+      lastPullStatus = "error";
       console.warn("Watch progress sync pull failed", error);
       return [];
     }
   },
 
   async push() {
+    if (isSyncBackoffActive()) {
+      return false;
+    }
     if (activePushPromise) {
       pushAgainRequested = true;
       return activePushPromise;
@@ -555,6 +585,9 @@ export const WatchProgressSyncService = {
 
   async deleteItems(items = []) {
     try {
+      if (isSyncBackoffActive()) {
+        return false;
+      }
       if (!AuthManager.isAuthenticated) {
         return false;
       }
