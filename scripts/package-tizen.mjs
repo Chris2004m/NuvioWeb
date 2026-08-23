@@ -444,7 +444,9 @@ async function assertSignedTizenPackage(outputPath, { requireEngineFsService = f
   if (requireEngineFsService) {
     const requiredServiceEntries = [
       tizenEngineFsServiceRelativePath,
-      `${tizenEngineFsRuntimeDirRelativePath}/media-http.cjs`
+      `${tizenEngineFsRuntimeDirRelativePath}/media-http.cjs`,
+      `${tizenEngineFsRuntimeDirRelativePath}/tx3g-subtitle-parser.cjs`,
+      `${tizenEngineFsRuntimeDirRelativePath}/tx3g-subtitle-service.cjs`
     ];
     const missingServiceEntry = requiredServiceEntries.find((fileName) => !zip.file(fileName));
     if (missingServiceEntry) {

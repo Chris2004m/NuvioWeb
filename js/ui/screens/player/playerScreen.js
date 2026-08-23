@@ -680,6 +680,116 @@ function normalizeTrackCodecText(value) {
   return cleanDisplayText(value).toUpperCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
 }
 
+function isTx3gSubtitleCodec(value) {
+  const normalized = normalizeTrackCodecText(value);
+  return ["TX3G", "MOV TEXT", "MPEG 4 TIMED TEXT", "MPEG-4 TIMED TEXT"].includes(normalized);
+}
+
+function getTx3gSubtitleCodecValue(track = {}) {
+  return (
+    track?.codec ||
+    track?.subtitleCodec ||
+    track?.codec_name ||
+    track?.codec_id ||
+    track?.format ||
+    track?.raw?.codec ||
+    track?.raw?.codec_name ||
+    track?.raw?.codec_id ||
+    track?.raw?.format ||
+    ""
+  );
+}
+
+function isTx3gSubtitleTrack(track = {}) {
+  return isTx3gSubtitleCodec(getTx3gSubtitleCodecValue(track));
+}
+
+function getBitmapSubtitleFormatLabel(track = {}) {
+  const format = getEmbeddedBitmapSubtitleFormat(track);
+  if (format === "pgs") {
+    return "PGS";
+  }
+  if (format === "vobsub") {
+    return "VobSub";
+  }
+  return "bitmap";
+}
+
+function getBitmapSubtitleSupportState(track = {}) {
+  if (!getEmbeddedBitmapSubtitleFormat(track) || !Environment.isWebOS()) {
+    return { supported: true, unsupportedReason: null };
+  }
+
+  if (
+    track?.supported === false &&
+    ["webos-bitmap", "webos-bitmap-runtime"].includes(track?.unsupportedReason)
+  ) {
+    return {
+      supported: false,
+      unsupportedReason: track.unsupportedReason
+    };
+  }
+
+  if (!canUseWebOsBitmapSubtitles()) {
+    return { supported: false, unsupportedReason: "webos-bitmap" };
+  }
+  return { supported: true, unsupportedReason: null };
+}
+
+function getTx3gSubtitleSupportState(track = {}) {
+  if (!isTx3gSubtitleTrack(track) || !Environment.isTizen()) {
+    return { supported: true, unsupportedReason: null };
+  }
+
+  const capabilities = TizenCapabilities.get();
+  if (
+    (capabilities.tizenVersionKnown && capabilities.tizenMajorVersion < 4) ||
+    !capabilities.engineFsServicePackaged ||
+    capabilities.webServiceSupported === false
+  ) {
+    return { supported: false, unsupportedReason: "tizen-tx3g" };
+  }
+  return { supported: true, unsupportedReason: null };
+}
+
+function getEmbeddedSubtitleSupportState(track = {}) {
+  const bitmapSupport = getBitmapSubtitleSupportState(track);
+  if (bitmapSupport.supported === false) {
+    return bitmapSupport;
+  }
+  if (isTx3gSubtitleTrack(track) && track?.supported === false) {
+    return {
+      supported: false,
+      unsupportedReason: track?.unsupportedReason || "tx3g-runtime"
+    };
+  }
+  return getTx3gSubtitleSupportState(track);
+}
+
+function getTx3gSubtitleSupportMessage(reason = "") {
+  return reason === "tx3g-runtime"
+    ? t("player_subtitle_tizen_advanced_unavailable_short", {}, "Not fully supported on this TV")
+    : t("settings_p2p_unsupported_subtitle", {}, "Not supported on this TV.");
+}
+
+function getBitmapSubtitleSupportMessage() {
+  return t("settings_p2p_unsupported_subtitle", {}, "Not supported on this TV.");
+}
+
+function isBitmapSubtitleSupportError(error) {
+  const errorText = [error?.code, error?.errorCode, error?.message, error?.errorText]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return /unsupported|not supported|decoder|invalid[_ ](?:pgs|vobsub)|laced[_ ]bitmap/.test(
+    errorText
+  );
+}
+
+function isTizenTx3gEmbeddedSubtitleTrack(track = {}) {
+  return Environment.isTizen() && isTx3gSubtitleTrack(track);
+}
+
 function isAssSubtitleCodec(value) {
   const text = cleanDisplayText(value);
   if (!text) {
@@ -706,6 +816,10 @@ function isUnsupportedEmbeddedSubtitleTrack(track = {}) {
 }
 
 function getEmbeddedBitmapSubtitleFormat(track = {}) {
+  const explicitFormat = normalizeBitmapSubtitleFormat(track?.bitmapSubtitleFormat);
+  if (explicitFormat) {
+    return explicitFormat;
+  }
   const primaryFormat = normalizeBitmapSubtitleFormat(
     track?.codec || track?.subtitleCodec || track?.codec_name || track?.format || ""
   );
@@ -2417,6 +2531,8 @@ export const PlayerScreen = {
     this.webOsEmbeddedTextSubtitleWindowStart = 0;
     this.webOsEmbeddedTextSubtitleWindowEnd = 0;
     this.webOsEmbeddedTextSubtitleLastErrorAt = 0;
+    this.embeddedTextSubtitleSupportNotice = "";
+    this.embeddedBitmapSubtitleSupportNotice = "";
     this.subtitleCueStyleBindings = new Map();
     this.subtitleCueOriginalState = new WeakMap();
     this.embeddedSubtitleCueRefreshTimers = new Set();
@@ -4405,11 +4521,16 @@ export const PlayerScreen = {
         if (isTizenAvPlayMetadata) {
           return true;
         }
-        return getEmbeddedBitmapSubtitleFormat(track)
-          ? canUseWebOsBitmapSubtitles()
-          : !isUnsupportedEmbeddedSubtitleTrack(track);
+        if (getEmbeddedBitmapSubtitleFormat(track)) {
+          // Keep WebOS bitmap tracks visible when the local decoder is
+          // unavailable so the user sees the reason instead of a missing
+          // subtitle entry. Other browser paths retain their existing filter.
+          return Environment.isWebOS() || canUseWebOsBitmapSubtitles();
+        }
+        return !isUnsupportedEmbeddedSubtitleTrack(track);
       })
       .map((track, index) => {
+        const support = getEmbeddedSubtitleSupportState(track);
         const bitmapSubtitleFormat = getEmbeddedBitmapSubtitleFormat(track);
         const bitmapSubtitle = Boolean(bitmapSubtitleFormat);
         const currentNativeTrackIndex = nativeTrackIndex;
@@ -4449,6 +4570,8 @@ export const PlayerScreen = {
             : String(normalizedLanguage || rawLanguage || "")
                 .trim()
                 .toUpperCase(),
+          supported: support.supported,
+          unsupportedReason: support.unsupportedReason,
           forced: isForcedSubtitleTrack(track),
           codec: cleanDisplayText(
             track?.codec ||
@@ -4587,6 +4710,24 @@ export const PlayerScreen = {
 
   getSubtitleDialogSupportNotice() {
     const notices = [];
+    if (this.embeddedTextSubtitleSupportNotice) {
+      notices.push(this.embeddedTextSubtitleSupportNotice);
+    }
+    if (
+      !this.embeddedTextSubtitleSupportNotice &&
+      this.embeddedSubtitleTracks.some((track) => track?.unsupportedReason === "tizen-tx3g")
+    ) {
+      notices.push(getTx3gSubtitleSupportMessage("tizen-tx3g"));
+    }
+    if (this.embeddedBitmapSubtitleSupportNotice) {
+      notices.push(this.embeddedBitmapSubtitleSupportNotice);
+    } else if (
+      this.embeddedSubtitleTracks.some((track) =>
+        ["webos-bitmap", "webos-bitmap-runtime"].includes(track?.unsupportedReason)
+      )
+    ) {
+      notices.push(getBitmapSubtitleSupportMessage());
+    }
     if (TizenCapabilities.isAdvancedSubtitleStylingLimited()) {
       notices.push(
         t(
@@ -8702,6 +8843,10 @@ export const PlayerScreen = {
   },
 
   refreshSubtitleTrackRendering() {
+    if (this.isTizenTx3gEmbeddedSubtitleActive()) {
+      this.renderWebOsEmbeddedTextSubtitleAtCurrentTime();
+      return;
+    }
     if (Environment.isWebOS()) {
       if (this.webOsEmbeddedTextSubtitleUsingAss) {
         return;
@@ -8761,6 +8906,12 @@ export const PlayerScreen = {
         }
       });
     });
+  },
+
+  isTizenTx3gEmbeddedSubtitleActive() {
+    return (
+      Environment.isTizen() && isTizenTx3gEmbeddedSubtitleTrack(this.webOsEmbeddedTextSubtitleTrack)
+    );
   },
 
   updateModalBackdrop() {
@@ -12694,8 +12845,18 @@ export const PlayerScreen = {
     const embeddedTrack = this.getEmbeddedSubtitleTrackByNativeIndex(
       Number.isFinite(avplayTrackIndex) ? avplayTrackIndex : index
     );
+    const support = getEmbeddedSubtitleSupportState({
+      ...embeddedTrack,
+      ...track,
+      codec: track?.codec || embeddedTrack?.codec,
+      format: track?.format || embeddedTrack?.format
+    });
     if (!embeddedTrack) {
-      return track;
+      return {
+        ...track,
+        supported: support.supported,
+        unsupportedReason: support.unsupportedReason
+      };
     }
     const rawAvplayLanguage = getTrackLanguageValue(track);
     const rawEmbeddedLanguage = getTrackLanguageValue(embeddedTrack);
@@ -12735,6 +12896,10 @@ export const PlayerScreen = {
       // placeholders such as "unknown" or "und".
       language: selectedLanguage,
       lang: track?.lang || selectedLanguage,
+      codec: track?.codec || embeddedTrack?.codec || "",
+      format: track?.format || embeddedTrack?.format || "",
+      supported: support.supported,
+      unsupportedReason: embeddedTrack?.unsupportedReason || support.unsupportedReason || null,
       forced: isForcedSubtitleTrack(track) || isForcedSubtitleTrack(embeddedTrack),
       secondary: embeddedTrack.secondary || String(selectedLanguage || "").toUpperCase()
     };
@@ -13417,6 +13582,7 @@ export const PlayerScreen = {
     this.bitmapSubtitleLastErrorAt = 0;
     this.clearBitmapSubtitleCanvas();
     if (dispose) {
+      this.embeddedBitmapSubtitleSupportNotice = "";
       this.bitmapSubtitleDecoder?.dispose?.();
       this.bitmapSubtitleDecoder = null;
       this.bitmapSubtitleTrack = null;
@@ -13424,10 +13590,29 @@ export const PlayerScreen = {
     }
   },
 
+  markEmbeddedBitmapSubtitleUnsupported(track, reason = "webos-bitmap-runtime") {
+    if (!Environment.isWebOS() || !getEmbeddedBitmapSubtitleFormat(track)) {
+      return;
+    }
+    track.supported = false;
+    track.unsupportedReason = reason;
+    this.embeddedBitmapSubtitleSupportNotice = getBitmapSubtitleSupportMessage();
+    this.bitmapSubtitleDecoder?.dispose?.();
+    this.bitmapSubtitleDecoder = null;
+    this.bitmapSubtitleWindowStart = 0;
+    this.bitmapSubtitleWindowEnd = 0;
+    this.clearBitmapSubtitleCanvas();
+    this.invalidateTrackDialogCaches();
+    if (this.subtitleDialogVisible) {
+      this.renderSubtitleDialog();
+    }
+  },
+
   clearWebOsEmbeddedTextSubtitleOverlay({ dispose = false } = {}) {
     const overlayActive =
       this.webOsEmbeddedTextSubtitleUsingHtml ||
-      String(this.htmlSubtitleSelectedId || "").startsWith("webos-embedded-text-");
+      String(this.htmlSubtitleSelectedId || "").startsWith("webos-embedded-text-") ||
+      String(this.htmlSubtitleSelectedId || "").startsWith("tizen-tx3g-");
     if (this.webOsEmbeddedTextSubtitleUsingAss) {
       this.destroyAssSubtitleRenderer();
     }
@@ -13437,6 +13622,9 @@ export const PlayerScreen = {
     this.webOsEmbeddedTextSubtitleWindowStart = 0;
     this.webOsEmbeddedTextSubtitleWindowEnd = 0;
     this.webOsEmbeddedTextSubtitleLastErrorAt = 0;
+    if (dispose) {
+      this.embeddedTextSubtitleSupportNotice = "";
+    }
     if (overlayActive) {
       this.clearHtmlSubtitleOverlay();
     }
@@ -13444,6 +13632,21 @@ export const PlayerScreen = {
     if (dispose) {
       this.webOsEmbeddedTextSubtitleTrack = null;
       this.webOsEmbeddedTextSubtitleUsingHtml = false;
+    }
+  },
+
+  markEmbeddedTextSubtitleUnsupported(track, reason = "tx3g-runtime") {
+    if (!isTx3gSubtitleTrack(track)) {
+      return;
+    }
+    this.embeddedTextSubtitleSupportNotice = getTx3gSubtitleSupportMessage(reason);
+    if (Environment.isTizen()) {
+      track.supported = false;
+      track.unsupportedReason = reason;
+    }
+    this.invalidateTrackDialogCaches();
+    if (this.subtitleDialogVisible) {
+      this.renderSubtitleDialog();
     }
   },
 
@@ -13474,7 +13677,7 @@ export const PlayerScreen = {
     const sourceUrl = this.getTrackProbeUrl();
     const sourceTrackId = Number(track?.sourceTrackId);
     if (
-      !Environment.isWebOS() ||
+      (!Environment.isWebOS() && !isTizenTx3gEmbeddedSubtitleTrack(track)) ||
       !track ||
       !sourceUrl ||
       !Number.isFinite(sourceTrackId) ||
@@ -13506,6 +13709,14 @@ export const PlayerScreen = {
         this.webOsEmbeddedTextSubtitleTrack !== track
       ) {
         return false;
+      }
+
+      if (isTx3gSubtitleTrack(track)) {
+        this.embeddedTextSubtitleSupportNotice = "";
+        if (Environment.isTizen()) {
+          track.supported = true;
+          track.unsupportedReason = null;
+        }
       }
 
       this.webOsEmbeddedTextSubtitleWindowStart = Number(
@@ -13572,6 +13783,7 @@ export const PlayerScreen = {
         Boolean(windowData.assBody);
       const cues = this.parseSubtitleCues(windowData.body);
       const shouldUseHtml =
+        isTizenTx3gEmbeddedSubtitleTrack(track) ||
         this.webOsEmbeddedTextSubtitleUsingHtml ||
         Boolean(windowData.hasAssOverrideTags) ||
         (isAssTrack && cues.length > 0);
@@ -13580,15 +13792,16 @@ export const PlayerScreen = {
       }
 
       if (!this.webOsEmbeddedTextSubtitleUsingHtml) {
-        if (typeof PlayerController.setWebOsEmbeddedSubtitleNativeVisibility !== "function") {
-          return false;
-        }
-        const nativeRendererHidden = await Promise.resolve(
-          PlayerController.setWebOsEmbeddedSubtitleNativeVisibility(
-            false,
-            this.selectedEmbeddedSubtitleTrackIndex
-          )
-        );
+        const nativeRendererHidden = isTizenTx3gEmbeddedSubtitleTrack(track)
+          ? Boolean(PlayerController.applyAvPlaySubtitleRenderMode?.("html"))
+          : typeof PlayerController.setWebOsEmbeddedSubtitleNativeVisibility === "function"
+            ? await Promise.resolve(
+                PlayerController.setWebOsEmbeddedSubtitleNativeVisibility(
+                  false,
+                  this.selectedEmbeddedSubtitleTrackIndex
+                )
+              )
+            : false;
         if (
           requestToken !== this.webOsEmbeddedTextSubtitleLoadToken ||
           this.webOsEmbeddedTextSubtitleTrack !== track ||
@@ -13600,7 +13813,9 @@ export const PlayerScreen = {
       }
 
       this.htmlSubtitleCues = cues;
-      this.htmlSubtitleSelectedId = `webos-embedded-text-${this.selectedEmbeddedSubtitleTrackIndex}`;
+      this.htmlSubtitleSelectedId = isTizenTx3gEmbeddedSubtitleTrack(track)
+        ? `tizen-tx3g-${this.selectedEmbeddedSubtitleTrackIndex}`
+        : `webos-embedded-text-${this.selectedEmbeddedSubtitleTrackIndex}`;
       this.renderHtmlSubtitleOverlayCue([]);
       this.renderHtmlSubtitleOverlayAtCurrentTime();
       this.scheduleHtmlSubtitleOverlayRender();
@@ -13615,6 +13830,15 @@ export const PlayerScreen = {
           trackNumber: sourceTrackId,
           error: error?.message || String(error || "")
         });
+        if (isTx3gSubtitleTrack(track)) {
+          this.markEmbeddedTextSubtitleUnsupported(track);
+        }
+        if (isTizenTx3gEmbeddedSubtitleTrack(track)) {
+          // Keep playback alive when the optional extractor is unavailable on
+          // an older supported firmware; AVPlay can still render natively on
+          // devices that implement tx3g despite the documented gap.
+          PlayerController.applyAvPlaySubtitleRenderMode?.("native");
+        }
       }
       return false;
     } finally {
@@ -13653,7 +13877,7 @@ export const PlayerScreen = {
 
   prepareBitmapSubtitleForSeek(timeSeconds) {
     const track = this.bitmapSubtitleTrack;
-    if (!track) {
+    if (!track || getEmbeddedSubtitleSupportState(track).supported === false) {
       return;
     }
     const targetSeconds = Math.max(0, Number(timeSeconds) || 0);
@@ -13676,7 +13900,12 @@ export const PlayerScreen = {
   async loadBitmapSubtitleWindow(timeSeconds) {
     const track = this.bitmapSubtitleTrack;
     const sourceUrl = this.getTrackProbeUrl();
-    if (!track || !sourceUrl || this.bitmapSubtitleLoading) {
+    if (
+      !track ||
+      getEmbeddedSubtitleSupportState(track).supported === false ||
+      !sourceUrl ||
+      this.bitmapSubtitleLoading
+    ) {
       return false;
     }
     const requestToken = Number(this.bitmapSubtitleLoadToken || 0) + 1;
@@ -13708,6 +13937,9 @@ export const PlayerScreen = {
         decoder.dispose();
         return false;
       }
+      this.embeddedBitmapSubtitleSupportNotice = "";
+      track.supported = true;
+      track.unsupportedReason = null;
       const previousDecoder = this.bitmapSubtitleDecoder;
       this.bitmapSubtitleDecoder = decoder;
       previousDecoder?.dispose?.();
@@ -13725,6 +13957,9 @@ export const PlayerScreen = {
           trackNumber: track.sourceTrackId,
           error: error?.message || String(error || "")
         });
+        if (isBitmapSubtitleSupportError(error)) {
+          this.markEmbeddedBitmapSubtitleUnsupported(track);
+        }
       }
       return false;
     } finally {
@@ -13736,7 +13971,7 @@ export const PlayerScreen = {
 
   renderBitmapSubtitleAtCurrentTime({ force = false } = {}) {
     const track = this.bitmapSubtitleTrack;
-    if (!track) {
+    if (!track || getEmbeddedSubtitleSupportState(track).supported === false) {
       return false;
     }
     const currentTime = Number(this.getPlaybackCurrentSeconds() || 0);
@@ -14447,6 +14682,9 @@ export const PlayerScreen = {
               ? avplayTrackIndex
               : index;
             const display = formatSubtitleTrackDisplay(mergedTrack, index);
+            const unsupportedReason =
+              mergedTrack.unsupportedReason ||
+              (mergedTrack.supported === false ? "tizen-tx3g" : null);
             return {
               id: `subtitle-avplay-${normalizedTrackIndex}`,
               label: display.label,
@@ -14457,8 +14695,10 @@ export const PlayerScreen = {
               track: mergedTrack,
               isForced: isForcedSubtitleTrack(mergedTrack),
               selected: normalizedTrackIndex === selectedAvPlaySubtitleTrack,
-              disabled: dashTextSwitchingUnsupported,
-              unsupportedReason: dashTextSwitchingUnsupported ? "tizen-dash-text" : null,
+              disabled: dashTextSwitchingUnsupported || mergedTrack.supported === false,
+              unsupportedReason: dashTextSwitchingUnsupported
+                ? "tizen-dash-text"
+                : unsupportedReason,
               trackIndex: null,
               avplaySubtitleTrackIndex: normalizedTrackIndex
             };
@@ -14534,6 +14774,7 @@ export const PlayerScreen = {
         },
         ...embeddedSubtitleTracks.map((track, index) => {
           const display = formatSubtitleTrackDisplay(track, index);
+          const support = getEmbeddedSubtitleSupportState(track);
           return {
             id: `subtitle-embedded-${track.embeddedTrackIndex}`,
             label: display.label,
@@ -14544,12 +14785,15 @@ export const PlayerScreen = {
             track,
             isForced: isForcedSubtitleTrack(track),
             selected: track.embeddedTrackIndex === this.selectedEmbeddedSubtitleTrackIndex,
+            disabled: support.supported === false,
+            unsupportedReason: support.unsupportedReason,
             trackIndex: null,
             embeddedSubtitleTrackIndex: track.embeddedTrackIndex
           };
         }),
         ...builtInTracks.map((track, index) => {
           const display = formatSubtitleTrackDisplay(track, index);
+          const support = getEmbeddedSubtitleSupportState(track);
           return {
             id: `subtitle-built-${index}`,
             label: display.label,
@@ -14562,6 +14806,8 @@ export const PlayerScreen = {
             selected:
               this.selectedEmbeddedSubtitleTrackIndex < 0 &&
               index === this.selectedSubtitleTrackIndex,
+            disabled: support.supported === false,
+            unsupportedReason: support.unsupportedReason,
             trackIndex: index
           };
         }),
@@ -14736,7 +14982,11 @@ export const PlayerScreen = {
       if (isForced) {
         pushUniqueText(metaParts, t("sub_forced_lang", {}, "Forced"));
       }
-      if (entry.unsupportedReason === "tizen-dash-text") {
+      if (entry.unsupportedReason === "tizen-tx3g") {
+        pushUniqueText(metaParts, getTx3gSubtitleSupportMessage("tizen-tx3g"));
+      } else if (entry.unsupportedReason === "tx3g-runtime") {
+        pushUniqueText(metaParts, getTx3gSubtitleSupportMessage("tx3g-runtime"));
+      } else if (entry.unsupportedReason === "tizen-dash-text") {
         pushUniqueText(
           metaParts,
           t(
@@ -14745,6 +14995,12 @@ export const PlayerScreen = {
             "Subtitle switching for DASH streams may not be supported by this TV."
           )
         );
+      } else if (
+        entry.unsupportedReason === "webos-bitmap" ||
+        entry.unsupportedReason === "webos-bitmap-runtime"
+      ) {
+        pushUniqueText(metaParts, getBitmapSubtitleFormatLabel(track));
+        pushUniqueText(metaParts, getBitmapSubtitleSupportMessage());
       }
       options.push({
         id: entry.id,
@@ -16078,6 +16334,7 @@ export const PlayerScreen = {
     this.clearBitmapSubtitleOverlay({ dispose: true });
 
     let applied = false;
+    const useTizenTx3gHtmlFallback = isTizenTx3gEmbeddedSubtitleTrack(embeddedTrack);
     if (
       Environment.isTizen() &&
       typeof PlayerController.isUsingAvPlay === "function" &&
@@ -16088,7 +16345,7 @@ export const PlayerScreen = {
         typeof PlayerController.setAvPlaySubtitleTrack === "function" &&
         Number.isFinite(nativeTrackIndex)
           ? PlayerController.setAvPlaySubtitleTrack(nativeTrackIndex, {
-              renderMode: this.subtitleRenderMode
+              renderMode: useTizenTx3gHtmlFallback ? "html" : this.subtitleRenderMode
             })
           : false;
     } else {
@@ -16118,7 +16375,11 @@ export const PlayerScreen = {
     if (this.refreshSubtitleCueStyles()) {
       this.refreshWebOsEmbeddedSubtitleAfterCueMutation();
     }
-    if (Environment.isWebOS() && embeddedTrack && !embeddedTrack.bitmapSubtitle) {
+    if (
+      embeddedTrack &&
+      !embeddedTrack.bitmapSubtitle &&
+      (Environment.isWebOS() || useTizenTx3gHtmlFallback)
+    ) {
       this.webOsEmbeddedTextSubtitleTrack = embeddedTrack;
       this.webOsEmbeddedTextSubtitleUsingHtml = false;
       void this.loadWebOsEmbeddedTextSubtitleWindow(this.getPlaybackCurrentSeconds());
@@ -16129,7 +16390,11 @@ export const PlayerScreen = {
   },
 
   applyBitmapEmbeddedSubtitleTrack(embeddedTrack, targetTrackIndex) {
-    if (!embeddedTrack?.bitmapSubtitle || !canUseWebOsBitmapSubtitles()) {
+    if (
+      !embeddedTrack?.bitmapSubtitle ||
+      getEmbeddedSubtitleSupportState(embeddedTrack).supported === false ||
+      !canUseWebOsBitmapSubtitles()
+    ) {
       return false;
     }
     const sourceTrackId = Number(embeddedTrack.sourceTrackId);
