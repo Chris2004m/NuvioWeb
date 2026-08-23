@@ -22,6 +22,7 @@ import {
 import { WebOsLunaService } from "../../platform/webos/webosLunaService.js";
 import { WebOSPlayerExtensions } from "../../platform/webos/webosPlayerExtensions.js";
 import { loadStreamingLibs } from "../../runtime/loadStreamingLibs.js";
+import { WATCH_PROGRESS_UNKNOWN_DURATION_PERCENT } from "../../domain/model/watchProgress.js";
 
 const MIN_PROGRESS_SYNC_DURATION_MS = 1000;
 const WEBOS_AUDIO_TRACK_SELECTION_TIMEOUT_MS = 4000;
@@ -3018,11 +3019,17 @@ export const PlayerController = {
     const normalized = String(itemType || "")
       .trim()
       .toLowerCase();
+    const hasEpisodeIdentity =
+      this.currentSeason != null &&
+      this.currentEpisode != null &&
+      Number.isFinite(Number(this.currentSeason)) &&
+      Number.isFinite(Number(this.currentEpisode));
     return (
       normalized === "channel" ||
       normalized === "live" ||
       normalized === "tvchannel" ||
-      normalized === "stream"
+      normalized === "stream" ||
+      (normalized === "tv" && !hasEpisodeIdentity)
     );
   },
 
@@ -4537,9 +4544,10 @@ export const PlayerController = {
       this.syncWebOsPlaybackKeepAwake();
       const context = this.createProgressContext();
       const durationMs = Math.floor(this.getDurationSeconds() * 1000);
-      const completedMs =
-        durationMs > 0 ? durationMs : Math.floor(this.getCurrentTimeSeconds() * 1000);
-      this.flushProgress(completedMs, durationMs > 0 ? durationMs : completedMs, false, context);
+      const positionMs = Math.floor(this.getCurrentTimeSeconds() * 1000);
+      // Android keeps an unknown-duration playback in progress. Do not turn
+      // the current live position into a synthetic finite duration here.
+      this.flushProgress(positionMs, durationMs, false, context);
     });
 
     this.video.addEventListener("error", (e) => {
@@ -5290,7 +5298,8 @@ export const PlayerController = {
       // source instead of reopening the stream picker.
       streamIdentity: active.streamIdentity || null,
       positionMs: Math.max(0, Math.trunc(safePosition)),
-      durationMs: hasFiniteDuration ? Math.max(0, Math.trunc(safeDuration)) : 0
+      durationMs: hasFiniteDuration ? Math.max(0, Math.trunc(safeDuration)) : 0,
+      progressPercent: hasFiniteDuration ? null : WATCH_PROGRESS_UNKNOWN_DURATION_PERCENT
     });
     if (!allowCloudSync) {
       return true;
