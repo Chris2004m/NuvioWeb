@@ -1140,7 +1140,7 @@
     <string name="layout_selection_continue">متابعة</string>
     <string name="update_title">تحديث التطبيق</string>
     <string name="update_installer_required">استخدم Nuvio WebTV Installer لتحديث التطبيق على التلفاز.</string>
-    <string name="update_release_notes">ما الجديد</string>
+    <string name="update_release_notes">ملاحظات الإصدار</string>
     <string name="update_release_notes_unavailable">لا يتوفر وصف للإصدار.</string>
     <string name="update_downloading">جاري تحميل التحديث</string>
     <string name="update_download">تنزيل</string>
@@ -1367,7 +1367,7 @@
     <string name="player.audio.unsupportedCodec">برنامج الترميز غير مدعوم على هذا الجهاز</string>
     <string name="player.audio.noSupportedTracks">لا تتوفر مسارات صوتية مدعومة</string>
     <string name="settings_stream_addon_logo_title">شعار الإضافة</string>
-    <string name="settings_stream_addon_logo_description">عرض شعار الإضافة واسمها بجانب مصادر البث.</string>
+    <string name="settings_stream_addon_logo_description">إظهار شعار الإضافة واسمها بجانب مصادر البث.</string>
     <string name="autoplay_reuse_binge_group">حفظ مجموعة المشاهدة المتتالية</string>
     <string name="autoplay_reuse_binge_group_sub">حفظ واستخدام آخر مجموعة مشاهدة تلقائية عبر الجلسات (متابعة المشاهدة، التفاصيل، إلخ).</string>
     <string name="unsupported_device_title">التلفاز غير مدعوم</string>
@@ -1816,7 +1816,7 @@
     <string name="cloud_library_playable_file_count">عدد الملفات القابلة للتشغيل: %1$d</string>
     <string name="cloud_library_provider_all">الكل</string>
     <string name="cloud_library_refresh">تحديث المكتبة السحابية</string>
-    <string name="cloud_library_search_label">ابحث في المكتبة السحابية</string>
+    <string name="cloud_library_search_label">البحث في المكتبة السحابية</string>
     <string name="cloud_library_search_placeholder">البحث في الملفات</string>
     <string name="cloud_library_select_provider">إختر المزود</string>
     <string name="cloud_library_select_type">إختر النوع</string>
@@ -1830,8 +1830,8 @@
     <string name="cloud_library_error_disabled">المكتبة السحابية معطلة.</string>
     <string name="cloud_library_search_clear">مسح البحث</string>
     <string name="layout_overall_ratings">التقييمات العامة</string>
-    <string name="layout_overall_ratings_sub_on">يتم عرض التقييمات القياسية وتقييمات TMDB.</string>
-    <string name="layout_overall_ratings_sub_off">التقييمات القياسية وتقييمات TMDB مخفية. تكون إعدادات مزود MDBList لها الأولوية في صفحات التفاصيل.</string>
+    <string name="layout_overall_ratings_sub_on">التقييمات القياسية وتقييمات TMDB ظاهرة.</string>
+    <string name="layout_overall_ratings_sub_off">التقييمات القياسية وتقييمات TMDB مخفية. إعدادات مزود MDBList لها الأولوية في صفحات التفاصيل.</string>
     <string name="settings_p2p_unsupported_subtitle">غير مدعوم على هذا التلفاز.</string>
     <string name="player_audio_tizen_dash_unsupported">تبديل مسارات الصوت DASH غير مدعوم على هذا التلفاز.</string>
     <string name="player_subtitle_tizen_advanced_unsupported">قد لا تكون تنسيقات الترجمة المتقدمة مدعومة بالكامل على هذا التلفاز.</string>
@@ -1840,4 +1840,6 @@
     <string name="player_error_tizen_p2p_unsupported">تشغيل Torrent/P2P غير مدعوم على هذا التلفاز.</string>
     <string name="player_tizen_mkv_subtitles_unavailable">لا يعرض مشغل الويب في هذا التلفاز ترجمات MKV المضمّنة.</string>
     <string name="player_tizen_mkv_audio_unavailable">لا يعرض مشغل الويب في هذا التلفاز مسارات صوت MKV المضمّنة.</string>
+    <string name="layout_cw_enabled">إظهار "متابعة المشاهدة"</string>
+    <string name="layout_cw_enabled_sub">إظهار صف "متابعة المشاهدة" في الشاشة الرئيسية.</string>
 </resources>
