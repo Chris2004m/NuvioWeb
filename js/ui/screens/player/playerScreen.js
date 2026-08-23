@@ -13307,7 +13307,15 @@ export const PlayerScreen = {
           return null;
         }
         const layout = parseVttCueLayout(lines[timingIndex]);
-        return { start, end, text, line: layout.line, align: layout.align };
+        return {
+          start,
+          end,
+          text,
+          line: layout.line,
+          position: layout.position,
+          align: layout.align,
+          size: layout.size
+        };
       })
       .filter(Boolean)
       .sort((left, right) => left.start - right.start || left.end - right.end);
@@ -13831,7 +13839,7 @@ export const PlayerScreen = {
     const cueKey = activeCues
       .map(
         (cue) =>
-          `${cue.start}-${cue.end}-${cue.line ?? "default"}-${cue.align || "center"}-${cue.text}`
+          `${cue.start}-${cue.end}-${cue.line ?? "default"}-${cue.position ?? "default"}-${cue.align || "center"}-${cue.size ?? "default"}-${cue.text}`
       )
       .join("|");
     const hasRenderedActiveCue =
@@ -13857,12 +13865,16 @@ export const PlayerScreen = {
     }
     const cueGroups = new Map();
     activeCues.forEach((cue) => {
-      const line = cue?.line == null ? NaN : Number(cue.line);
-      const normalizedLine = Number.isFinite(line) ? clamp(line, 0, 100) : null;
+      const rawLine = cue?.line == null ? NaN : Number(cue.line);
+      const normalizedLine = Number.isFinite(rawLine) ? clamp(rawLine, 0, 100) : null;
+      const rawPosition = cue?.position == null ? NaN : Number(cue.position);
+      const position = Number.isFinite(rawPosition) ? clamp(rawPosition, 0, 100) : null;
       const align = ["start", "end", "center"].includes(cue?.align) ? cue.align : "center";
-      const groupKey = `${normalizedLine ?? "default"}:${align}`;
+      const rawSize = cue?.size == null ? NaN : Number(cue.size);
+      const size = Number.isFinite(rawSize) && rawSize > 0 ? clamp(rawSize, 10, 200) : null;
+      const groupKey = `${normalizedLine ?? "default"}:${position ?? "default"}:${align}:${size ?? ""}`;
       if (!cueGroups.has(groupKey)) {
-        cueGroups.set(groupKey, { line: normalizedLine, align, cues: [] });
+        cueGroups.set(groupKey, { line: normalizedLine, position, align, size, cues: [] });
       }
       cueGroups.get(groupKey).cues.push(cue);
     });
@@ -13874,6 +13886,15 @@ export const PlayerScreen = {
       } else {
         cueNode.classList.add("player-html-subtitle-positioned");
         cueNode.style.top = `${group.line}%`;
+        if (group.position != null) {
+          cueNode.style.left = `${group.position}%`;
+          cueNode.style.right = "auto";
+          const anchor = group.align === "start" ? "0%" : group.align === "end" ? "-100%" : "-50%";
+          cueNode.style.transform = `translate(${anchor}, -50%) translateY(var(--player-subtitle-offset))`;
+        }
+      }
+      if (group.size != null && group.line != null) {
+        cueNode.style.fontSize = `${group.size}%`;
       }
       group.cues.forEach((cue) =>
         String(cue.text || "")
