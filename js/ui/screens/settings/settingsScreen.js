@@ -3683,6 +3683,11 @@ export const SettingsScreen = {
         onSelect: (option) => LayoutPreferences.set({ continueWatchingCardStyle: option.id })
       })
     );
+    this.actionMap.set("layout:continueWatchingEnabled", () => {
+      LayoutPreferences.set({
+        continueWatchingEnabled: !LayoutPreferences.get().continueWatchingEnabled
+      });
+    });
     const openNumberSetting = (focusKey, titleKey, field, values, fallback) =>
       this.actionMap.set(focusKey, () =>
         this.openOptionDialog({
@@ -4066,8 +4071,9 @@ export const SettingsScreen = {
       </div>
     `;
 
-    const continueWatchingBody = `
-      <div class="settings-stack">
+    const continueWatchingEnabled = model.layout.continueWatchingEnabled !== false;
+    const continueWatchingOptionsBody = continueWatchingEnabled
+      ? `
         ${this.renderActionRow({ focusKey: "layout:continueWatchingCardStyle", title: t("layout_cw_card_style", {}, "Card style"), subtitle: t("layout_section_continue_watching_desc", {}, "Choose the Continue Watching card shape"), value: t(`layout_cw_card_style_${model.layout.continueWatchingCardStyle || "card"}`, {}, model.layout.continueWatchingCardStyle || "card") })}
         ${this.renderToggleRow({
           focusKey: "layout:useEpisodeThumbnailsInCw",
@@ -4127,6 +4133,22 @@ export const SettingsScreen = {
           ),
           value: continueWatchingSortLabel
         })}
+      `
+      : "";
+
+    const continueWatchingBody = `
+      <div class="settings-stack">
+        ${this.renderToggleRow({
+          focusKey: "layout:continueWatchingEnabled",
+          title: t("settings.layout.continueWatchingEnabled.title", {}, "Show Continue Watching"),
+          subtitle: t(
+            "settings.layout.continueWatchingEnabled.subtitle",
+            {},
+            "Show Continue Watching and Upcoming rows on Home."
+          ),
+          checked: continueWatchingEnabled
+        })}
+        ${continueWatchingOptionsBody}
       </div>
     `;
 

@@ -136,8 +136,16 @@ function parsePublishedAtEpoch(value = "") {
   return Number.isFinite(parsed) ? parsed : Number.MIN_SAFE_INTEGER;
 }
 
-function rankTmdbVideoCandidates(results = []) {
-  return (Array.isArray(results) ? results : [])
+function rankTmdbVideoCandidates(
+  results = [],
+  preferredLanguageCode = TMDB_TRAILER_FALLBACK_LANGUAGE
+) {
+  const preferredLanguage = String(preferredLanguageCode || TMDB_TRAILER_FALLBACK_LANGUAGE)
+    .split("-")[0]
+    .trim()
+    .toLowerCase();
+  const seenKeys = new Set();
+  const candidates = (Array.isArray(results) ? results : [])
     .filter((entry) => String(entry?.site || "").toLowerCase() === "youtube")
     .filter((entry) => Boolean(String(entry?.key || "").trim()))
     .filter((entry) => {
@@ -146,15 +154,39 @@ function rankTmdbVideoCandidates(results = []) {
         .toLowerCase();
       return normalizedType === "trailer" || normalizedType === "teaser";
     })
-    .sort((left, right) => {
-      const typeDiff = videoTypePriority(left?.type) - videoTypePriority(right?.type);
-      if (typeDiff !== 0) return typeDiff;
-      const officialDiff = Number(Boolean(right?.official)) - Number(Boolean(left?.official));
-      if (officialDiff !== 0) return officialDiff;
-      const sizeDiff = Number(right?.size || 0) - Number(left?.size || 0);
-      if (sizeDiff !== 0) return sizeDiff;
-      return parsePublishedAtEpoch(right?.published_at) - parsePublishedAtEpoch(left?.published_at);
+    .filter((entry) => {
+      const key = String(entry?.key || "").trim();
+      if (seenKeys.has(key)) {
+        return false;
+      }
+      seenKeys.add(key);
+      return true;
     });
+
+  const languageRank = (entry) => {
+    const language = String(entry?.iso_639_1 || "")
+      .trim()
+      .toLowerCase();
+    if (language === preferredLanguage) {
+      return 0;
+    }
+    if (language === "en") {
+      return 1;
+    }
+    return 2;
+  };
+
+  return candidates.sort((left, right) => {
+    const typeDiff = videoTypePriority(left?.type) - videoTypePriority(right?.type);
+    if (typeDiff !== 0) return typeDiff;
+    const languageDiff = languageRank(left) - languageRank(right);
+    if (languageDiff !== 0) return languageDiff;
+    const officialDiff = Number(Boolean(right?.official)) - Number(Boolean(left?.official));
+    if (officialDiff !== 0) return officialDiff;
+    const sizeDiff = Number(right?.size || 0) - Number(left?.size || 0);
+    if (sizeDiff !== 0) return sizeDiff;
+    return parsePublishedAtEpoch(right?.published_at) - parsePublishedAtEpoch(left?.published_at);
+  });
 }
 
 async function fetchTmdbVideos({ type, tmdbId, apiKey, language }) {
@@ -169,7 +201,7 @@ async function fetchTmdbVideos({ type, tmdbId, apiKey, language }) {
 
 async function resolveTrailerCandidates({ type, tmdbId, apiKey, language, initialResults = [] }) {
   const preferredLanguage = normalizeTmdbTrailerLanguage(language);
-  const preferred = rankTmdbVideoCandidates(initialResults);
+  const preferred = rankTmdbVideoCandidates(initialResults, preferredLanguage);
   if (preferred.length || preferredLanguage === TMDB_TRAILER_FALLBACK_LANGUAGE) {
     return preferred;
   }
@@ -179,7 +211,7 @@ async function resolveTrailerCandidates({ type, tmdbId, apiKey, language, initia
     apiKey,
     language: TMDB_TRAILER_FALLBACK_LANGUAGE
   });
-  return rankTmdbVideoCandidates(fallback);
+  return rankTmdbVideoCandidates(fallback, TMDB_TRAILER_FALLBACK_LANGUAGE);
 }
 
 function mapTrailerCandidates(items = []) {

@@ -1319,6 +1319,24 @@ function resolveNextUpReleaseState(item = {}) {
   };
 }
 
+function refreshContinueWatchingReleaseState(item = {}) {
+  if (!item?.isNextUp) {
+    return item;
+  }
+  const releaseTimestamp = parseEpisodeReleaseDateForContinueWatching(
+    firstNonEmpty(item?.released, item?.releaseInfo)
+  );
+  if (releaseTimestamp == null) {
+    return item;
+  }
+  const releaseState = resolveNextUpReleaseState(item);
+  return {
+    ...item,
+    ...releaseState,
+    airDateLabel: releaseState.hasAired ? null : buildNextUpAirDateStatus(item)
+  };
+}
+
 function parseEpisodeReleaseCalendarDateForContinueWatching(released) {
   const raw = String(released || "").trim();
   if (!raw) {
@@ -1846,9 +1864,9 @@ function getCachedContinueWatchingEnrichment(item = {}) {
 function applyCachedContinueWatchingEnrichment(item = {}) {
   const cached = getCachedContinueWatchingEnrichment(item);
   if (!cached) {
-    return item;
+    return refreshContinueWatchingReleaseState(item);
   }
-  return {
+  return refreshContinueWatchingReleaseState({
     ...item,
     ...cached,
     contentId: item.contentId,
@@ -1861,7 +1879,7 @@ function applyCachedContinueWatchingEnrichment(item = {}) {
     progressPercent: item.progressPercent,
     updatedAt: item.updatedAt,
     source: item.source
-  };
+  });
 }
 
 function saveContinueWatchingEnrichment(item = {}) {
@@ -1922,14 +1940,16 @@ function readContinueWatchingDisplaySnapshot(scopeKey) {
   if (Date.now() - Number(entry.savedAt || 0) > CW_DISPLAY_SNAPSHOT_MAX_AGE_MS) {
     return [];
   }
-  return entry.items.filter((item) => {
-    if (!isCloudContinueWatchingItem(item)) {
-      return true;
-    }
-    return Boolean(
-      CloudLibraryPlaybackProgressStore.findForContinueWatching(item.contentId, item.videoId)
-    );
-  });
+  return entry.items
+    .map((item) => refreshContinueWatchingReleaseState(item))
+    .filter((item) => {
+      if (!isCloudContinueWatchingItem(item)) {
+        return true;
+      }
+      return Boolean(
+        CloudLibraryPlaybackProgressStore.findForContinueWatching(item.contentId, item.videoId)
+      );
+    });
 }
 
 function writeContinueWatchingDisplaySnapshot(scopeKey, items = []) {
@@ -1979,7 +1999,10 @@ function buildContinueWatchingSignature(items = []) {
         position,
         duration,
         normalized.progressStatus || "",
-        normalized.progressFraction ?? ""
+        normalized.progressFraction ?? "",
+        normalized.hasAired === false ? "upcoming" : "aired",
+        normalized.isReleaseAlert ? "release-alert" : "",
+        normalized.airDateLabel || ""
       ].join("|");
     })
     .join("::");
@@ -8763,6 +8786,7 @@ export const HomeScreen = {
     } else if (
       !background &&
       this.layoutMode === "modern" &&
+      this.layoutPrefs?.continueWatchingEnabled !== false &&
       this.continueWatchingHydratedFromSnapshot &&
       this.continueWatchingDisplay?.length
     ) {
@@ -8988,7 +9012,11 @@ export const HomeScreen = {
           this.continueWatchingDisplay = nextDisplay;
           this.continueWatchingLoading = false;
           this.persistContinueWatchingSnapshot();
-          if (this.layoutMode === "modern" && this.continueWatchingDisplay.length) {
+          if (
+            this.layoutMode === "modern" &&
+            this.layoutPrefs?.continueWatchingEnabled !== false &&
+            this.continueWatchingDisplay.length
+          ) {
             if (!preserveHomeReturnState && !this.suppressInitialContinueWatchingFocus) {
               this.heroItem = this.pickInitialHero();
             }
@@ -9035,7 +9063,7 @@ export const HomeScreen = {
   },
 
   pickInitialHero() {
-    if (this.layoutMode === "modern") {
+    if (this.layoutMode === "modern" && this.layoutPrefs?.continueWatchingEnabled !== false) {
       if (
         this.continueWatchingLoading &&
         Array.isArray(this.continueWatching) &&
@@ -9293,6 +9321,7 @@ export const HomeScreen = {
     const backFocusHero = backFocusState ? this.getHeroSourceFromFocusState(backFocusState) : null;
     const shouldHoldHeroForContinueWatching =
       this.layoutMode === "modern" &&
+      this.layoutPrefs?.continueWatchingEnabled !== false &&
       Boolean(this.continueWatchingLoading) &&
       !this.continueWatchingDisplay?.length &&
       !this.heroItem;
@@ -9357,10 +9386,13 @@ export const HomeScreen = {
       (!this.homeHoldFocusLocked && retainedFocusState && retainedFocusState.focusKind === "item"
         ? retainedFocusState
         : null);
-    const continueWatchingRows = partitionContinueWatchingRows(
-      this.continueWatchingDisplay || [],
-      this.layoutPrefs?.continueWatchingSortMode
-    );
+    const continueWatchingEnabled = this.layoutPrefs?.continueWatchingEnabled !== false;
+    const continueWatchingRows = continueWatchingEnabled
+      ? partitionContinueWatchingRows(
+          this.continueWatchingDisplay || [],
+          this.layoutPrefs?.continueWatchingSortMode
+        )
+      : { main: [], upcoming: [] };
     this.continueWatchingRenderedItems = [
       ...continueWatchingRows.main,
       ...continueWatchingRows.upcoming
@@ -9373,15 +9405,17 @@ export const HomeScreen = {
         : String(focusState?.rowKey || "") === "upcoming_section"
           ? continueWatchingRows.main.length + Math.max(0, Number(focusState?.itemIndex || 0))
           : -1;
-    const continueWatchingRenderLimit = splitUpcomingEnabled
-      ? continueWatchingRows.main.length
-      : Math.min(
-          Number(this.continueWatchingDisplay?.length || 0),
-          Math.max(
-            this.getContinueWatchingRenderBatchSize(),
-            continueWatchingFocusIndex >= 0 ? continueWatchingFocusIndex + 1 : 0
-          )
-        );
+    const continueWatchingRenderLimit = !continueWatchingEnabled
+      ? 0
+      : splitUpcomingEnabled
+        ? continueWatchingRows.main.length
+        : Math.min(
+            Number(this.continueWatchingDisplay?.length || 0),
+            Math.max(
+              this.getContinueWatchingRenderBatchSize(),
+              continueWatchingFocusIndex >= 0 ? continueWatchingFocusIndex + 1 : 0
+            )
+          );
     const focusedPosterFlowConfig = this.getFocusedPosterFlowConfig(this.layoutPrefs || {});
     const expandFocusedPoster =
       this.layoutMode === "modern" &&
@@ -9390,15 +9424,17 @@ export const HomeScreen = {
       Boolean(focusState);
     const rowItemLimit = this.getRowItemLimit();
     const loadingRowItemCount = this.getLoadingRowItemCount();
-    const continueWatchingLoadingCount = Math.min(
-      Math.max(
-        Number(this.continueWatching?.length || 0),
-        Number(this.nextUpProgressCandidates?.length || 0)
-      ),
-      loadingRowItemCount
-    );
+    const continueWatchingLoadingCount = continueWatchingEnabled
+      ? Math.min(
+          Math.max(
+            Number(this.continueWatching?.length || 0),
+            Number(this.nextUpProgressCandidates?.length || 0)
+          ),
+          loadingRowItemCount
+        )
+      : 0;
     const effectiveContinueWatchingLoadingCount =
-      this.continueWatchingLoading && continueWatchingLoadingCount === 0
+      continueWatchingEnabled && this.continueWatchingLoading && continueWatchingLoadingCount === 0
         ? loadingRowItemCount
         : continueWatchingLoadingCount;
     this.teardownGridStickyHeader();
@@ -9416,7 +9452,7 @@ export const HomeScreen = {
         heroCandidates: this.heroCandidates,
         continueWatchingItems: continueWatchingRows.main,
         upcomingItems: continueWatchingRows.upcoming,
-        continueWatchingLoading: Boolean(this.continueWatchingLoading),
+        continueWatchingLoading: continueWatchingEnabled && Boolean(this.continueWatchingLoading),
         continueWatchingLoadingCount: effectiveContinueWatchingLoadingCount,
         continueWatchingRenderLimit,
         useEpisodeThumbnailsInCw: this.layoutPrefs?.useEpisodeThumbnailsInCw !== false,
@@ -9444,25 +9480,29 @@ export const HomeScreen = {
       this.catalogSeeAllMap = modernLayoutPayload.catalogSeeAllMap;
       mainContentMarkup = modernLayoutPayload.markup;
     } else {
-      const continueHtml = renderContinueWatchingSection(continueWatchingRows.main, {
-        rowKey: "continue_watching",
-        loading: Boolean(this.continueWatchingLoading),
-        loadingCount: effectiveContinueWatchingLoadingCount,
-        itemLimit: continueWatchingRenderLimit,
-        useEpisodeThumbnails: this.layoutPrefs?.useEpisodeThumbnailsInCw !== false,
-        blurNextUp: resolveContinueWatchingBlurNextUp(this.layoutPrefs),
-        cardStyle: this.layoutPrefs?.continueWatchingCardStyle || "card"
-      });
-      const upcomingHtml = renderContinueWatchingSection(continueWatchingRows.upcoming, {
-        rowKey: "upcoming_section",
-        titleKey: "upcoming_section_title",
-        title: "Upcoming",
-        startIndex: continueWatchingRows.main.length,
-        itemLimit: continueWatchingRows.upcoming.length,
-        useEpisodeThumbnails: this.layoutPrefs?.useEpisodeThumbnailsInCw !== false,
-        blurNextUp: resolveContinueWatchingBlurNextUp(this.layoutPrefs),
-        cardStyle: this.layoutPrefs?.continueWatchingCardStyle || "card"
-      });
+      const continueHtml = continueWatchingEnabled
+        ? renderContinueWatchingSection(continueWatchingRows.main, {
+            rowKey: "continue_watching",
+            loading: Boolean(this.continueWatchingLoading),
+            loadingCount: effectiveContinueWatchingLoadingCount,
+            itemLimit: continueWatchingRenderLimit,
+            useEpisodeThumbnails: this.layoutPrefs?.useEpisodeThumbnailsInCw !== false,
+            blurNextUp: resolveContinueWatchingBlurNextUp(this.layoutPrefs),
+            cardStyle: this.layoutPrefs?.continueWatchingCardStyle || "card"
+          })
+        : "";
+      const upcomingHtml = continueWatchingEnabled
+        ? renderContinueWatchingSection(continueWatchingRows.upcoming, {
+            rowKey: "upcoming_section",
+            titleKey: "upcoming_section_title",
+            title: "Upcoming",
+            startIndex: continueWatchingRows.main.length,
+            itemLimit: continueWatchingRows.upcoming.length,
+            useEpisodeThumbnails: this.layoutPrefs?.useEpisodeThumbnailsInCw !== false,
+            blurNextUp: resolveContinueWatchingBlurNextUp(this.layoutPrefs),
+            cardStyle: this.layoutPrefs?.continueWatchingCardStyle || "card"
+          })
+        : "";
       const legacyRowsPayload = renderLegacyCatalogRowsMarkup(this.rows, {
         layoutMode: this.layoutMode,
         showPosterLabels,
