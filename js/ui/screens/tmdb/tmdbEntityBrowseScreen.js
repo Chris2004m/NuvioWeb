@@ -302,8 +302,11 @@ export const TmdbEntityBrowseScreen = {
     const meta = [header.originCountry, header.secondaryLabel].filter(Boolean).join(" • ");
     const backdrop = this.getHeroBackdrop();
     const description = String(header.description || "").trim();
+    const heroClass = header.logo
+      ? "tmdb-entity-hero tmdb-entity-hero-has-logo"
+      : "tmdb-entity-hero";
     return `
-      <section class="tmdb-entity-hero">
+      <section class="${heroClass}">
         ${
           backdrop
             ? `<img class="tmdb-entity-hero-backdrop" src="${escapeHtml(backdrop)}" alt="" aria-hidden="true" onerror="this.hidden=true" />`

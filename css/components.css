@@ -18957,7 +18957,7 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
 }
 
 .no-flex-gap .cast-credit-track > * {
-  margin-right: 14px;
+  margin-right: 16px;
 }
 
 .no-flex-gap .cast-credit-track > *:last-child {
@@ -19004,10 +19004,6 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
   .home-poster-card.is-landscape
   .home-poster-frame {
   height: var(--home-landscape-poster-height);
-}
-
-.no-aspect-ratio .cast-credit-poster {
-  height: 360px;
 }
 
 .no-backdrop-filter .modern-sidebar-panel,
@@ -20907,6 +20903,11 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
   line-height: 1.45;
   color: var(--text-color);
   max-width: 1200px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  line-clamp: 5;
+  overflow: hidden;
 }
 
 .cast-detail-section-title {
@@ -20922,7 +20923,7 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
   display: flex;
   gap: 14px;
   overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: visible;
   scrollbar-width: none;
   padding-bottom: 8px;
 }
@@ -20932,49 +20933,86 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
 }
 
 .cast-credit-card {
-  flex: 0 0 240px;
-  border-radius: 18px;
-  padding: 10px;
-  background: var(--bg-elevated);
-  /* Tizen 5 Chromium does not parse the modern rgb(var(...) / alpha)
-     notation. Keep a valid border so the focused border-color below has a
-     visible box on legacy TVs; modern runtimes override it with the themed
-     declaration immediately after. */
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border: 1px solid rgb(var(--focus-color-rgb) / 0.12);
+  flex: 0 0 248px;
+  width: 248px;
+  min-width: 248px;
+  overflow: visible;
+  border: 0;
+  border-radius: 12px;
+  padding: 0;
+  background: transparent;
+  color: var(--text-color);
+  box-sizing: border-box;
 }
 
 .cast-credit-card.focused {
   transform: none;
-  border-color: var(--focus-color);
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.2);
-  box-shadow: 0 0 0 3px rgb(var(--focus-color-rgb) / 0.2);
 }
 
 .cast-credit-poster {
+  display: block;
   width: 100%;
-  aspect-ratio: 2 / 3;
+  height: 372px;
+  overflow: hidden;
+  border: 2px solid transparent;
   border-radius: 14px;
   background: var(--card-bg) center center / cover no-repeat;
-  margin-bottom: 10px;
+  box-sizing: border-box;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    background-color 120ms ease;
+}
+
+.cast-credit-card.focused .cast-credit-poster {
+  border-color: var(--secondary-color);
+  box-shadow: 0 0 0 2px var(--secondary-color);
+  background-color: var(--focus-bg);
 }
 
 .cast-credit-title {
-  font-size: 18px;
+  width: 100%;
+  min-height: 34px;
+  margin-top: 10px;
+  padding: 0 2px;
+  color: var(--text-color);
+  font-size: 24px;
+  line-height: 1.2;
   font-weight: 700;
-  line-height: 1.25;
-  min-height: 44px;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
   -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
   overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .cast-credit-subtitle {
-  margin-top: 6px;
-  font-size: 15px;
+  margin-top: 4px;
+  padding: 0 2px;
   color: var(--text-secondary);
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+@media (min-width: 1520px) {
+  .cast-credit-card {
+    flex-basis: 280px;
+    width: 280px;
+    min-width: 280px;
+  }
+
+  .cast-credit-poster {
+    height: 420px;
+  }
+
+  .cast-credit-title {
+    font-size: var(--tv-body-text, 28px);
+  }
+
+  .cast-credit-subtitle {
+    font-size: var(--tv-caption-text, 22px);
+  }
 }
 
 .cast-credit-empty {
@@ -22754,5 +22792,35 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
 
   .no-flex-gap .tmdb-entity-track > * + * {
     margin-left: 24px;
+  }
+}
+
+/* Tizen 5/older Chromium keeps the Android hero logo on the TV-safe right
+   side. Keep this fallback limited to identified constrained Tizen runtimes;
+   modern Tizen and browser layouts retain their existing Web presentation. */
+.performance-constrained.legacy-tizen .tmdb-entity-hero-has-logo .tmdb-entity-hero-copy {
+  width: 100%;
+  max-width: none;
+}
+
+.performance-constrained.legacy-tizen .tmdb-entity-hero-has-logo .tmdb-entity-logo {
+  position: absolute;
+  top: 50%;
+  right: 48px;
+  margin-bottom: 0;
+  transform: translateY(-50%);
+  object-position: center center;
+}
+
+.performance-constrained.legacy-tizen .tmdb-entity-hero-has-logo .tmdb-entity-eyebrow,
+.performance-constrained.legacy-tizen .tmdb-entity-hero-has-logo .tmdb-entity-title,
+.performance-constrained.legacy-tizen .tmdb-entity-hero-has-logo .tmdb-entity-meta,
+.performance-constrained.legacy-tizen .tmdb-entity-hero-has-logo .tmdb-entity-description {
+  max-width: calc(100% - 328px);
+}
+
+@media (min-width: 1520px) {
+  .performance-constrained.legacy-tizen .tmdb-entity-hero-has-logo .tmdb-entity-logo {
+    right: var(--tv-safe-gutter-wide, 96px);
   }
 }
