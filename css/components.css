@@ -20828,7 +20828,7 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
     radial-gradient(140% 90% at 78% 0%, rgb(var(--secondary-color-rgb) / 0.22), transparent 40%),
     var(--bg-color);
   color: var(--text-color);
-  padding: 26px 34px 38px;
+  padding: 26px var(--tv-safe-gutter-wide, 96px) 38px;
   box-sizing: border-box;
   position: relative;
 }
@@ -20888,7 +20888,7 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
 .cast-detail-hero-content {
   display: grid;
   grid-template-columns: 220px 1fr;
-  gap: 20px;
+  gap: 24px;
   align-items: flex-start;
 }
 
@@ -22492,6 +22492,11 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
   color: var(--text-color);
   box-sizing: border-box;
   padding-bottom: 56px;
+  --tmdb-entity-safe-x: 48px;
+}
+
+.tizen-tv .tmdb-entity-shell {
+  --tmdb-entity-safe-x: 56px;
 }
 
 .tmdb-entity-shell::-webkit-scrollbar {
@@ -22600,7 +22605,7 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
   z-index: 1;
   min-height: 520px;
   max-width: 1050px;
-  padding: 74px 48px 66px;
+  padding: 74px var(--tmdb-entity-safe-x) 66px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -22667,7 +22672,7 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
 }
 
 .tmdb-entity-rail-title {
-  margin: 0 48px 14px;
+  margin: 0 var(--tmdb-entity-safe-x) 14px;
   color: var(--text-color);
   font-size: 32px;
   line-height: 1.25;
@@ -22680,7 +22685,7 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
   gap: 16px;
   overflow-x: auto;
   overflow-y: visible;
-  padding: 4px 48px 16px;
+  padding: 4px var(--tmdb-entity-safe-x) 16px;
   scrollbar-width: none;
   -ms-overflow-style: none;
   box-sizing: border-box;
@@ -22808,26 +22813,34 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
   transition: none;
 }
 
+.tmdb-entity-logo.tmdb-entity-logo-dark {
+  filter: brightness(0) invert(1);
+}
+
 @media (min-width: 1520px) {
+  .tmdb-entity-shell {
+    --tmdb-entity-safe-x: var(--tv-safe-gutter-wide, 96px);
+  }
+
   .tmdb-entity-hero {
     min-height: 560px;
   }
 
   .tmdb-entity-hero-copy {
     min-height: 560px;
-    padding-left: var(--tv-safe-gutter-wide, 96px);
-    padding-right: var(--tv-safe-gutter-wide, 96px);
+    padding-left: var(--tmdb-entity-safe-x);
+    padding-right: var(--tmdb-entity-safe-x);
   }
 
   .tmdb-entity-rail-title {
-    margin-left: var(--tv-safe-gutter-wide, 96px);
-    margin-right: var(--tv-safe-gutter-wide, 96px);
+    margin-left: var(--tmdb-entity-safe-x);
+    margin-right: var(--tmdb-entity-safe-x);
     font-size: clamp(28px, 1.7vw, 40px);
   }
 
   .tmdb-entity-track {
-    padding-left: var(--tv-safe-gutter-wide, 96px);
-    padding-right: var(--tv-safe-gutter-wide, 96px);
+    padding-left: var(--tmdb-entity-safe-x);
+    padding-right: var(--tmdb-entity-safe-x);
     gap: 24px;
   }
 
@@ -22858,32 +22871,31 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
   }
 }
 
-/* Tizen 5/older Chromium keeps the Android hero logo on the TV-safe right
-   side. Keep this fallback limited to identified constrained Tizen runtimes;
-   modern Tizen and browser layouts retain their existing Web presentation. */
-.performance-constrained.legacy-tizen .tmdb-entity-hero-has-logo .tmdb-entity-hero-copy {
+/* Tizen hero layout mirrors Android's side-by-side logo treatment. The
+   platform class is applied before any entity screen is rendered, so this
+   does not depend on performance-profile detection. */
+.tizen-tv .tmdb-entity-hero-has-logo .tmdb-entity-hero-copy {
   width: 100%;
   max-width: none;
 }
 
-.performance-constrained.legacy-tizen .tmdb-entity-hero-has-logo .tmdb-entity-logo {
+.tizen-tv .tmdb-entity-hero-has-logo .tmdb-entity-logo {
   position: absolute;
   top: 50%;
-  right: 48px;
+  right: var(--tmdb-entity-safe-x);
   margin-bottom: 0;
   transform: translateY(-50%);
   object-position: center center;
 }
 
-.performance-constrained.legacy-tizen .tmdb-entity-hero-has-logo .tmdb-entity-eyebrow,
-.performance-constrained.legacy-tizen .tmdb-entity-hero-has-logo .tmdb-entity-title,
-.performance-constrained.legacy-tizen .tmdb-entity-hero-has-logo .tmdb-entity-meta,
-.performance-constrained.legacy-tizen .tmdb-entity-hero-has-logo .tmdb-entity-description {
+.tizen-tv .tmdb-entity-hero-has-logo .tmdb-entity-eyebrow,
+.tizen-tv .tmdb-entity-hero-has-logo .tmdb-entity-title,
+.tizen-tv .tmdb-entity-hero-has-logo .tmdb-entity-meta,
+.tizen-tv .tmdb-entity-hero-has-logo .tmdb-entity-description {
   max-width: calc(100% - 328px);
 }
 
-@media (min-width: 1520px) {
-  .performance-constrained.legacy-tizen .tmdb-entity-hero-has-logo .tmdb-entity-logo {
-    right: var(--tv-safe-gutter-wide, 96px);
-  }
+.tizen-tv .tmdb-entity-hero-has-logo .tmdb-entity-hero-copy[dir="rtl"] .tmdb-entity-logo {
+  right: auto;
+  left: var(--tmdb-entity-safe-x);
 }

@@ -12,6 +12,7 @@ import { detailWatchedEnrichmentService } from "../../../data/repository/detailW
 import { watchedSeriesReconciliationService } from "../../../data/repository/watchedSeriesReconciliationService.js";
 import { TmdbService } from "../../../core/tmdb/tmdbService.js";
 import { TmdbMetadataService } from "../../../core/tmdb/tmdbMetadataService.js";
+import { normalizeTmdbBackdropUrl } from "../../../core/tmdb/tmdbImageUrl.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
 import {
   showHomeRatings,
@@ -94,6 +95,24 @@ function isRtlDetailLocale(locale = I18n.getLocale()) {
 
 function detailImageLoadingMode() {
   return getTvRuntimePerformanceProfile().isPerformanceConstrained ? "eager" : "lazy";
+}
+
+function resolveDetailBackdropUrl(meta = {}) {
+  const candidates = [
+    meta?.background,
+    meta?.backdrop,
+    meta?.backdropUrl,
+    meta?.landscapePoster,
+    meta?.poster
+  ];
+  for (const [index, candidate] of candidates.entries()) {
+    const value = String(candidate || "").trim();
+    if (!value) {
+      continue;
+    }
+    return index < candidates.length - 1 ? normalizeTmdbBackdropUrl(value) : value;
+  }
+  return "";
 }
 
 // Returns the first value that is a non-negative integer (number or numeric
@@ -3115,7 +3134,7 @@ export const MetaDetailsScreen = {
   },
 
   renderSeriesLayout(meta) {
-    const backdrop = meta.background || meta.poster || "";
+    const backdrop = resolveDetailBackdropUrl(meta);
     const heroMarkup = this.renderSeriesHeroMarkup(meta);
     const detailDirectionClass = isRtlDetailLocale() ? " detail-rtl" : "";
     if (!this.selectedRatingSeason || !this.seriesRatingsBySeason?.[this.selectedRatingSeason]) {
@@ -3448,7 +3467,7 @@ export const MetaDetailsScreen = {
   },
 
   renderMovieLayout(meta) {
-    const backdrop = meta.background || meta.poster || "";
+    const backdrop = resolveDetailBackdropUrl(meta);
     const heroMarkup = this.renderMovieHeroMarkup(meta);
     const detailDirectionClass = isRtlDetailLocale() ? " detail-rtl" : "";
 
@@ -3489,7 +3508,7 @@ export const MetaDetailsScreen = {
     if (!(node instanceof HTMLElement)) {
       return;
     }
-    const desired = String(meta?.background || meta?.poster || "");
+    const desired = resolveDetailBackdropUrl(meta);
     if (node.dataset.backdropUrl === desired) {
       return;
     }
