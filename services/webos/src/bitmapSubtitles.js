@@ -1283,6 +1283,9 @@ function buildAssDialogueLine(track, frame, nextFrame) {
     String(fields[7] || "").trim() === "";
   var hasStructuredFields = hasShortTiming || hasPositionalShape;
   var assText = text.replace(/\r?\n/g, "\\N");
+  // Positional form carries the ASS Layer in fields[0]; short SSA has none,
+  // so default it to 0. Preserve a non-zero layer to keep stacking order.
+  var layer = hasPositionalShape ? String(fields[0] || "").trim() || "0" : "0";
   var style = hasStructuredFields ? String(fields[2] || "").trim() || "Default" : "Default";
   var name = hasStructuredFields ? String(fields[3] || "").trim() : "";
   var marginL = hasStructuredFields ? String(fields[4] || "").trim() || "0" : "0";
@@ -1290,7 +1293,9 @@ function buildAssDialogueLine(track, frame, nextFrame) {
   var marginV = hasStructuredFields ? String(fields[6] || "").trim() || "0" : "0";
   var effect = hasStructuredFields ? String(fields[7] || "").trim() : "";
   return (
-    "Dialogue: 0," +
+    "Dialogue: " +
+    layer +
+    "," +
     formatAssTimestamp(startMs) +
     "," +
     formatAssTimestamp(endMs) +
