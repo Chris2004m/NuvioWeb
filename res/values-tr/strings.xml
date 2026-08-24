@@ -2698,4 +2698,15 @@
     <string name="player_tizen_mkv_audio_unavailable">Bu TV'nin web oynatıcısı gömülü MKV ses parçalarını sunmuyor.</string>
     <string name="layout_cw_enabled">İzlemeye Devam Et\'i Göster</string>
     <string name="layout_cw_enabled_sub">Ana ekranda İzlemeye Devam Et satırını gösterir.</string>
+    <string name="supporters_level_supporter">Destekçi</string>
+    <string name="supporters_level_supporter_plus">Destekçi+</string>
+    <string name="supporters_since">%1$s tarihinden beri Nuvio'yu destekliyor</string>
+    <string name="supporters_since_unknown">Nuvio'yu gururla destekliyor</string>
+    <string name="profile_editor_tab_avatar">Avatar</string>
+    <string name="profile_editor_tab_background">Arka Plan</string>
+    <string name="profile_choose_background">Profil Arka Planını Seçin</string>
+    <string name="profile_background_member_note">Özel arka plan URL'leri Nuvio web panelinden yapılandırılabilir.</string>
+    <string name="profile_background_normal">Normal</string>
+    <string name="profile_background_custom">Özel</string>
+    <string name="profile_avatar_category_supporter">Destekçi</string>
 </resources>

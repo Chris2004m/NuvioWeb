@@ -2720,4 +2720,15 @@
     <string name="player_tizen_mkv_audio_unavailable">Wbudowane ścieżki audio MKV nie są udostępniane przez odtwarzacz webowy tego telewizora.</string>
     <string name="layout_cw_enabled">Pokaż Kontynuuj oglądanie</string>
     <string name="layout_cw_enabled_sub">Pokaż rząd Kontynuuj oglądanie na ekranie głównym.</string>
+    <string name="profile_editor_tab_avatar">Awatar</string>
+    <string name="profile_editor_tab_background">Tło</string>
+    <string name="profile_choose_background">Wybierz tło profilu</string>
+    <string name="profile_background_member_note">Niestandardowe adresy URL tła można skonfigurować z panelu Nuvio.</string>
+    <string name="profile_background_normal">Normalne</string>
+    <string name="profile_background_custom">Niestandardowe</string>
+    <string name="profile_avatar_category_supporter">Supporter</string>
+    <string name="supporters_level_supporter">Supporter</string>
+    <string name="supporters_level_supporter_plus">Supporter+</string>
+    <string name="supporters_since">Wspiera Nuvio od %1$s</string>
+    <string name="supporters_since_unknown">Z dumą wspiera Nuvio</string>
 </resources>

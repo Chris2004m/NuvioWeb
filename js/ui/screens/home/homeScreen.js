@@ -1495,7 +1495,13 @@ function shouldShowNextUpEpisodeForContinueWatching(
   if (isSeasonRollover && releaseTime == null) {
     return false;
   }
-  if (releaseTime == null || releaseTime <= Date.now()) {
+  // Android treats an episode without a release date as unaired. Keep the
+  // same setting gate so missing metadata cannot make an upcoming episode
+  // appear as an already aired Next Up item.
+  if (releaseTime == null) {
+    return showUnairedNextUp;
+  }
+  if (releaseTime <= Date.now()) {
     return true;
   }
   if (!showUnairedNextUp) {
