@@ -1268,15 +1268,24 @@ export const StreamScreen = {
   },
 
   navigateBackFromStream() {
+    if (this.streamBackNavigationInProgress) {
+      // A pending history pop is the first Back transition. Do not let a
+      // duplicate Tizen event turn it into the next Android stack transition.
+      return "history";
+    }
     const itemId = String(this.params?.itemId || "").trim();
     if (!itemId) {
       return false;
     }
+    this.streamBackNavigationInProgress = true;
     const itemType = normalizeType(this.params?.itemType);
     const isSeries = itemType === "series" || itemType === "tv";
     if (this.params?.continueWatchingBackHome && !isSeries) {
       // Android returns movies opened from Continue Watching straight Home;
       // only episodic content reconstructs a Detail route on Back.
+      if (Router.popToExistingRoute?.("home", {})) {
+        return "history";
+      }
       void Router.navigate(
         "home",
         {},
@@ -1288,31 +1297,31 @@ export const StreamScreen = {
       );
       return true;
     }
-    void Router.navigate(
-      "detail",
-      {
-        itemId,
-        itemType,
-        imdbId: this.params?.imdbId || null,
-        tmdbId: this.params?.tmdbId || null,
-        traktId: this.params?.traktId || null,
-        originalItemId: this.params?.originalItemId || null,
-        fallbackTitle: this.params?.itemTitle || this.params?.playerTitle || "Untitled",
-        returnToSearchOnBack: Boolean(this.params?.returnToSearchOnBack),
-        returnHomeOnBack: Boolean(
-          !this.params?.returnToSearchOnBack &&
-          (this.params?.continueWatchingBackHome ||
-            this.params?.returnHomeOnBack ||
-            this.params?.returnToDetail ||
-            this.params?.fromDetailRoute)
-        )
-      },
-      {
-        skipStackPush: true,
-        replaceHistory: true,
-        isBackNavigation: true
-      }
-    );
+    const detailParams = {
+      itemId,
+      itemType,
+      imdbId: this.params?.imdbId || null,
+      tmdbId: this.params?.tmdbId || null,
+      traktId: this.params?.traktId || null,
+      originalItemId: this.params?.originalItemId || null,
+      fallbackTitle: this.params?.itemTitle || this.params?.playerTitle || "Untitled",
+      returnToSearchOnBack: Boolean(this.params?.returnToSearchOnBack),
+      returnHomeOnBack: Boolean(
+        !this.params?.returnToSearchOnBack &&
+        (this.params?.continueWatchingBackHome ||
+          this.params?.returnHomeOnBack ||
+          this.params?.returnToDetail ||
+          this.params?.fromDetailRoute)
+      )
+    };
+    if (Router.popToExistingRoute?.("detail", detailParams)) {
+      return "history";
+    }
+    void Router.navigate("detail", detailParams, {
+      skipStackPush: true,
+      replaceHistory: true,
+      isBackNavigation: true
+    });
     return true;
   },
 
@@ -1341,6 +1350,7 @@ export const StreamScreen = {
     this.container = document.getElementById("stream");
     ScreenUtils.show(this.container);
     this.params = params || {};
+    this.streamBackNavigationInProgress = false;
     this.stopStreamVirtualization();
     this.streamVirtualHeights = new Map();
     this.streamVirtualFocusReset = false;

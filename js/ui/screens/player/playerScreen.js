@@ -7368,7 +7368,10 @@ export const PlayerScreen = {
 
   navigateBackToStreamScreen({ forceDetail = false } = {}) {
     if (this.playerBackNavigationInProgress) {
-      return true;
+      // The first Back already requested the browser pop that reveals the
+      // existing route. A duplicate Tizen key must not make FocusEngine call
+      // suppressNextPopstate(), otherwise it can swallow that traversal.
+      return "history";
     }
     this.playerBackNavigationInProgress = true;
     this.releaseCurrentEngineFsStreamBestEffort("back-to-stream", {
@@ -7388,8 +7391,6 @@ export const PlayerScreen = {
       !shouldReturnToHome &&
       !forceDetail &&
       this.shouldReturnToStreamOnBack();
-    Router.suppressNextPopstate?.(1500);
-    Router.ignoreSinglePopstate?.();
     const targetRoute = shouldReturnToHome
       ? "home"
       : shouldReturnToLibrary
@@ -7407,6 +7408,19 @@ export const PlayerScreen = {
           : targetRoute === "detail"
             ? this.buildDetailRouteParamsFromPlayer()
             : {};
+
+    // Android returns to the existing NavController destination with
+    // popBackStack(). Use the matching Web history/Router stack entry when it
+    // exists so the previous Sources/Library/Home/Detail screen is restored in
+    // place instead of being reconstructed with replaceHistory.
+    if (Router.popToExistingRoute?.(targetRoute, targetParams)) {
+      return "history";
+    }
+
+    // Keep a conservative fallback for direct-player and recovered sessions
+    // whose browser history no longer contains the expected destination.
+    // Router's back-navigation guard still protects this replacement from a
+    // late Tizen popstate without masking a legitimate history traversal.
     void Router.navigate(targetRoute, targetParams, {
       skipStackPush: true,
       replaceHistory: true,
