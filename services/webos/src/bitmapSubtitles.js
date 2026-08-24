@@ -1274,6 +1274,7 @@ function buildAssDialogueLine(track, frame, nextFrame) {
   // those two signatures so arbitrary rows still fall back to Default.
   var hasShortTiming = fields.length >= 9 && isAssTimestamp(fields[0]) && isAssTimestamp(fields[1]);
   var hasPositionalShape =
+    isAssTextSubtitleTrack(track) &&
     fields.length >= 9 &&
     /^-?\d+$/.test(String(fields[0] || "").trim()) &&
     /^-?\d+$/.test(String(fields[1] || "").trim()) &&
