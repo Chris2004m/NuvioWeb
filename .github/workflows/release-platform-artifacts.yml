@@ -260,7 +260,7 @@ jobs:
             Write-Error "Expected Windows installer .exe was not created"
             exit 1
           }
-          $targetFile = "Nuvio-WebTV-Installer-Windows-$env:TAG_NAME.exe"
+          $targetFile = "NuvioTVSmart-Installer-Windows-$env:TAG_NAME.exe"
           Move-Item -Force -Path $asset.FullName -Destination $targetFile
           "installer_name=$targetFile" >> $env:GITHUB_OUTPUT
 
@@ -310,7 +310,7 @@ jobs:
             echo "Expected macOS .app was not created" >&2
             exit 1
           fi
-          TARGET_FILE="Nuvio-WebTV-Installer-macOS-${TAG_NAME}.zip"
+          TARGET_FILE="NuvioTVSmart-Installer-macOS-${TAG_NAME}.zip"
           ditto -c -k --keepParent "$APP_PATH" "$TARGET_FILE"
           echo "installer_name=$TARGET_FILE" >> "$GITHUB_OUTPUT"
 
@@ -359,7 +359,7 @@ jobs:
             echo "Expected Linux AppImage was not created" >&2
             exit 1
           fi
-          TARGET_FILE="Nuvio-WebTV-Installer-Linux-${TAG_NAME}.AppImage"
+          TARGET_FILE="NuvioTVSmart-Installer-Linux-${TAG_NAME}.AppImage"
           mv "$APPIMAGE_PATH" "$TARGET_FILE"
           chmod +x "$TARGET_FILE"
           echo "installer_name=$TARGET_FILE" >> "$GITHUB_OUTPUT"
