@@ -160,7 +160,7 @@ function requestRange(url, start, end, maxBytes, redirects, requestContext) {
         headers: {
           Range: "bytes=" + start + "-" + end,
           "Accept-Encoding": "identity",
-          "User-Agent": "NuvioTV-Web/bitmap-subtitles"
+          "User-Agent": "NuvioTV/bitmap-subtitles"
         }
       },
       function (res) {

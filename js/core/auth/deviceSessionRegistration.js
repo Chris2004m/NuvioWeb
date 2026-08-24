@@ -6,8 +6,7 @@ import { SupabaseApi } from "../../data/remote/supabase/supabaseApi.js";
 import { AuthManager } from "./authManager.js";
 import { AuthState } from "./authState.js";
 
-const TV_CLIENT_NAME = "Nuvio TV";
-const WEB_CLIENT_NAME = "Nuvio Web";
+const CLIENT_NAME = "Nuvio TV";
 const INSTALLATION_ID_KEY = "nuvio_web_installation_id";
 const INSTALLATION_ID_PREFIX = "nuvio-web-";
 const INSTALLATION_ID_LENGTH = 32;
@@ -98,12 +97,7 @@ export function getOrCreateInstallationId(storage = globalThis.localStorage, ran
 }
 
 export function buildDeviceRegistrationParams({ installationId, clientVersion, metadata }) {
-  const platform = normalizedText(metadata?.platform).toLowerCase();
-  const clientName =
-    normalizedText(metadata?.clientName) ||
-    (platform.startsWith("tizen") || platform.startsWith("webos")
-      ? TV_CLIENT_NAME
-      : WEB_CLIENT_NAME);
+  const clientName = normalizedText(metadata?.clientName) || CLIENT_NAME;
   return {
     p_installation_id: installationId,
     p_client_name: clientName,
@@ -123,7 +117,7 @@ function readTizenMetadata(runtime, fallbackDeviceName) {
     // Model access is optional on wrappers and older TVs.
   }
   return {
-    clientName: TV_CLIENT_NAME,
+    clientName: CLIENT_NAME,
     deviceName: model || fallbackDeviceName || "Tizen TV",
     platform: version ? `Tizen ${version}` : "Tizen"
   };
@@ -164,7 +158,7 @@ async function readWebOsMetadata(runtime, fallbackDeviceName) {
   );
   const model = firstText(details.modelName, details.model);
   return {
-    clientName: TV_CLIENT_NAME,
+    clientName: CLIENT_NAME,
     deviceName: model || fallbackDeviceName || "webOS TV",
     platform: version ? `webOS ${version}` : "webOS"
   };
@@ -185,7 +179,7 @@ export async function resolveCurrentDeviceMetadata(platform = Platform, runtime 
     runtime.navigator?.platform
   );
   return {
-    clientName: WEB_CLIENT_NAME,
+    clientName: CLIENT_NAME,
     deviceName: fallbackDeviceName || "Web Browser",
     platform: browserPlatform ? `Web Browser ${browserPlatform}` : "Web Browser"
   };

@@ -929,7 +929,7 @@
 	
     <!-- UpdatePromptDialog -->
     <string name="update_title">Alkalmazásfrissítés</string>
-    <string name="update_installer_required">A TV-n lévő alkalmazás frissítéséhez használd a Nuvio WebTV Installert.</string>
+    <string name="update_installer_required">A TV-n lévő alkalmazás frissítéséhez használd a Nuvio TV Installert.</string>
     <string name="update_release_notes">Újdonságok</string>
     <string name="update_release_notes_unavailable">Nem érhető el kiadási leírás.</string>
     <string name="update_downloading">Frissítés letöltése</string>

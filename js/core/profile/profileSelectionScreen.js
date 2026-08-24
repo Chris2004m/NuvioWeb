@@ -36,7 +36,7 @@ const PROFILE_PIN_TEXT = {
   supportVerifyChange: "Enter the current 4-digit PIN before setting a new one.",
   supportVerifyRemove: "Enter the current 4-digit PIN to remove this lock.",
   mismatch: "PINs did not match. Enter a new PIN again.",
-  forgot: "Forgot PIN? Reset it from your Nuvio account on nuvio website.",
+  forgot: "Forgot PIN? Reset it from your Nuvio account page.",
   back: "Press back to cancel",
   verifying: "Verifying…",
   saving: "Saving…",

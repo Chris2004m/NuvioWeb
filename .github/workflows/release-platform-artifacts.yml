@@ -188,9 +188,9 @@ jobs:
         run: npm ci
 
       # The GitHub release WGT is the installer input, not the Seller Office
-      # package. NuvioWebTVInstaller signs it locally with the certificate
+      # package. The Nuvio TV Installer signs it locally with the certificate
       # associated with the target TV DUID before vd_appinstall.
-      - name: Package unsigned Tizen WGT for WebTV Installer
+      - name: Package unsigned Tizen WGT for Nuvio TV Installer
         env:
           NUVIO_REQUIRE_LOCAL_PROPERTIES: "1"
           TIZEN_INCLUDE_ENGINEFS_SERVICE: "1"
@@ -234,7 +234,7 @@ jobs:
       - name: Check out installer repo
         uses: actions/checkout@v4
         with:
-          repository: ${{ vars.INSTALLER_REPO || 'NuvioMedia/NuvioWebTVInstaller' }}
+          repository: ${{ vars.INSTALLER_REPO || 'NuvioMedia/NuvioTVSmart-Installer' }}
           token: ${{ secrets.REPO_DISPATCH_TOKEN || github.token }}
 
       - name: Set up Node.js
@@ -285,7 +285,7 @@ jobs:
       - name: Check out installer repo
         uses: actions/checkout@v4
         with:
-          repository: ${{ vars.INSTALLER_REPO || 'NuvioMedia/NuvioWebTVInstaller' }}
+          repository: ${{ vars.INSTALLER_REPO || 'NuvioMedia/NuvioTVSmart-Installer' }}
           token: ${{ secrets.REPO_DISPATCH_TOKEN || github.token }}
 
       - name: Set up Node.js
@@ -334,7 +334,7 @@ jobs:
       - name: Check out installer repo
         uses: actions/checkout@v4
         with:
-          repository: ${{ vars.INSTALLER_REPO || 'NuvioMedia/NuvioWebTVInstaller' }}
+          repository: ${{ vars.INSTALLER_REPO || 'NuvioMedia/NuvioTVSmart-Installer' }}
           token: ${{ secrets.REPO_DISPATCH_TOKEN || github.token }}
 
       - name: Set up Node.js

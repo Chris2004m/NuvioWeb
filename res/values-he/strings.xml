@@ -773,7 +773,7 @@
     <string name="layout_preview_row">הצג שורת תצוגה מקדימה</string>
     <string name="layout_preview_row_sub">הצג תצוגה מקדימה חלקית של השורה הבאה בפריסת הבית המודרני.</string>
     <string name="update_title">עדכון אפליקציה</string>
-    <string name="update_installer_required">יש להשתמש ב-Nuvio WebTV Installer כדי לעדכן את האפליקציה בטלוויזיה.</string>
+    <string name="update_installer_required">יש להשתמש ב-Nuvio TV Installer כדי לעדכן את האפליקציה בטלוויזיה.</string>
     <string name="update_release_notes">מה חדש</string>
     <string name="update_release_notes_unavailable">תיאור הגרסה אינו זמין.</string>
     <string name="update_downloading">מוריד עדכון</string>

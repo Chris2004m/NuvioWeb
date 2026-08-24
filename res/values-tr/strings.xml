@@ -1091,7 +1091,7 @@
     <string name="profile_addons">eklentiler</string>
     <string name="profile_plugins">uzantılar</string>
     <string name="profile_choose_avatar">Profil Resmi Seçin</string>
-    <string name="profile_custom_avatar_web_panel_note">Özel avatar URL\'leri Nuvio web panelinden yapılandırılabilir.</string>
+    <string name="profile_custom_avatar_web_panel_note">Özel avatar URL\'leri Nuvio hesap panelinden yapılandırılabilir.</string>
     <string name="profile_avatar_none_selected">Görsel seçilmedi</string>
     <string name="profile_avatar_focus_hint">İsmini görmek için resmin üzerine gelin</string>
     <string name="profile_avatar_category_all">Hepsi</string>
@@ -1134,7 +1134,7 @@
     <string name="profile_pin_overlay_set_support">Bu PIN, profil açılmadan önce her seferinde istenecek.</string>
     <string name="profile_pin_overlay_confirm_support">Kurulumu tamamlamak için aynı 4 rakamı tekrar girin.</string>
     <string name="profile_pin_overlay_mismatch">PINler eşleşmedi. Tekrar deneyin.</string>
-    <string name="profile_pin_overlay_forgot_hint">PIN mi unuttunuz? Nuvio web sitesinden sıfırlayabilirsiniz.</string>
+    <string name="profile_pin_overlay_forgot_hint">PIN mi unuttunuz? Nuvio hesap sayfasından sıfırlayabilirsiniz.</string>
     <string name="profile_pin_overlay_back_hint">İptal etmek için geri tuşuna basın</string>
     <string name="essential_addon_setup_title">Eklentileri ayarla</string>
     <string name="essential_addon_setup_subtitle">Yayın başlatmak için bir eklenti kurun. Daha fazlasını Eklentiler bölümünden ekleyebilirsiniz.</string>
@@ -1596,7 +1596,7 @@
     <string name="layout_selection_subtitle">Ana sayfa düzeninizi seçin</string>
     <string name="layout_selection_continue">Devam Et</string>
     <string name="update_title">Güncelleme</string>
-    <string name="update_installer_required">TV’nizdeki uygulamayı güncellemek için Nuvio WebTV Installer’ı kullanın.</string>
+    <string name="update_installer_required">TV’nizdeki uygulamayı güncellemek için Nuvio TV Installer’ı kullanın.</string>
     <string name="update_release_notes">Yenilikler</string>
     <string name="update_release_notes_unavailable">Sürüm açıklaması mevcut değil.</string>
     <string name="update_downloading">İndiriliyor</string>
@@ -2705,7 +2705,7 @@
     <string name="profile_editor_tab_avatar">Avatar</string>
     <string name="profile_editor_tab_background">Arka Plan</string>
     <string name="profile_choose_background">Profil Arka Planını Seçin</string>
-    <string name="profile_background_member_note">Özel arka plan URL'leri Nuvio web panelinden yapılandırılabilir.</string>
+    <string name="profile_background_member_note">Özel arka plan URL'leri Nuvio hesap panelinden yapılandırılabilir.</string>
     <string name="profile_background_normal">Normal</string>
     <string name="profile_background_custom">Özel</string>
     <string name="profile_avatar_category_supporter">Destekçi</string>
