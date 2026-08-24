@@ -73,6 +73,7 @@ const EPISODE_VIRTUALIZATION_MIN_WINDOW = 20;
 const EPISODE_VIRTUALIZATION_OVERSCAN = 8;
 const EPISODE_VIRTUALIZATION_DEFAULT_CARD_WIDTH = 540;
 const EPISODE_VIRTUALIZATION_DEFAULT_GAP = 34;
+const RTL_DETAIL_LANGUAGES = new Set(["ar", "he"]);
 // Match Android TV's LazyRow behavior: one focus step per key event and only
 // throttle native repeat events. Do not schedule a second move after keydown;
 // Samsung remotes can deliver keyup late or not at all.
@@ -81,6 +82,14 @@ const LOCAL_YOUTUBE_PROXY_URL = "youtube-proxy.html";
 
 function t(key, params = {}, fallback = key) {
   return I18n.t(key, params, { fallback });
+}
+
+function isRtlDetailLocale(locale = I18n.getLocale()) {
+  const language = String(locale || "")
+    .trim()
+    .toLowerCase()
+    .split(/[-_]/, 1)[0];
+  return RTL_DETAIL_LANGUAGES.has(language);
 }
 
 function detailImageLoadingMode() {
@@ -3108,12 +3117,13 @@ export const MetaDetailsScreen = {
   renderSeriesLayout(meta) {
     const backdrop = meta.background || meta.poster || "";
     const heroMarkup = this.renderSeriesHeroMarkup(meta);
+    const detailDirectionClass = isRtlDetailLocale() ? " detail-rtl" : "";
     if (!this.selectedRatingSeason || !this.seriesRatingsBySeason?.[this.selectedRatingSeason]) {
       this.selectedRatingSeason = this.selectedSeason || this.episodes?.[0]?.season || 1;
     }
 
     this.container.innerHTML = `
-      <div class="series-detail-shell${this.getTrailerShellStateClasses()}">
+      <div class="series-detail-shell${detailDirectionClass}${this.getTrailerShellStateClasses()}">
         <div class="series-detail-backdrop" data-backdrop-url="${escapeAttribute(backdrop || "")}"${backdrop ? ` style="background-image:url('${backdrop.replace(/'/g, "%27")}')"` : ""}></div>
         <div class="detail-trailer-layer"></div>
         <div class="detail-trailer-loading-spinner" aria-hidden="true">${renderLoadingIndicator({ className: "player-loading-spinner-ring" })}</div>
@@ -3440,9 +3450,10 @@ export const MetaDetailsScreen = {
   renderMovieLayout(meta) {
     const backdrop = meta.background || meta.poster || "";
     const heroMarkup = this.renderMovieHeroMarkup(meta);
+    const detailDirectionClass = isRtlDetailLocale() ? " detail-rtl" : "";
 
     this.container.innerHTML = `
-      <div class="series-detail-shell movie-detail-shell${this.getTrailerShellStateClasses()}">
+      <div class="series-detail-shell movie-detail-shell${detailDirectionClass}${this.getTrailerShellStateClasses()}">
         <div class="series-detail-backdrop" data-backdrop-url="${escapeAttribute(backdrop || "")}"${backdrop ? ` style="background-image:url('${backdrop.replace(/'/g, "%27")}')"` : ""}></div>
         <div class="detail-trailer-layer"></div>
         <div class="detail-trailer-loading-spinner" aria-hidden="true">${renderLoadingIndicator({ className: "player-loading-spinner-ring" })}</div>

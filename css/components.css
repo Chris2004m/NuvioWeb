@@ -20148,6 +20148,23 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
   );
 }
 
+.series-detail-shell.detail-rtl .series-detail-vignette {
+  /* Android TV mirrors the detail gradient for RTL locales. */
+  background: linear-gradient(
+    270deg,
+    rgb(var(--bg-color-rgb) / 1) 0%,
+    rgb(var(--bg-color-rgb) / 0.95) 7.8%,
+    rgb(var(--bg-color-rgb) / 0.84) 17.16%,
+    rgb(var(--bg-color-rgb) / 0.7) 28.08%,
+    rgb(var(--bg-color-rgb) / 0.52) 40.56%,
+    rgb(var(--bg-color-rgb) / 0.34) 51.48%,
+    rgb(var(--bg-color-rgb) / 0.18) 60.84%,
+    rgb(var(--bg-color-rgb) / 0.07) 70.2%,
+    rgb(var(--bg-color-rgb) / 0) 78%,
+    rgb(var(--bg-color-rgb) / 0) 100%
+  );
+}
+
 .legacy-tizen .series-detail-description {
   display: block;
   max-height: 150px;
