@@ -100,6 +100,7 @@ import {
   HERO_ROTATE_INTERVAL_MS,
   HOME_BACKGROUND_RENDER_DELAY_LEGACY_MS,
   HOME_BACKGROUND_RENDER_DELAY_MS,
+  HOME_ADDON_MANIFEST_TIMEOUT_MS,
   HOME_INITIAL_CATALOG_LOAD,
   HOME_LEGACY_HERO_BACKDROP_CROSSFADE_MS,
   HOME_LAYOUT_SEQUENCE,
@@ -4046,6 +4047,35 @@ export const HomeScreen = {
     );
   },
 
+  ensureAddonManifestSubscriptions() {
+    if (!this.unsubscribeAddonManifestChanges) {
+      this.unsubscribeAddonManifestChanges = addonRepository.onManifestCacheChanged(() => {
+        if (Router.getCurrent() !== "home") {
+          return;
+        }
+        void this.requestHomeBackgroundRefresh({
+          preserveReturnState: true,
+          reason: "manifest-cache"
+        }).catch((error) => {
+          console.warn("Home post-manifest refresh failed", error);
+        });
+      });
+    }
+    if (!this.unsubscribeInstalledAddonChanges) {
+      this.unsubscribeInstalledAddonChanges = addonRepository.onInstalledAddonsChanged(() => {
+        if (Router.getCurrent() !== "home") {
+          return;
+        }
+        void this.requestHomeBackgroundRefresh({
+          preserveReturnState: true,
+          reason: "addon-state"
+        }).catch((error) => {
+          console.warn("Home addon-state refresh failed", error);
+        });
+      });
+    }
+  },
+
   requestHomeBackgroundRefresh({ preserveReturnState = true, reason = "background" } = {}) {
     this.homeBackgroundRefreshPending = true;
     this.homeBackgroundRefreshPreserveReturnState = Boolean(
@@ -4077,7 +4107,8 @@ export const HomeScreen = {
         this.homeBackgroundRefreshReason = "";
         await this.loadData({
           background: true,
-          preserveReturnState: shouldPreserveReturnState
+          preserveReturnState: shouldPreserveReturnState,
+          refreshManifests: refreshReason !== "manifest-cache"
         });
         didRefresh = true;
         logHomePerf("backgroundRefresh", {
@@ -8436,6 +8467,7 @@ export const HomeScreen = {
     const returnFocusState = restoredRouteFocusState || storedReturnFocusState;
     ScreenUtils.show(this.container);
     this.ensureDelegatedEventsBound();
+    this.ensureAddonManifestSubscriptions();
     this.sidebarExpanded = false;
     this.sidebarOpenedByBack = false;
     this.pillIconOnly = Boolean(
@@ -8633,7 +8665,11 @@ export const HomeScreen = {
     });
   },
 
-  async loadData({ background = false, preserveReturnState = false } = {}) {
+  async loadData({
+    background = false,
+    preserveReturnState = false,
+    refreshManifests = true
+  } = {}) {
     const loadStart = HOME_PERF_DEBUG ? homePerfNow() : 0;
     const token = this.homeLoadToken;
     const preserveHomeReturnState = Boolean(background && preserveReturnState);
@@ -8684,7 +8720,12 @@ export const HomeScreen = {
     // slow addon or Trakt call never blocks catalog rows. The section paints
     // instantly from the snapshot hydrated in mount().
 
-    const addons = await addonRepository.getInstalledAddons();
+    const addons = refreshManifests
+      ? await addonRepository.getInstalledAddons({
+          staleWhileRevalidate: true,
+          timeoutMs: HOME_ADDON_MANIFEST_TIMEOUT_MS
+        })
+      : await addonRepository.getInstalledAddons({ cacheOnly: true });
     this.collections = CollectionsStore.get();
     const catalogDescriptors = [];
 
@@ -11459,6 +11500,14 @@ export const HomeScreen = {
     if (this.unsubscribeStartupSyncPullCompleted) {
       this.unsubscribeStartupSyncPullCompleted();
       this.unsubscribeStartupSyncPullCompleted = null;
+    }
+    if (this.unsubscribeAddonManifestChanges) {
+      this.unsubscribeAddonManifestChanges();
+      this.unsubscribeAddonManifestChanges = null;
+    }
+    if (this.unsubscribeInstalledAddonChanges) {
+      this.unsubscribeInstalledAddonChanges();
+      this.unsubscribeInstalledAddonChanges = null;
     }
     this.homeBackgroundRefreshPending = false;
     this.homeBackgroundRefreshPreserveReturnState = false;
