@@ -41,6 +41,7 @@ import {
   YOUTUBE_PROXY_URL
 } from "../../../config.js";
 import { I18n } from "../../../i18n/index.js";
+import { localizedGenreLabel } from "../../../i18n/genreLabels.js";
 import { NuvioDialog } from "../../components/nuvioDialog.js";
 import { renderLoadingIndicator } from "../../components/loadingIndicator.js";
 import { resolveMovieStreamIdentity } from "./movieStreamIdentity.js";
@@ -3250,7 +3251,7 @@ export const MetaDetailsScreen = {
 
   renderHeroMetaRows(meta) {
     const hasExternalRatings = hasMdbListRatings(meta?.mdbListRatings);
-    const genresText = normalizeGenreList(meta).join(" • ");
+    const genresText = normalizeGenreList(meta).map(localizedGenreLabel).join(" • ");
     const yearText = formatMovieReleaseDate(meta);
     const imdbValue = resolveImdbRating(meta);
     const imdbText =
@@ -7195,7 +7196,7 @@ export const MetaDetailsScreen = {
           <div class="series-stream-left">
             ${this.meta?.logo ? `<img src="${this.meta.logo}" class="series-stream-logo" alt="logo" />` : `<div class="series-stream-heading">${this.meta?.name || "Movie"}</div>`}
             <div class="series-stream-episode">${this.meta?.name || ""}</div>
-            <div class="series-stream-episode-title">${Array.isArray(this.meta?.genres) ? this.meta.genres.slice(0, 3).join(" • ") : ""}</div>
+            <div class="series-stream-episode-title">${Array.isArray(this.meta?.genres) ? this.meta.genres.slice(0, 3).map(localizedGenreLabel).join(" • ") : ""}</div>
           </div>
           <div class="series-stream-right">
             <div class="series-stream-filters">${filterTabs}</div>

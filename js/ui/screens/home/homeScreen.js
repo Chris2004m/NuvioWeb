@@ -40,6 +40,7 @@ import { isFastHorizontalNavigationEnabled } from "../../../platform/sharedKeys.
 import { LocalStore } from "../../../core/storage/localStore.js";
 import { TMDB_API_KEY, YOUTUBE_PROXY_URL } from "../../../config.js";
 import { I18n } from "../../../i18n/index.js";
+import { localizedGenreLabel } from "../../../i18n/genreLabels.js";
 import {
   buildWatchedTitleIdSet,
   isTitleItemWatched,
@@ -2077,7 +2078,9 @@ function buildHeroDisplayModel(hero, layoutMode) {
   }
   const year = extractYear(hero);
   const imdb = hideHomeHeroRatings() ? null : resolveImdbRating(hero);
-  const genres = Array.isArray(hero?.genres) ? hero.genres.filter(Boolean).slice(0, 3) : [];
+  const genres = Array.isArray(hero?.genres)
+    ? hero.genres.filter(Boolean).slice(0, 3).map(localizedGenreLabel)
+    : [];
   const typeLabel = formatContentTypeLabel(hero?.type || hero?.apiType || "movie", "movie");
   const isContinueWatchingHero = hero?.heroSource === "continueWatching";
   const metaPrimary = [];
@@ -2156,7 +2159,9 @@ export function buildModernHeroPresentation(hero) {
   }
 
   const isSeries = String(normalized.type || normalized.apiType || "").toLowerCase() === "series";
-  const genres = Array.isArray(normalized.genres) ? normalized.genres.filter(Boolean) : [];
+  const genres = Array.isArray(normalized.genres)
+    ? normalized.genres.filter(Boolean).map(localizedGenreLabel)
+    : [];
   const contentTypeText = formatContentTypeLabel(
     normalized.type || normalized.apiType || "movie",
     "movie"

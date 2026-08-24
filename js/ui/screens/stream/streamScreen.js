@@ -42,6 +42,7 @@ import { Environment } from "../../../platform/environment.js";
 import { getTvRuntimePerformanceProfile } from "../../../platform/tvRuntimePerformance.js";
 import { WebOsLunaService } from "../../../platform/webos/webosLunaService.js";
 import { I18n } from "../../../i18n/index.js";
+import { localizedGenreText } from "../../../i18n/genreLabels.js";
 import {
   matchStreamBadges,
   normalizeStreamBadgeChipColor,
@@ -2492,7 +2493,7 @@ export const StreamScreen = {
     const episodeLabel = normalizeEpisodeCode(this.params?.season, this.params?.episode);
     const detailLine = isSeries
       ? ""
-      : [String(this.params?.genres || "").trim(), String(this.params?.year || "").trim()]
+      : [localizedGenreText(this.params?.genres), String(this.params?.year || "").trim()]
           .filter(Boolean)
           .join(" • ");
     return { isSeries, title, subtitle, episodeLabel, detailLine };
