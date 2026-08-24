@@ -223,10 +223,11 @@ async function enterWithLastProfile({ restoreWebOsRoute = false } = {}) {
     StartupSyncService.enableProfileScopedSync();
     detailWatchedEnrichmentService.invalidateAllCache();
     await I18n.init();
-    const memberAccess = await MemberAccessRepository.getAccess().catch(() =>
-      MemberAccessRepository.getCurrentAccess()
-    );
+    const memberAccess = MemberAccessRepository.getCachedAccess();
     ThemeManager.apply({ enforceAccess: true, access: memberAccess });
+    void MemberAccessRepository.getAccess().catch((error) => {
+      console.warn("Profile member access refresh failed", error);
+    });
     I18n.apply();
     void preloadStreamBadgeImages().catch((error) => {
       console.warn("Stream badge image prerender failed", error);
