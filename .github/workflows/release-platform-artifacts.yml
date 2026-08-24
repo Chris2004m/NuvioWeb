@@ -65,7 +65,6 @@ jobs:
       - name: Package local webOS IPK
         env:
           TAG_NAME: ${{ needs.resolve-release-payload.outputs.tag }}
-          NUVIO_RELEASE_TAG: ${{ needs.resolve-release-payload.outputs.tag }}
           NUVIO_REQUIRE_LOCAL_PROPERTIES: "1"
         run: npm run package:webos
 
@@ -193,7 +192,6 @@ jobs:
       # associated with the target TV DUID before vd_appinstall.
       - name: Package unsigned Tizen WGT for WebTV Installer
         env:
-          NUVIO_RELEASE_TAG: ${{ needs.resolve-release-payload.outputs.tag }}
           NUVIO_REQUIRE_LOCAL_PROPERTIES: "1"
           TIZEN_INCLUDE_ENGINEFS_SERVICE: "1"
         run: npm run package:tizen

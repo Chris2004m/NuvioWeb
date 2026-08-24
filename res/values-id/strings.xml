@@ -540,7 +540,7 @@
     <string name="playback_player_ask">Tanya setiap kali</string>
     <string name="playback_internal_player_engine">Mesin Internal</string>
     <string name="playback_engine_exoplayer">ExoPlayer</string>
-    <string name="playback_engine_mvplayer">Libmpv (Beta)</string>
+    <string name="playback_engine_mvplayer">Libmpv</string>
     <string name="playback_auto_switch_internal_player_on_error">Ganti mesin otomatis saat error startup</string>
     <string name="playback_auto_switch_internal_player_on_error_sub">Jika stream gagal dimulai, ganti antara ExoPlayer dan libmpv secara otomatis.</string>
     <string name="playback_section_audio">Audio &amp; Video</string>

@@ -568,7 +568,7 @@
     <string name="playback_player_ask">Ask every time</string>
     <string name="playback_internal_player_engine">Internal Engine</string>
     <string name="playback_engine_exoplayer">ExoPlayer</string>
-    <string name="playback_engine_mvplayer">Libmpv (Beta)</string>
+    <string name="playback_engine_mvplayer">Libmpv</string>
     <string name="playback_auto_switch_internal_player_on_error">Auto-switch engine on startup error</string>
     <string name="playback_auto_switch_internal_player_on_error_sub">If stream startup fails, switch between ExoPlayer and libmpv automatically.</string>
     <string name="playback_external_forward_subtitles">Forward subtitles to external player</string>
@@ -2509,7 +2509,6 @@
     <string name="playback_net_connection_count_sub">Number of parallel TCP connections. Higher values increase memory usage and throughput but with diminishing returns.</string>
     <string name="playback_net_chunk_size">Chunk Size</string>
     <string name="playback_net_chunk_size_sub">Size of each download chunk per connection. Larger chunks reduce overhead but use more memory.</string>
-    <string name="common_beta">Beta</string>
     <string name="contributor_role_app_maintainer">Maintainer of this app</string>
     <string name="settings.dialogs.continueWatchingSortMode">Continue Watching Sort</string>
     <string name="player_playback_speed">Playback speed</string>

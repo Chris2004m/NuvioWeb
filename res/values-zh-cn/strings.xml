@@ -540,7 +540,7 @@
     <string name="playback_player_ask">每次询问</string>
     <string name="playback_internal_player_engine">内置引擎</string>
     <string name="playback_engine_exoplayer">ExoPlayer</string>
-    <string name="playback_engine_mvplayer">Libmpv (Beta)</string>
+    <string name="playback_engine_mvplayer">Libmpv</string>
     <string name="playback_auto_switch_internal_player_on_error">启动错误时自动切换引擎</string>
     <string name="playback_auto_switch_internal_player_on_error_sub">如果流启动失败，自动在 ExoPlayer 和 libmpv 之间切换。</string>
     <string name="playback_section_audio">音频和视频</string>

@@ -325,7 +325,7 @@
     <string name="playback_player_ask">السؤال في كل مرة</string>
     <string name="playback_internal_player_engine">محرك التشغيل الداخلي</string>
     <string name="playback_engine_exoplayer">ExoPlayer</string>
-    <string name="playback_engine_mvplayer">Libmpv (تجريبي)</string>
+    <string name="playback_engine_mvplayer">Libmpv</string>
     <string name="playback_auto_switch_internal_player_on_error">التبديل التلقائي لمحرك التشغيل عند خطأ بالتشغيل</string>
     <string name="playback_auto_switch_internal_player_on_error_sub">إذا فشل بدء التشغيل، سيتم التبديل بين ExoPlayer و libmpv تلقائياً.</string>
     <string name="playback_engine_exoplayer_desc">أفضل توافق مع ميزات Nuvio الحالية.</string>
@@ -1874,7 +1874,6 @@
     <string name="common.soon">قريباً</string>
     <string name="common.system">النظام</string>
     <string name="common_all">الكل</string>
-    <string name="common_beta">تجريبي</string>
     <string name="layout_cw_card_style">نمط البطاقة</string>
     <string name="layout_cw_sort_split_upcoming">صف منفصل للقادم</string>
     <string name="licenses_attributions_simkl_body">يتصل Nuvio بـ Simkl لمصادقة الحساب وقوائم المشاهدة وسجل المشاهدة وتقدم التشغيل والتسجيل التلقائي (Scrobbling). بيانات تتبع الأفلام والمسلسلات والأنمي مقدمة من Simkl. Nuvio غير تابع لـ Simkl ولا معتمد منه.</string>

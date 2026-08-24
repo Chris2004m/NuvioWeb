@@ -1152,7 +1152,7 @@
     <string name="advanced_clear_cw_cache_done">Cache rensad</string>
     <string name="playback_internal_player_engine">Intern motor</string>
     <string name="playback_engine_exoplayer">ExoPlayer</string>
-    <string name="playback_engine_mvplayer">Libmpv (Beta)</string>
+    <string name="playback_engine_mvplayer">Libmpv</string>
     <string name="playback_auto_switch_internal_player_on_error">Växla motor automatiskt vid startfel</string>
     <string name="playback_auto_switch_internal_player_on_error_sub">Om strömstart misslyckas, växla automatiskt mellan ExoPlayer och libmpv.</string>
     <string name="playback_resolution_matching_unsupported_sub">Skärmen rapporterar bara en upplösning; matchning kanske inte påverkar.</string>

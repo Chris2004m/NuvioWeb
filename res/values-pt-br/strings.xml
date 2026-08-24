@@ -541,7 +541,7 @@
     <string name="playback_player_ask">Sempre perguntar</string>
     <string name="playback_internal_player_engine">Player Interno</string>
     <string name="playback_engine_exoplayer">ExoPlayer</string>
-    <string name="playback_engine_mvplayer">Libmpv (Beta)</string>
+    <string name="playback_engine_mvplayer">Libmpv</string>
     <string name="playback_auto_switch_internal_player_on_error">Alternar motor em erro inicial</string>
     <string name="playback_auto_switch_internal_player_on_error_sub">Se falhar, alternar ExoPlayer/libmpv</string>
     <string name="playback_external_forward_subtitles">Enviar legendas ao player externo</string>
@@ -2458,7 +2458,6 @@
     <string name="playback_net_connection_count_sub">Número de conexões TCP paralelas. Valores maiores aumentam o uso de memória e a velocidade, mas com ganhos cada vez menores.</string>
     <string name="playback_net_chunk_size">Tamanho do bloco</string>
     <string name="playback_net_chunk_size_sub">Tamanho de cada bloco baixado por conexão. Blocos maiores reduzem a sobrecarga, mas usam mais memória.</string>
-    <string name="common_beta">Beta</string>
     <string name="contributor_role_app_maintainer">Mantenedor deste app</string>
     <string name="settings.layout.groups.continueWatching.title">Continuar assistindo</string>
     <string name="settings.layout.groups.continueWatching.subtitle">Configure os próximos episódios e a ordem</string>

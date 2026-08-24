@@ -11,18 +11,6 @@ async function readJson(filePath) {
   return JSON.parse(await readFile(filePath, "utf8"));
 }
 
-function resolveClientVersion(version) {
-  const releaseTag = String(process.env.NUVIO_RELEASE_TAG || process.env.GITHUB_REF_NAME || "")
-    .trim()
-    .replace(/^v/i, "");
-
-  if (releaseTag === version || releaseTag.startsWith(`${version}-`)) {
-    return releaseTag;
-  }
-
-  return version;
-}
-
 async function writeJson(filePath, value) {
   await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
@@ -32,8 +20,7 @@ export async function readAppMetadata() {
   const version = String(packageJson?.version || "0.0.0").trim() || "0.0.0";
   return {
     name: String(packageJson?.name || "").trim(),
-    version,
-    clientVersion: resolveClientVersion(version)
+    version
   };
 }
 

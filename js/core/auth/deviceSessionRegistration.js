@@ -1,4 +1,4 @@
-/* global __NUVIO_APP_VERSION__, __NUVIO_CLIENT_VERSION__ */
+/* global __NUVIO_APP_VERSION__ */
 
 import { Platform } from "../../platform/index.js";
 import { getTizenCapabilities } from "../../platform/tizen/tizenCapabilities.js";
@@ -46,9 +46,6 @@ function parseJsonObject(value) {
 }
 
 function readAppVersion() {
-  if (typeof __NUVIO_CLIENT_VERSION__ !== "undefined") {
-    return __NUVIO_CLIENT_VERSION__;
-  }
   return typeof __NUVIO_APP_VERSION__ !== "undefined" ? __NUVIO_APP_VERSION__ : "0.0.0";
 }
 

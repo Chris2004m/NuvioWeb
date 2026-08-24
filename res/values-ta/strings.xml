@@ -539,7 +539,7 @@
     <string name="playback_player_ask">ஒவ்வொரு முறையும் கேள்</string>
     <string name="playback_internal_player_engine">உள்ளமை engine</string>
     <string name="playback_engine_exoplayer">ExoPlayer</string>
-    <string name="playback_engine_mvplayer">Libmpv (பீட்டா)</string>
+    <string name="playback_engine_mvplayer">Libmpv</string>
     <string name="playback_auto_switch_internal_player_on_error">தொடக்க பிழையில் engine-ஐ தானாக மாற்று</string>
     <string name="playback_auto_switch_internal_player_on_error_sub">ஸ்ட்ரீம் தொடக்கம் தோல்வியடைந்தால் ExoPlayer மற்றும் libmpv இடையே தானாக மாறு.</string>
     <string name="playback_section_audio">ஒலி &amp; வீடியோ</string>
