@@ -1,4 +1,5 @@
 import { AuthState } from "./authState.js";
+import { clearAccountLocalData } from "./accountLocalDataReset.js";
 import { SessionStore } from "../storage/sessionStore.js";
 import { SUPABASE_ANON_KEY } from "../../config.js";
 import { fetchSupabaseAuth } from "./supabaseAuthFetch.js";
@@ -141,10 +142,18 @@ class AuthManagerClass {
   }
 
   async signOut() {
+    const wasSignedOut = this.state === AuthState.SIGNED_OUT;
     SessionStore.clear();
+    try {
+      clearAccountLocalData();
+    } catch (error) {
+      console.warn("Account-local data reset failed during sign out", error);
+    }
     this.cachedEffectiveUserId = null;
     this.cachedEffectiveUserSourceUserId = null;
-    this.setState(AuthState.SIGNED_OUT);
+    if (!wasSignedOut) {
+      this.setState(AuthState.SIGNED_OUT);
+    }
   }
 
   async refreshSessionIfNeeded({ force = false } = {}) {
