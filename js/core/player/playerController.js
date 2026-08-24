@@ -4694,7 +4694,10 @@ export const PlayerController = {
     } catch (_) {
       // ignore logging errors
     }
-    this.rememberPlaybackEngineAttempt(this.currentPlaybackUrl, preferredEngine, {
+    // Tizen may replace the requested source with a local EngineFS proxy URL.
+    // Keep failover attempts keyed by the stable source URL because PlayerScreen
+    // asks for alternatives using the original stream URL.
+    this.rememberPlaybackEngineAttempt(requestedUrl, preferredEngine, {
       reset: !forceEngine
     });
 
