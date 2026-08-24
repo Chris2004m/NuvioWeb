@@ -108,6 +108,15 @@ import {
 } from "../../../core/player/bitmapSubtitleDecoder.js";
 import { isAssSubtitle, convertAssBodyToVtt } from "../../../core/player/assSubtitle.js";
 import { createAssRenderer } from "../../../core/player/assRenderer.js";
+import {
+  SUBTITLE_VIRTUALIZATION_DEFAULT_ROW_EXTENT,
+  SUBTITLE_VIRTUALIZATION_MIN_WINDOW,
+  SUBTITLE_VIRTUALIZATION_OVERSCAN_PX,
+  SUBTITLE_VIRTUALIZATION_THRESHOLD,
+  buildSubtitleVirtualModel,
+  getSubtitleScrollTopForIndex,
+  getSubtitleVirtualWindow
+} from "./subtitleVirtualizer.js";
 
 const CLOCK_FORMATTER_CACHE = new Map();
 const LANGUAGE_DISPLAY_NAME_CACHE = new Map();
@@ -496,6 +505,7 @@ const PARENTAL_GUIDE_LINE_OUT_MS = 300;
 const PARENTAL_GUIDE_CONTAINER_OUT_DELAY_MS = 200;
 const PARENTAL_GUIDE_CONTAINER_OUT_MS = 200;
 const SKIP_INTRO_COUNTDOWN_MS = 10000;
+const SUBTITLE_VIRTUAL_ROW_GAP = 8;
 
 function t(key, params = {}, fallback = key) {
   return I18n.t(key, params, { fallback });
@@ -517,6 +527,16 @@ function cleanDisplayText(value) {
   return String(value ?? "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function stableSubtitleTextKey(value = "") {
+  const text = String(value ?? "");
+  let hash = 2166136261;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
 }
 
 function normalizeSubtitleRenderMode(value) {
@@ -1961,6 +1981,18 @@ function createTrackDialogCache() {
   };
 }
 
+function createSubtitleOptionVirtualState() {
+  return {
+    languageKey: "",
+    keys: [],
+    measuredExtents: new Map(),
+    model: null,
+    window: null,
+    scrollTop: 0,
+    initialized: false
+  };
+}
+
 function dbToGain(db = 0) {
   return Math.pow(10, Number(db || 0) / 20);
 }
@@ -2486,8 +2518,14 @@ export const PlayerScreen = {
     this.subtitleStyleRailIndex = 0;
     this.subtitleStyleControlSide = "minus";
     this.subtitleFocusedRail = "language";
+    this.subtitleFocusedLanguageKey = SUBTITLE_LANGUAGE_OFF_KEY;
     this.subtitleDialogScrollMode = "nearest";
     this.subtitleDialogScrollTimer = null;
+    this.subtitleDialogSession = null;
+    this.subtitleOptionFocusMemory = new Map();
+    this.subtitleOptionVirtualState = createSubtitleOptionVirtualState();
+    this.subtitleOptionVirtualMeasureTimer = null;
+    this.renderedSubtitleDialogMarkup = "";
     this.selectedSubtitleTrackIndex = -1;
     this.selectedEmbeddedSubtitleTrackIndex = -1;
     this.selectedAddonSubtitleId = null;
@@ -12302,6 +12340,7 @@ export const PlayerScreen = {
   refreshTrackDialogs() {
     this.invalidateTrackDialogCaches();
     this.syncTrackState();
+    this.syncSubtitleDialogSession();
     const audioTrackSetSignature = this.getStartupAudioTrackSetSignature();
     if (
       Environment.isWebOS() &&
@@ -12329,6 +12368,7 @@ export const PlayerScreen = {
     this.refreshSubtitleCueStyles();
     this.renderControlButtons();
     if (this.subtitleDialogVisible) {
+      this.restoreSubtitleDialogFocus();
       this.renderSubtitleDialog();
     }
     if (this.audioDialogVisible) {
@@ -12338,6 +12378,84 @@ export const PlayerScreen = {
 
   invalidateTrackDialogCaches() {
     this.trackDialogCache = createTrackDialogCache();
+    this.renderedSubtitleDialogMarkup = "";
+    this.resetSubtitleOptionVirtualState();
+  },
+
+  resetSubtitleOptionVirtualState() {
+    if (this.subtitleOptionVirtualMeasureTimer) {
+      clearTimeout(this.subtitleOptionVirtualMeasureTimer);
+      this.subtitleOptionVirtualMeasureTimer = null;
+    }
+    this.subtitleOptionVirtualState = createSubtitleOptionVirtualState();
+  },
+
+  getSubtitleDialogSourceSignature(subtitles = this.subtitles) {
+    return (Array.isArray(subtitles) ? subtitles : [])
+      .map((subtitle, index) => {
+        const id = subtitle?.id || subtitle?.url || `subtitle-${index}`;
+        return [
+          id,
+          subtitle?.url || "",
+          subtitle?.lang || subtitle?.language || subtitle?.languageCode || "",
+          subtitle?.addonName || ""
+        ]
+          .map((value) => String(value ?? "").trim())
+          .join("\u0001");
+      })
+      .join("\u0002");
+  },
+
+  beginSubtitleDialogSession() {
+    const subtitles = Array.isArray(this.subtitles) ? this.subtitles.slice() : [];
+    this.subtitleDialogSession = {
+      subtitles,
+      sourceSignature: this.getSubtitleDialogSourceSignature(subtitles)
+    };
+    this.subtitleOptionFocusMemory = new Map();
+    this.resetSubtitleOptionVirtualState();
+    this.renderedSubtitleDialogMarkup = "";
+  },
+
+  syncSubtitleDialogSession() {
+    if (!this.subtitleDialogVisible || !this.subtitleDialogSession) {
+      return false;
+    }
+    const subtitles = Array.isArray(this.subtitles) ? this.subtitles.slice() : [];
+    const sourceSignature = this.getSubtitleDialogSourceSignature(subtitles);
+    if (sourceSignature === this.subtitleDialogSession.sourceSignature) {
+      return false;
+    }
+    this.subtitleDialogSession = { subtitles, sourceSignature };
+    this.resetSubtitleOptionVirtualState();
+    return true;
+  },
+
+  restoreSubtitleDialogFocus() {
+    if (!this.subtitleDialogVisible) {
+      return;
+    }
+    const languages = this.getSubtitleLanguageRailItems();
+    const focusedLanguageIndex = languages.findIndex(
+      (item) => item.key === this.subtitleFocusedLanguageKey
+    );
+    if (focusedLanguageIndex >= 0) {
+      this.subtitleLanguageRailIndex = focusedLanguageIndex;
+    } else {
+      const selectedLanguageKey = this.getSelectedSubtitleLanguageKey();
+      const selectedLanguageIndex = languages.findIndex((item) => item.key === selectedLanguageKey);
+      this.subtitleLanguageRailIndex = Math.max(0, selectedLanguageIndex);
+      this.subtitleFocusedLanguageKey =
+        languages[this.subtitleLanguageRailIndex]?.key || SUBTITLE_LANGUAGE_OFF_KEY;
+    }
+    this.syncSubtitleOptionIndexForFocusedLanguage();
+  },
+
+  getSubtitleDialogSubtitles() {
+    if (this.subtitleDialogVisible && this.subtitleDialogSession) {
+      return this.subtitleDialogSession.subtitles;
+    }
+    return Array.isArray(this.subtitles) ? this.subtitles : [];
   },
 
   getStartupAudioTrackSetSignature() {
@@ -14922,8 +15040,9 @@ export const PlayerScreen = {
     }
 
     if (tab === "addons") {
-      if (this.subtitles.length) {
-        return this.subtitles.map((subtitle, index) => {
+      const subtitleSource = this.getSubtitleDialogSubtitles();
+      if (subtitleSource.length) {
+        return subtitleSource.map((subtitle, index) => {
           const subtitleId = subtitle.id || subtitle.url || `subtitle-${index}`;
           const display = formatSubtitleTrackDisplay(subtitle, index);
           return {
@@ -14938,6 +15057,7 @@ export const PlayerScreen = {
             selected: this.selectedAddonSubtitleId === subtitleId,
             trackIndex: null,
             subtitleIndex: index,
+            subtitleId,
             fallbackAddonSubtitle: true
           };
         });
@@ -15105,8 +15225,14 @@ export const PlayerScreen = {
       const trackId = cleanDisplayText(track?.id);
       const normalizedTrackId = normalizeSubtitleLanguageKey(trackId);
       const meta = trackId && normalizedTrackId !== languageKey ? trackId : "";
-      options.push({
+      const optionId = this.getSubtitleOptionStableId({
         id: entry.id,
+        sourceLabel: entry.secondary || track?.addonName,
+        sourceType: "addon",
+        entry
+      });
+      options.push({
+        id: optionId,
         languageKey,
         languageLabel,
         title: languageLabel,
@@ -15122,6 +15248,20 @@ export const PlayerScreen = {
 
     this.trackDialogCache.subtitleOptions = options;
     return options;
+  },
+
+  getSubtitleOptionStableId(entry) {
+    if (!entry || entry.sourceType !== "addon") {
+      return String(entry?.id || "subtitle-option");
+    }
+    const track = entry.entry?.track || entry.entry || {};
+    const identity = [
+      track?.addonName || entry.sourceLabel || "addon",
+      track?.id || "",
+      track?.url || "",
+      entry.id || ""
+    ].join("\u0001");
+    return `addon:${stableSubtitleTextKey(identity)}`;
   },
 
   getSelectedSubtitleLanguageKey() {
@@ -15230,12 +15370,27 @@ export const PlayerScreen = {
   },
 
   syncSubtitleOptionIndexForFocusedLanguage() {
-    const languages = this.getSubtitleLanguageRailItems();
-    const activeLanguage =
-      languages[this.subtitleLanguageRailIndex]?.key || SUBTITLE_LANGUAGE_OFF_KEY;
-    const options = this.getSubtitleOptionsForLanguage(activeLanguage);
+    const selectedLanguageKey = this.getSelectedSubtitleLanguageKey();
+    const options = this.getSubtitleOptionsForLanguage(selectedLanguageKey);
+    const rememberedOptionId = this.subtitleOptionFocusMemory?.get(selectedLanguageKey);
+    const rememberedIndex = options.findIndex((item) => item.id === rememberedOptionId);
     const selectedIndex = options.findIndex((item) => item.selected);
-    this.subtitleOptionRailIndex = Math.max(0, selectedIndex >= 0 ? selectedIndex : 0);
+    this.subtitleOptionRailIndex = Math.max(
+      0,
+      rememberedIndex >= 0 ? rememberedIndex : selectedIndex >= 0 ? selectedIndex : 0
+    );
+    this.rememberSubtitleOptionFocus(selectedLanguageKey, options, this.subtitleOptionRailIndex);
+  },
+
+  rememberSubtitleOptionFocus(languageKey, options = [], index = 0) {
+    const option = options[clamp(Number(index || 0), 0, Math.max(0, options.length - 1))];
+    if (!option?.id || !languageKey || languageKey === SUBTITLE_LANGUAGE_OFF_KEY) {
+      return;
+    }
+    if (!(this.subtitleOptionFocusMemory instanceof Map)) {
+      this.subtitleOptionFocusMemory = new Map();
+    }
+    this.subtitleOptionFocusMemory.set(languageKey, option.id);
   },
 
   selectSubtitleOption(option, { focusOptions = true } = {}) {
@@ -15251,11 +15406,13 @@ export const PlayerScreen = {
     const languageIndex = languages.findIndex((item) => item.key === option.languageKey);
     if (languageIndex >= 0) {
       this.subtitleLanguageRailIndex = languageIndex;
+      this.subtitleFocusedLanguageKey = option.languageKey;
     }
 
     const options = this.getSubtitleOptionsForLanguage(option.languageKey);
     const optionIndex = options.findIndex((item) => item.id === option.id);
     this.subtitleOptionRailIndex = Math.max(0, optionIndex >= 0 ? optionIndex : 0);
+    this.rememberSubtitleOptionFocus(option.languageKey, options, this.subtitleOptionRailIndex);
     if (focusOptions) {
       this.subtitleFocusedRail = "options";
     }
@@ -15272,8 +15429,12 @@ export const PlayerScreen = {
     if (!options.length) {
       return false;
     }
-    const firstAvailable = options.find((option) => !option?.disabled);
-    return this.selectSubtitleOption(firstAvailable, { focusOptions });
+    const rememberedOptionId = this.subtitleOptionFocusMemory?.get(languageKey);
+    const targetOption =
+      options.find((option) => option.selected && !option.disabled) ||
+      options.find((option) => option.id === rememberedOptionId && !option.disabled) ||
+      options.find((option) => !option?.disabled);
+    return this.selectSubtitleOption(targetOption, { focusOptions });
   },
 
   scrollSubtitleRailNodeIntoView(node, { center = false } = {}) {
@@ -15324,8 +15485,33 @@ export const PlayerScreen = {
         nextScrollTop = nodeBottom - Number(rail.clientHeight || 0) + margin;
       }
     }
+    // Legacy Chromium/Tizen can return a stale bounding rectangle directly
+    // after a keyed DOM update. The offset-parent coordinates are independent
+    // of that paint cycle and provide the same nearest-item fallback used by
+    // Android's LazyListState when the focused row is outside the viewport.
+    if (nextScrollTop === viewTop) {
+      const offsetTop = Number(node.offsetTop || 0);
+      const offsetBottom = offsetTop + Number(node.offsetHeight || 0);
+      const offsetViewBottom = viewTop + Number(rail.clientHeight || 0);
+      if (center) {
+        nextScrollTop =
+          offsetTop -
+          Math.max(0, (Number(rail.clientHeight || 0) - Number(node.offsetHeight || 0)) / 2);
+      } else if (offsetTop < viewTop + margin) {
+        nextScrollTop = offsetTop - margin;
+      } else if (offsetBottom > offsetViewBottom - margin) {
+        nextScrollTop = offsetBottom - Number(rail.clientHeight || 0) + margin;
+      }
+    }
     if (nextScrollTop !== viewTop) {
-      rail.scrollTop = Math.max(0, Math.min(maxScrollTop, Math.round(nextScrollTop)));
+      const nextValue = Math.max(0, Math.min(maxScrollTop, Math.round(nextScrollTop)));
+      rail.scrollTop = nextValue;
+      if (
+        rail.classList.contains("player-subtitle-options-rail") &&
+        this.subtitleOptionVirtualState?.window
+      ) {
+        this.subtitleOptionVirtualState.scrollTop = nextValue;
+      }
     }
   },
 
@@ -16324,6 +16510,7 @@ export const PlayerScreen = {
     this.cancelSeekPreview({ commit: false });
     this.syncTrackState();
     this.subtitleDialogVisible = true;
+    this.beginSubtitleDialogSession();
     this.audioDialogVisible = false;
     this.speedDialogVisible = false;
     this.sourcesPanelVisible = false;
@@ -16333,6 +16520,8 @@ export const PlayerScreen = {
       0,
       languageRail.findIndex((item) => item.key === selectedLanguageKey)
     );
+    this.subtitleFocusedLanguageKey =
+      languageRail[this.subtitleLanguageRailIndex]?.key || SUBTITLE_LANGUAGE_OFF_KEY;
     this.syncSubtitleOptionIndexForFocusedLanguage();
     this.subtitleStyleRailIndex = 0;
     this.subtitleStyleControlSide = "minus";
@@ -16351,8 +16540,12 @@ export const PlayerScreen = {
     this.flushPersistPlayerPresentationSettings();
     this.subtitleDialogVisible = false;
     this.subtitleFocusedRail = "language";
+    this.subtitleFocusedLanguageKey = SUBTITLE_LANGUAGE_OFF_KEY;
     this.subtitleStyleControlSide = "minus";
     this.renderSubtitleDialog();
+    this.subtitleDialogSession = null;
+    this.subtitleOptionFocusMemory = new Map();
+    this.resetSubtitleOptionVirtualState();
     this.updateModalBackdrop();
     this.resetControlsAutoHide();
   },
@@ -16624,8 +16817,9 @@ export const PlayerScreen = {
         clearTimeout(this.subtitleSelectionTimer);
         this.subtitleSelectionTimer = null;
       }
-      const subtitle = this.subtitles[entry.subtitleIndex];
-      const subtitleId = subtitle?.id || subtitle?.url || `subtitle-${entry.subtitleIndex}`;
+      const subtitle = entry.track || this.subtitles[entry.subtitleIndex];
+      const subtitleId =
+        entry.subtitleId || subtitle?.id || subtitle?.url || `subtitle-${entry.subtitleIndex}`;
       this.selectedAddonSubtitleId = subtitleId;
       this.selectedSubtitleTrackIndex = -1;
       this.selectedEmbeddedSubtitleTrackIndex = -1;
@@ -16635,7 +16829,15 @@ export const PlayerScreen = {
       this.refreshSubtitleCueStyles();
       this.renderControlButtons();
       this.renderSubtitleDialog();
-      void this.applyFallbackAddonSubtitle(entry.subtitleIndex, selectionToken);
+      const liveSubtitleIndex = this.subtitles.findIndex((candidate) => {
+        const candidateId = candidate?.id || candidate?.url || "";
+        return candidateId && candidateId === subtitleId;
+      });
+      void this.applyFallbackAddonSubtitle(
+        liveSubtitleIndex >= 0 ? liveSubtitleIndex : entry.subtitleIndex,
+        selectionToken,
+        subtitle
+      );
       return;
     }
 
@@ -16697,8 +16899,12 @@ export const PlayerScreen = {
     this.renderSubtitleDialog();
   },
 
-  async applyFallbackAddonSubtitle(subtitleIndex, selectionToken = this.subtitleSelectionToken) {
-    const subtitle = this.subtitles[subtitleIndex];
+  async applyFallbackAddonSubtitle(
+    subtitleIndex,
+    selectionToken = this.subtitleSelectionToken,
+    subtitleOverride = null
+  ) {
+    const subtitle = subtitleOverride || this.subtitles[subtitleIndex];
     if (!subtitle?.url) {
       return;
     }
@@ -16916,6 +17122,294 @@ export const PlayerScreen = {
     scheduleActivation();
   },
 
+  getSubtitleOptionKeys(options = []) {
+    const occurrences = new Map();
+    return options.map((item, index) => {
+      const baseKey = String(item?.id || `subtitle-option-${index}`);
+      const occurrence = Number(occurrences.get(baseKey) || 0);
+      occurrences.set(baseKey, occurrence + 1);
+      return occurrence ? `${baseKey}#${occurrence}` : baseKey;
+    });
+  },
+
+  renderSubtitleOptionItemMarkup(item, index, optionKey) {
+    return `
+            <div class="player-dialog-item focusable${item.selected ? " selected" : ""}${item.disabled ? " disabled" : ""}" data-subtitle-rail="options" data-subtitle-index="${index}" data-subtitle-key="${escapeAttribute(optionKey)}" aria-disabled="${item.disabled ? "true" : "false"}">
+              <div class="player-subtitle-option-copy">
+                <span class="player-subtitle-source-chip">${escapeHtml(item.sourceLabel || "")}</span>
+                <div class="player-dialog-item-main">${escapeHtml(item.title || "")}</div>
+                ${item.meta ? `<div class="player-dialog-item-sub">${escapeHtml(item.meta)}</div>` : ""}
+              </div>
+              <div class="player-dialog-item-check">${item.selected ? "&#10003;" : ""}</div>
+            </div>
+          `;
+  },
+
+  prepareSubtitleOptionVirtualState(languageKey, keys) {
+    const state = this.subtitleOptionVirtualState || createSubtitleOptionVirtualState();
+    const normalizedLanguageKey = String(languageKey || SUBTITLE_LANGUAGE_OFF_KEY);
+    const sameKeys =
+      state.languageKey === normalizedLanguageKey &&
+      state.keys.length === keys.length &&
+      state.keys.every((key, index) => key === keys[index]);
+    if (!sameKeys) {
+      state.languageKey = normalizedLanguageKey;
+      state.keys = keys.slice();
+      state.measuredExtents = new Map();
+      state.model = null;
+      state.window = null;
+      state.scrollTop = 0;
+      state.initialized = false;
+    }
+    this.subtitleOptionVirtualState = state;
+    return { state, languageChanged: !sameKeys };
+  },
+
+  getSubtitleVirtualRowGap() {
+    // components.css supplies the same 8px spacing through margin when the
+    // legacy runtime lacks flex-gap, so the logical model remains identical.
+    return SUBTITLE_VIRTUAL_ROW_GAP;
+  },
+
+  renderSubtitleOptionsMarkup(
+    options = [],
+    { subtitleLoadingVisible = false, languageKey = "" } = {}
+  ) {
+    if (!options.length) {
+      return subtitleLoadingVisible
+        ? `
+        <div class="player-dialog-empty player-dialog-loading">
+          ${renderLoadingIndicator()}
+          <span>${escapeHtml(t("subtitle_loading_builtin", {}, "Loading subtitle tracks..."))}</span>
+        </div>
+      `
+        : `<div class="player-dialog-empty">${escapeHtml(t("subtitle_none", {}, "No subtitles"))}</div>`;
+    }
+
+    const optionKeys = this.getSubtitleOptionKeys(options);
+    const { state, languageChanged } = this.prepareSubtitleOptionVirtualState(
+      languageKey,
+      optionKeys
+    );
+    if (options.length < SUBTITLE_VIRTUALIZATION_THRESHOLD) {
+      state.model = null;
+      state.window = null;
+      state.scrollTop = 0;
+      state.initialized = true;
+      return options
+        .map((item, index) => this.renderSubtitleOptionItemMarkup(item, index, optionKeys[index]))
+        .join("");
+    }
+
+    const rail = this.uiRefs?.subtitleDialog?.querySelector?.(".player-subtitle-options-rail");
+    const viewportHeight = Number(rail?.clientHeight || 0) || 720;
+    const estimatedExtent =
+      Number(state.model?.estimatedExtent || 0) || SUBTITLE_VIRTUALIZATION_DEFAULT_ROW_EXTENT;
+    const rowGap = this.getSubtitleVirtualRowGap();
+    const model = buildSubtitleVirtualModel(optionKeys, state.measuredExtents, estimatedExtent, {
+      rowGap
+    });
+    const preferredIndex = clamp(
+      Number(this.subtitleOptionRailIndex || 0),
+      0,
+      Math.max(0, options.length - 1)
+    );
+    let scrollTop = Number(state.scrollTop || 0);
+    if (languageChanged || !state.initialized) {
+      scrollTop = getSubtitleScrollTopForIndex(model, preferredIndex, {
+        currentScrollTop: 0,
+        viewportHeight,
+        padding: 16
+      });
+    }
+    if (
+      state.window &&
+      (preferredIndex < state.window.start || preferredIndex > state.window.end)
+    ) {
+      scrollTop = getSubtitleScrollTopForIndex(model, preferredIndex, {
+        currentScrollTop: scrollTop,
+        viewportHeight,
+        padding: 16
+      });
+    }
+    const virtualWindow = getSubtitleVirtualWindow(model, {
+      scrollTop,
+      viewportHeight,
+      overscanPx: SUBTITLE_VIRTUALIZATION_OVERSCAN_PX,
+      minWindow: SUBTITLE_VIRTUALIZATION_MIN_WINDOW
+    });
+    state.model = model;
+    state.window = virtualWindow;
+    state.scrollTop = scrollTop;
+    state.initialized = true;
+
+    const visibleItems = options
+      .slice(virtualWindow.start, virtualWindow.end + 1)
+      .map((item, relativeIndex) => {
+        const index = virtualWindow.start + relativeIndex;
+        return this.renderSubtitleOptionItemMarkup(item, index, optionKeys[index]);
+      })
+      .join("");
+    const topSpacerHeight = Math.max(0, Number(virtualWindow.topSpacer || 0) - rowGap);
+    const bottomSpacerHeight = Math.max(0, Number(virtualWindow.bottomSpacer || 0) - rowGap);
+    const topSpacer = topSpacerHeight
+      ? `<div class="player-subtitle-virtual-spacer" style="height:${Math.round(topSpacerHeight)}px" aria-hidden="true"></div>`
+      : "";
+    const bottomSpacer = bottomSpacerHeight
+      ? `<div class="player-subtitle-virtual-spacer" style="height:${Math.round(bottomSpacerHeight)}px" aria-hidden="true"></div>`
+      : "";
+    return `${topSpacer}${visibleItems}${bottomSpacer}`;
+  },
+
+  applySubtitleOptionVirtualScrollPosition() {
+    const state = this.subtitleOptionVirtualState;
+    const rail = this.uiRefs?.subtitleDialog?.querySelector?.(".player-subtitle-options-rail");
+    if (!state?.window || !(rail instanceof HTMLElement)) {
+      return;
+    }
+    rail.scrollTop = Math.max(0, Number(state.scrollTop || 0));
+  },
+
+  scheduleSubtitleOptionVirtualMeasurement() {
+    if (this.subtitleOptionVirtualMeasureTimer) {
+      clearTimeout(this.subtitleOptionVirtualMeasureTimer);
+      this.subtitleOptionVirtualMeasureTimer = null;
+    }
+    const options = this.getSubtitleOptionsForLanguage(this.getSelectedSubtitleLanguageKey());
+    if (!this.subtitleDialogVisible || options.length < SUBTITLE_VIRTUALIZATION_THRESHOLD) {
+      return;
+    }
+    this.subtitleOptionVirtualMeasureTimer = setTimeout(() => {
+      this.subtitleOptionVirtualMeasureTimer = null;
+      this.measureSubtitleOptionVirtualRows();
+    }, 0);
+  },
+
+  measureSubtitleOptionVirtualRows() {
+    const state = this.subtitleOptionVirtualState;
+    const rail = this.uiRefs?.subtitleDialog?.querySelector?.(".player-subtitle-options-rail");
+    if (
+      !this.subtitleDialogVisible ||
+      !state?.window ||
+      !(rail instanceof HTMLElement) ||
+      !state.model
+    ) {
+      return;
+    }
+    const measuredRows = Array.from(
+      rail.querySelectorAll("[data-subtitle-rail='options'][data-subtitle-key]")
+    );
+    let changed = false;
+    measuredRows.forEach((node) => {
+      const key = String(node.dataset?.subtitleKey || "");
+      const height = Number(node.offsetHeight || 0);
+      if (!key || !Number.isFinite(height) || height <= 0) {
+        return;
+      }
+      const previous = Number(state.measuredExtents.get(key) || 0);
+      if (Math.abs(previous - height) > 1) {
+        state.measuredExtents.set(key, height);
+        changed = true;
+      }
+    });
+    if (!changed) {
+      return;
+    }
+    const options = this.getSubtitleOptionsForLanguage(this.getSelectedSubtitleLanguageKey());
+    if (options.length < SUBTITLE_VIRTUALIZATION_THRESHOLD) {
+      return;
+    }
+    const optionKeys = this.getSubtitleOptionKeys(options);
+    const rowGap = this.getSubtitleVirtualRowGap();
+    const model = buildSubtitleVirtualModel(
+      optionKeys,
+      state.measuredExtents,
+      state.model.estimatedExtent,
+      { rowGap }
+    );
+    const viewportHeight = Number(rail.clientHeight || 0) || 720;
+    state.model = model;
+    state.scrollTop = getSubtitleScrollTopForIndex(model, this.subtitleOptionRailIndex, {
+      currentScrollTop: state.scrollTop,
+      viewportHeight,
+      padding: 16
+    });
+    state.window = getSubtitleVirtualWindow(model, {
+      scrollTop: state.scrollTop,
+      viewportHeight,
+      overscanPx: SUBTITLE_VIRTUALIZATION_OVERSCAN_PX,
+      minWindow: SUBTITLE_VIRTUALIZATION_MIN_WINDOW
+    });
+    this.renderSubtitleOptionsRailInPlace({ scheduleMeasurement: false, syncFocus: false });
+  },
+
+  renderSubtitleOptionsRailInPlace({ scheduleMeasurement = true, syncFocus = true } = {}) {
+    const dialog = this.uiRefs?.subtitleDialog;
+    const rail = dialog?.querySelector?.(".player-subtitle-options-rail");
+    if (!(rail instanceof HTMLElement) || !this.subtitleDialogVisible) {
+      return false;
+    }
+    const selectedLanguageKey = this.getSelectedSubtitleLanguageKey();
+    const options = this.getSubtitleOptionsForLanguage(selectedLanguageKey);
+    const subtitleLoadingVisible = Boolean(
+      this.subtitleLoading ||
+      this.manifestLoading ||
+      this.trackDiscoveryInProgress ||
+      (this.embeddedSubtitleLoading && this.canDiscoverEmbeddedSubtitleTracks())
+    );
+    rail.innerHTML = this.renderSubtitleOptionsMarkup(options, {
+      subtitleLoadingVisible,
+      languageKey: selectedLanguageKey
+    });
+    rail.classList.toggle(
+      "hidden",
+      selectedLanguageKey === SUBTITLE_LANGUAGE_OFF_KEY && !subtitleLoadingVisible
+    );
+    this.renderedSubtitleDialogMarkup = "";
+    this.applySubtitleOptionVirtualScrollPosition();
+    if (scheduleMeasurement) {
+      this.scheduleSubtitleOptionVirtualMeasurement();
+    }
+    if (syncFocus) {
+      this.syncSubtitleDialogFocusDom({ scroll: false });
+    }
+    return true;
+  },
+
+  syncSubtitleDialogFocusDom({ scroll = true } = {}) {
+    const dialog = this.uiRefs?.subtitleDialog;
+    if (!dialog || !this.subtitleDialogVisible) {
+      return false;
+    }
+    const railName = String(this.subtitleFocusedRail || "language");
+    const index =
+      railName === "language"
+        ? this.subtitleLanguageRailIndex
+        : railName === "options"
+          ? this.subtitleOptionRailIndex
+          : this.subtitleStyleRailIndex;
+    let selector = `.player-subtitle-${railName}-rail .player-dialog-item[data-subtitle-index="${Number(index || 0)}"]`;
+    let target = dialog.querySelector(selector);
+    if (!target && railName === "options") {
+      this.renderSubtitleOptionsRailInPlace({ syncFocus: false });
+      target = dialog.querySelector(selector);
+    }
+    if (!target) {
+      return false;
+    }
+
+    dialog.querySelectorAll(".focused").forEach((node) => node.classList.remove("focused"));
+    target.classList.add("focused");
+    if (railName === "style") {
+      const side = this.subtitleStyleControlSide === "plus" ? "plus" : "minus";
+      target.querySelector(`.player-dialog-step-${side}`)?.classList.add("focused");
+    }
+    if (scroll) {
+      this.scrollSubtitleRailNodeIntoView(target);
+    }
+    return true;
+  },
+
   renderSubtitleDialog() {
     const dialog = this.uiRefs?.subtitleDialog;
     if (!dialog) {
@@ -16925,6 +17419,7 @@ export const PlayerScreen = {
     dialog.classList.toggle("hidden", !this.subtitleDialogVisible);
     if (!this.subtitleDialogVisible) {
       dialog.innerHTML = "";
+      this.renderedSubtitleDialogMarkup = "";
       return;
     }
 
@@ -16934,9 +17429,10 @@ export const PlayerScreen = {
       0,
       Math.max(0, languages.length - 1)
     );
-    const activeLanguage =
+    this.subtitleFocusedLanguageKey =
       languages[this.subtitleLanguageRailIndex]?.key || SUBTITLE_LANGUAGE_OFF_KEY;
-    const options = this.getSubtitleOptionsForLanguage(activeLanguage);
+    const selectedLanguageKey = this.getSelectedSubtitleLanguageKey();
+    const options = this.getSubtitleOptionsForLanguage(selectedLanguageKey);
     this.subtitleOptionRailIndex = clamp(
       this.subtitleOptionRailIndex,
       0,
@@ -16954,19 +17450,15 @@ export const PlayerScreen = {
       this.trackDiscoveryInProgress ||
       (this.embeddedSubtitleLoading && this.canDiscoverEmbeddedSubtitleTracks())
     );
-    const showOptionsRail = activeLanguage !== SUBTITLE_LANGUAGE_OFF_KEY || subtitleLoadingVisible;
-    const focusedStyleSide = this.subtitleStyleControlSide === "plus" ? "plus" : "minus";
+    const showOptionsRail =
+      selectedLanguageKey !== SUBTITLE_LANGUAGE_OFF_KEY || subtitleLoadingVisible;
     const supportNotice = this.getSubtitleDialogSupportNotice();
-    const emptySubtitleOptionsMarkup = subtitleLoadingVisible
-      ? `
-        <div class="player-dialog-empty player-dialog-loading">
-          ${renderLoadingIndicator()}
-          <span>${escapeHtml(t("subtitle_loading_builtin", {}, "Loading subtitle tracks..."))}</span>
-        </div>
-      `
-      : `<div class="player-dialog-empty">${escapeHtml(t("subtitle_none", {}, "No subtitles"))}</div>`;
+    const optionsMarkup = this.renderSubtitleOptionsMarkup(options, {
+      subtitleLoadingVisible,
+      languageKey: selectedLanguageKey
+    });
 
-    dialog.innerHTML = `
+    const nextMarkup = `
       <div class="player-dialog-title">${escapeHtml(t("subtitle_dialog_title", {}, "Subtitles"))}</div>
       ${supportNotice ? `<div class="player-dialog-support-message" role="status">${escapeHtml(supportNotice)}</div>` : ""}
       <div class="player-subtitle-overlay-grid">
@@ -16974,7 +17466,7 @@ export const PlayerScreen = {
           ${languages
             .map(
               (item, index) => `
-          <div class="player-dialog-item focusable${item.selected ? " selected" : ""}${this.subtitleFocusedRail === "language" && index === this.subtitleLanguageRailIndex ? " focused" : ""}" data-subtitle-rail="language" data-subtitle-index="${index}">
+          <div class="player-dialog-item focusable${item.selected ? " selected" : ""}" data-subtitle-rail="language" data-subtitle-index="${index}" data-subtitle-key="${escapeAttribute(item.key)}">
               <div class="player-dialog-item-main">${escapeHtml(item.label)}${item.count > 0 ? `<span class="player-subtitle-language-count">${item.count}</span>` : ""}</div>
               <div class="player-dialog-item-sub">${item.key === SUBTITLE_LANGUAGE_OFF_KEY && subtitleLoadingVisible ? escapeHtml(t("subtitle_loading_builtin", {}, "Loading subtitle tracks...")) : ""}</div>
             </div>
@@ -16983,36 +17475,19 @@ export const PlayerScreen = {
             .join("")}
         </div>
         <div class="player-subtitle-rail player-subtitle-options-rail${showOptionsRail ? "" : " hidden"}">
-          ${
-            options.length
-              ? options
-                  .map(
-                    (item, index) => `
-            <div class="player-dialog-item focusable${item.selected ? " selected" : ""}${item.disabled ? " disabled" : ""}${this.subtitleFocusedRail === "options" && index === this.subtitleOptionRailIndex ? " focused" : ""}" data-subtitle-rail="options" data-subtitle-index="${index}" aria-disabled="${item.disabled ? "true" : "false"}">
-              <div class="player-subtitle-option-copy">
-                <span class="player-subtitle-source-chip">${escapeHtml(item.sourceLabel || "")}</span>
-                <div class="player-dialog-item-main">${escapeHtml(item.title || "")}</div>
-                ${item.meta ? `<div class="player-dialog-item-sub">${escapeHtml(item.meta)}</div>` : ""}
-              </div>
-              <div class="player-dialog-item-check">${item.selected ? "&#10003;" : ""}</div>
-            </div>
-          `
-                  )
-                  .join("")
-              : emptySubtitleOptionsMarkup
-          }
+          ${optionsMarkup}
         </div>
         <div class="player-subtitle-rail player-subtitle-style-rail${showOptionsRail ? "" : " hidden"}">
           ${styleItems
             .map(
               (item, index) => `
-            <div class="player-dialog-item player-dialog-style-item${item.disabled ? " disabled" : ""}${this.subtitleFocusedRail === "style" && index === this.subtitleStyleRailIndex ? " focused" : ""}" data-subtitle-rail="style" data-subtitle-index="${index}" aria-disabled="${item.disabled ? "true" : "false"}">
-              <button class="player-dialog-step player-dialog-step-minus${item.disabled ? "" : " focusable"}${!item.disabled && this.subtitleFocusedRail === "style" && index === this.subtitleStyleRailIndex && focusedStyleSide === "minus" ? " focused" : ""}" type="button" data-subtitle-style-action="decrease" data-subtitle-rail="style" data-subtitle-index="${index}" data-style-id="${escapeAttribute(item.id)}" aria-label="${escapeAttribute(`${item.label} -`)}"${item.disabled ? " disabled" : ""}>&#8722;</button>
+            <div class="player-dialog-item player-dialog-style-item${item.disabled ? " disabled" : ""}" data-subtitle-rail="style" data-subtitle-index="${index}" data-subtitle-key="${escapeAttribute(item.id)}" aria-disabled="${item.disabled ? "true" : "false"}">
+              <button class="player-dialog-step player-dialog-step-minus${item.disabled ? "" : " focusable"}" type="button" data-subtitle-style-action="decrease" data-subtitle-rail="style" data-subtitle-index="${index}" data-style-id="${escapeAttribute(item.id)}" aria-label="${escapeAttribute(`${item.label} -`)}"${item.disabled ? " disabled" : ""}>&#8722;</button>
               <div class="player-dialog-item-center">
                 <div class="player-dialog-item-main">${escapeHtml(item.label)}</div>
                 <div class="player-dialog-item-sub">${escapeHtml(item.value || "")}</div>
               </div>
-              <button class="player-dialog-step player-dialog-step-plus${item.disabled ? "" : " focusable"}${!item.disabled && this.subtitleFocusedRail === "style" && index === this.subtitleStyleRailIndex && focusedStyleSide === "plus" ? " focused" : ""}" type="button" data-subtitle-style-action="increase" data-subtitle-rail="style" data-subtitle-index="${index}" data-style-id="${escapeAttribute(item.id)}" aria-label="${escapeAttribute(`${item.label} +`)}"${item.disabled ? " disabled" : ""}>&#43;</button>
+              <button class="player-dialog-step player-dialog-step-plus${item.disabled ? "" : " focusable"}" type="button" data-subtitle-style-action="increase" data-subtitle-rail="style" data-subtitle-index="${index}" data-style-id="${escapeAttribute(item.id)}" aria-label="${escapeAttribute(`${item.label} +`)}"${item.disabled ? " disabled" : ""}>&#43;</button>
             </div>
           `
             )
@@ -17020,16 +17495,23 @@ export const PlayerScreen = {
         </div>
       </div>
     `;
+    const mounted = Boolean(dialog.querySelector(".player-subtitle-overlay-grid"));
+    if (!mounted || this.renderedSubtitleDialogMarkup !== nextMarkup) {
+      dialog.innerHTML = nextMarkup;
+      this.renderedSubtitleDialogMarkup = nextMarkup;
+    }
+    this.applySubtitleOptionVirtualScrollPosition();
+    this.syncSubtitleDialogFocusDom({ scroll: false });
     this.scrollSubtitleDialogIntoView();
     this.scheduleSubtitleDialogScrollIntoView();
+    this.scheduleSubtitleOptionVirtualMeasurement();
   },
 
   handleSubtitleDialogKey(event) {
     const keyCode = Number(event?.keyCode || 0);
     const languages = this.getSubtitleLanguageRailItems();
-    const activeLanguage =
-      languages[this.subtitleLanguageRailIndex]?.key || SUBTITLE_LANGUAGE_OFF_KEY;
-    const options = this.getSubtitleOptionsForLanguage(activeLanguage);
+    const selectedLanguageKey = this.getSelectedSubtitleLanguageKey();
+    const options = this.getSubtitleOptionsForLanguage(selectedLanguageKey);
     const styleItems = this.getSubtitleStyleControls();
     const styleItem = styleItems[this.subtitleStyleRailIndex];
 
@@ -17040,12 +17522,18 @@ export const PlayerScreen = {
           0,
           Math.max(0, languages.length - 1)
         );
-        this.syncSubtitleOptionIndexForFocusedLanguage();
+        this.subtitleFocusedLanguageKey =
+          languages[this.subtitleLanguageRailIndex]?.key || SUBTITLE_LANGUAGE_OFF_KEY;
       } else if (this.subtitleFocusedRail === "options") {
         this.subtitleOptionRailIndex = clamp(
           this.subtitleOptionRailIndex - 1,
           0,
           Math.max(0, options.length - 1)
+        );
+        this.rememberSubtitleOptionFocus(
+          selectedLanguageKey,
+          options,
+          this.subtitleOptionRailIndex
         );
       } else {
         this.subtitleStyleRailIndex = clamp(
@@ -17054,7 +17542,9 @@ export const PlayerScreen = {
           Math.max(0, styleItems.length - 1)
         );
       }
-      this.renderSubtitleDialog();
+      if (!this.syncSubtitleDialogFocusDom()) {
+        this.renderSubtitleDialog();
+      }
       return true;
     }
     if (keyCode === 40) {
@@ -17064,12 +17554,18 @@ export const PlayerScreen = {
           0,
           Math.max(0, languages.length - 1)
         );
-        this.syncSubtitleOptionIndexForFocusedLanguage();
+        this.subtitleFocusedLanguageKey =
+          languages[this.subtitleLanguageRailIndex]?.key || SUBTITLE_LANGUAGE_OFF_KEY;
       } else if (this.subtitleFocusedRail === "options") {
         this.subtitleOptionRailIndex = clamp(
           this.subtitleOptionRailIndex + 1,
           0,
           Math.max(0, options.length - 1)
+        );
+        this.rememberSubtitleOptionFocus(
+          selectedLanguageKey,
+          options,
+          this.subtitleOptionRailIndex
         );
       } else {
         this.subtitleStyleRailIndex = clamp(
@@ -17078,24 +17574,30 @@ export const PlayerScreen = {
           Math.max(0, styleItems.length - 1)
         );
       }
-      this.renderSubtitleDialog();
+      if (!this.syncSubtitleDialogFocusDom()) {
+        this.renderSubtitleDialog();
+      }
       return true;
     }
     if (keyCode === 37) {
       if (this.subtitleFocusedRail === "style") {
         if (this.subtitleStyleControlSide === "plus") {
           this.subtitleStyleControlSide = "minus";
-          this.renderSubtitleDialog();
+          this.syncSubtitleDialogFocusDom();
           return true;
         } else {
           this.subtitleFocusedRail = options.length ? "options" : "language";
           this.subtitleStyleControlSide = "minus";
-          this.renderSubtitleDialog();
+          if (!this.syncSubtitleDialogFocusDom()) {
+            this.renderSubtitleDialog();
+          }
           return true;
         }
       } else if (this.subtitleFocusedRail === "options") {
         this.subtitleFocusedRail = "language";
-        this.renderSubtitleDialog();
+        if (!this.syncSubtitleDialogFocusDom()) {
+          this.renderSubtitleDialog();
+        }
         return true;
       }
       return true;
@@ -17103,23 +17605,27 @@ export const PlayerScreen = {
     if (keyCode === 39) {
       if (
         this.subtitleFocusedRail === "language" &&
-        activeLanguage !== SUBTITLE_LANGUAGE_OFF_KEY &&
+        selectedLanguageKey !== SUBTITLE_LANGUAGE_OFF_KEY &&
         options.length
       ) {
         this.subtitleFocusedRail = "options";
-        this.renderSubtitleDialog();
+        if (!this.syncSubtitleDialogFocusDom()) {
+          this.renderSubtitleDialog();
+        }
         return true;
       }
       if (this.subtitleFocusedRail === "options") {
         this.subtitleFocusedRail = "style";
         this.subtitleStyleControlSide = "minus";
-        this.renderSubtitleDialog();
+        if (!this.syncSubtitleDialogFocusDom()) {
+          this.renderSubtitleDialog();
+        }
         return true;
       }
       if (this.subtitleFocusedRail === "style") {
         if (this.subtitleStyleControlSide === "minus") {
           this.subtitleStyleControlSide = "plus";
-          this.renderSubtitleDialog();
+          this.syncSubtitleDialogFocusDom();
           return true;
         }
       }
@@ -17171,7 +17677,9 @@ export const PlayerScreen = {
     if (this.subtitleFocusedRail === "style" && (keyCode === 10009 || keyCode === 461)) {
       this.subtitleFocusedRail = options.length ? "options" : "language";
       this.subtitleStyleControlSide = "minus";
-      this.renderSubtitleDialog();
+      if (!this.syncSubtitleDialogFocusDom()) {
+        this.renderSubtitleDialog();
+      }
       return true;
     }
     return (
@@ -20106,9 +20614,16 @@ export const PlayerScreen = {
       const index = Number(subtitleNode.dataset.subtitleIndex || 0);
       if (this.subtitleFocusedRail === "language") {
         this.subtitleLanguageRailIndex = index;
+        this.subtitleFocusedLanguageKey =
+          this.getSubtitleLanguageRailItems()[index]?.key || SUBTITLE_LANGUAGE_OFF_KEY;
         this.syncSubtitleOptionIndexForFocusedLanguage();
       } else if (this.subtitleFocusedRail === "options") {
         this.subtitleOptionRailIndex = index;
+        this.rememberSubtitleOptionFocus(
+          this.getSelectedSubtitleLanguageKey(),
+          this.getSubtitleOptionsForLanguage(this.getSelectedSubtitleLanguageKey()),
+          index
+        );
       } else {
         this.subtitleStyleRailIndex = index;
         this.subtitleStyleControlSide =
@@ -21149,6 +21664,10 @@ export const PlayerScreen = {
       if (this.subtitleDialogScrollTimer) {
         clearTimeout(this.subtitleDialogScrollTimer);
         this.subtitleDialogScrollTimer = null;
+      }
+      if (this.subtitleOptionVirtualMeasureTimer) {
+        clearTimeout(this.subtitleOptionVirtualMeasureTimer);
+        this.subtitleOptionVirtualMeasureTimer = null;
       }
 
       this.clearMediaSessionHandlers();
