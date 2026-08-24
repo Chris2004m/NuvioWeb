@@ -2,7 +2,7 @@
   "name": "nuvio-tv-smart",
   "private": true,
   "type": "module",
-  "version": "0.3.42",
+  "version": "0.3.43",
   "scripts": {
     "build": "node ./scripts/build.mjs",
     "prepare": "husky || true",
