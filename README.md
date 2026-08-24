@@ -8,7 +8,7 @@
     Bring your own sources. Nuvio turns them into a library with artwork, ratings, subtitles, and your place saved on every screen.
   </p>
 
-[Website](https://nuvio.tv) · [GitHub releases](https://github.com/NuvioMedia/NuvioWeb/releases/latest) · [Support Nuvio](https://nuvio.tv/support)
+[Website](https://nuvio.tv) · [GitHub releases](https://github.com/NuvioMedia/NuvioTVSmart/releases/latest) · [Support Nuvio](https://nuvio.tv/support)
 
 </div>
 
@@ -19,14 +19,14 @@ On Tizen 4, some advanced audio/subtitle features may be limited, and torrent/P2
 On Tizen 5+ and LG webOS, torrent/P2P uses only the bundled local companion service; no external torrent streaming server is configured or required.
 
 - [Nuvio TV Installer](https://github.com/NuvioMedia/NuvioTVSmart-Installer/releases/latest) for Windows, macOS, and Linux
-- [Samsung Tizen WGT](https://github.com/NuvioMedia/NuvioWeb/releases/latest) for manual installation
+- [Samsung Tizen WGT](https://github.com/NuvioMedia/NuvioTVSmart/releases/latest) for manual installation
 - [LG webOS Homebrew repository](https://raw.githubusercontent.com/NuvioMedia/NuvioTVWebOS/main/webosbrew/apps.json)
-- [LG webOS IPK](https://github.com/NuvioMedia/NuvioWeb/releases/latest) for manual installation
+- [LG webOS IPK](https://github.com/NuvioMedia/NuvioTVSmart/releases/latest) for manual installation
 
 ## Build from source
 
 ```bash
-git clone https://github.com/NuvioMedia/NuvioWeb.git NuvioTVSmart
+git clone https://github.com/NuvioMedia/NuvioTVSmart.git NuvioTVSmart
 cd NuvioTVSmart
 npm install
 npm run build
