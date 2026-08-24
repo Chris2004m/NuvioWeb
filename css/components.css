@@ -7871,6 +7871,11 @@ button:focus-visible {
   perspective: 2200px;
 }
 
+.supporters-membership-card {
+  background: #07080b;
+  color: #f6f7f9;
+}
+
 .supporters-brand-face {
   position: absolute;
   inset: 0;
@@ -7888,6 +7893,68 @@ button:focus-visible {
 .supporters-brand-front {
   transform: rotateY(0deg);
   opacity: 1;
+}
+
+.supporters-membership-front {
+  justify-content: space-between;
+  gap: min(1.67vw, 32px);
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.supporters-membership-front::-webkit-scrollbar {
+  display: none;
+}
+
+.supporters-membership-copy {
+  min-height: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: min(1.04vw, 20px);
+}
+
+.supporters-membership-copy .supporters-title {
+  color: #f6f7f9;
+}
+
+.supporters-membership-copy .supporters-secondary-copy {
+  color: rgb(255 255 255 / 0.65);
+}
+
+.supporters-membership-tier-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: min(0.42vw, 8px);
+}
+
+.supporters-membership-tier-line strong {
+  color: var(--focus-color);
+  font-weight: 700;
+}
+
+.supporters-membership-since {
+  color: rgb(255 255 255 / 0.52) !important;
+}
+
+.supporters-membership-error {
+  margin: 0;
+  color: #ff9e9e;
+  font-size: min(1.25vw, 24px);
+  line-height: min(1.67vw, 32px);
+}
+
+.supporters-membership-actions {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: min(0.52vw, 10px);
+}
+
+.supporters-membership-primary-button {
+  margin-top: 0;
 }
 
 .supporters-brand-back {
@@ -7947,7 +8014,8 @@ button:focus-visible {
 .supporters-donate-button,
 .supporters-back-button,
 .supporters-retry-button,
-.supporters-dialog-button {
+.supporters-dialog-button,
+.supporters-membership-refresh-button {
   appearance: none;
   border: none;
   min-height: min(
@@ -7976,6 +8044,18 @@ button:focus-visible {
   margin-top: auto;
 }
 
+.supporters-membership-refresh-button {
+  width: 100%;
+  background: transparent;
+  color: rgb(255 255 255 / 0.65);
+  text-align: center;
+}
+
+.supporters-membership-refresh-button:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
 .supporters-back-button,
 .supporters-dialog-button:not(.primary) {
   background: var(--card-bg);
@@ -7986,6 +8066,7 @@ button:focus-visible {
 .supporters-back-button.focused,
 .supporters-retry-button.focused,
 .supporters-dialog-button.focused,
+.supporters-membership-refresh-button.focused,
 .supporters-donate-button:focus-visible,
 .supporters-back-button:focus-visible,
 .supporters-retry-button:focus-visible,
@@ -7994,6 +8075,14 @@ button:focus-visible {
   transform: scale(1.04);
   background: var(--focus-color);
   color: var(--bg-color);
+}
+
+.supporters-membership-refresh-button.focused,
+.supporters-membership-refresh-button:focus-visible {
+  outline: none;
+  background: transparent;
+  color: var(--focus-color);
+  transform: scale(1.04);
 }
 
 .supporters-qr-copy {
