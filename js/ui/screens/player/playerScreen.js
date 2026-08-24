@@ -133,6 +133,7 @@ const WEBOS_REMOTE_MKV_AUDIO_GATE_MAX_WAIT_MS = 30000;
 const WEBOS_NATIVE_STARTUP_LOADING_EXTENSION_MS = 120000;
 const WEBOS_HLS_REBUFFER_STALL_TIMEOUT_MS = 20000;
 const WEBOS_HLS_PLAYBACK_RECOVERY_MAX_ATTEMPTS = 1;
+const SOURCE_NAVIGATION_REPEAT_THROTTLE_MS = 112;
 const EPISODE_PANEL_TRANSITION_MS = 220;
 const activeEngineFsPlaybackClaims = new Map();
 const deferredEngineFsRemovalTimers = new Map();
@@ -2597,6 +2598,7 @@ export const PlayerScreen = {
     this.completedSourceRequestKey = "";
     this.sourcePanelRenderFrame = null;
     this.sourcePanelRenderFrameType = null;
+    this.sourcesLastNavigationRepeatAt = 0;
     this.renderedSourcesMarkup = null;
     this.streamCandidatesByVideoId = new Map();
     this.streamCandidatesLoadPromises = new Map();
@@ -18739,6 +18741,7 @@ export const PlayerScreen = {
   openSourcesPanel({ forceReload = false } = {}) {
     this.cancelSeekPreview({ commit: false });
     this.sourcesPanelVisible = true;
+    this.sourcesLastNavigationRepeatAt = 0;
     this.subtitleDialogVisible = false;
     this.audioDialogVisible = false;
     this.speedDialogVisible = false;
@@ -18778,6 +18781,7 @@ export const PlayerScreen = {
 
   closeSourcesPanel() {
     this.sourcesPanelVisible = false;
+    this.sourcesLastNavigationRepeatAt = 0;
     this.sourcesError = "";
     this.renderSourcesPanel();
     this.updateModalBackdrop();
@@ -18877,6 +18881,28 @@ export const PlayerScreen = {
         this.renderEpisodePanel();
       }
     }, 120);
+  },
+
+  scrollSourcesCardIntoView(target, padding = 12) {
+    const list = target?.closest?.(".player-sources-list");
+    if (
+      !list ||
+      typeof list.getBoundingClientRect !== "function" ||
+      typeof target?.getBoundingClientRect !== "function"
+    ) {
+      return;
+    }
+
+    // Keep scrolling inside the source list. Native scrollIntoView() can pick
+    // the wrong ancestor on old Chromium after a full panel DOM replacement,
+    // leaving virtual focus on one card while the list runs to its end.
+    const listRect = list.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    if (targetRect.top < listRect.top + padding) {
+      list.scrollTop -= listRect.top + padding - targetRect.top;
+    } else if (targetRect.bottom > listRect.bottom - padding) {
+      list.scrollTop += targetRect.bottom - (listRect.bottom - padding);
+    }
   },
 
   renderSourcesPanel() {
@@ -18999,7 +19025,7 @@ export const PlayerScreen = {
 
     const focusedCard = panel.querySelector(".player-source-card.focused");
     if (focusedCard) {
-      focusedCard.scrollIntoView({ block: "nearest", inline: "nearest" });
+      this.scrollSourcesCardIntoView(focusedCard);
     }
   },
 
@@ -19029,7 +19055,7 @@ export const PlayerScreen = {
     });
     focusedNode.classList.add("focused");
     if (focusedNode.classList.contains("player-source-card")) {
-      focusedNode.scrollIntoView({ block: "nearest", inline: "nearest" });
+      this.scrollSourcesCardIntoView(focusedNode);
     }
   },
 
@@ -19143,6 +19169,17 @@ export const PlayerScreen = {
 
   async handleSourcesPanelKey(event) {
     const keyCode = Number(event?.keyCode || 0);
+    const isDirectionalKey = keyCode >= 37 && keyCode <= 40;
+    if (isDirectionalKey && event?.repeat) {
+      const now = Date.now();
+      if (
+        now - Number(this.sourcesLastNavigationRepeatAt || 0) <
+        SOURCE_NAVIGATION_REPEAT_THROTTLE_MS
+      ) {
+        return true;
+      }
+      this.sourcesLastNavigationRepeatAt = now;
+    }
     if (keyCode === 82) {
       await this.reloadSources();
       return true;
