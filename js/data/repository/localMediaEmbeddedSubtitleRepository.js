@@ -22,6 +22,17 @@ function getRequestErrorMessage(error, fallback) {
   return String(error?.errorText || error?.message || error?.errorCode || fallback);
 }
 
+function createRequestError(error, fallback) {
+  const wrapped = new Error(getRequestErrorMessage(error, fallback));
+  if (error?.errorCode != null) {
+    wrapped.code = String(error.errorCode);
+  }
+  if (error?.errorDetails != null) {
+    wrapped.details = error.errorDetails;
+  }
+  return wrapped;
+}
+
 function getTizenTx3gServiceUrl() {
   const baseUrl = String(TizenEngineFsService.getLocalBaseUrls?.()[0] || "").trim();
   if (!baseUrl) {
@@ -112,14 +123,12 @@ export const localMediaEmbeddedSubtitleRepository = {
         REQUEST_TIMEOUT_MS
       );
     } catch (error) {
-      throw new Error(getRequestErrorMessage(error, "Embedded text subtitle extraction failed"));
+      throw createRequestError(error, "Embedded text subtitle extraction failed");
     }
 
     const payload = result?.payload || result || {};
     if (payload.returnValue === false) {
-      throw new Error(
-        payload.errorText || payload.errorCode || "Embedded text subtitle extraction failed"
-      );
+      throw createRequestError(payload, "Embedded text subtitle extraction failed");
     }
     if (payload.bodyTruncated) {
       throw new Error("Embedded text subtitle response is too large");

@@ -2531,6 +2531,7 @@ export const PlayerScreen = {
     this.webOsEmbeddedTextSubtitleWindowStart = 0;
     this.webOsEmbeddedTextSubtitleWindowEnd = 0;
     this.webOsEmbeddedTextSubtitleLastErrorAt = 0;
+    this.webOsEmbeddedTextSubtitleFallbackUnavailable = false;
     this.embeddedTextSubtitleSupportNotice = "";
     this.embeddedBitmapSubtitleSupportNotice = "";
     this.subtitleCueStyleBindings = new Map();
@@ -13627,6 +13628,7 @@ export const PlayerScreen = {
     this.webOsEmbeddedTextSubtitleLastErrorAt = 0;
     if (dispose) {
       this.embeddedTextSubtitleSupportNotice = "";
+      this.webOsEmbeddedTextSubtitleFallbackUnavailable = false;
     }
     if (overlayActive) {
       this.clearHtmlSubtitleOverlay();
@@ -13658,6 +13660,14 @@ export const PlayerScreen = {
     if (!track) {
       return;
     }
+    const targetSeconds = Math.max(0, Number(timeSeconds) || 0);
+    const hasReusableWindow =
+      this.webOsEmbeddedTextSubtitleWindowEnd > this.webOsEmbeddedTextSubtitleWindowStart &&
+      targetSeconds >= this.webOsEmbeddedTextSubtitleWindowStart &&
+      targetSeconds < this.webOsEmbeddedTextSubtitleWindowEnd;
+    if (hasReusableWindow) {
+      return;
+    }
     this.webOsEmbeddedTextSubtitleLoadToken =
       Number(this.webOsEmbeddedTextSubtitleLoadToken || 0) + 1;
     this.webOsEmbeddedTextSubtitleLoading = false;
@@ -13672,7 +13682,8 @@ export const PlayerScreen = {
       this.destroyAssSubtitleRenderer();
       this.webOsEmbeddedTextSubtitleUsingAss = false;
     }
-    void this.loadWebOsEmbeddedTextSubtitleWindow(timeSeconds);
+    // AVPlay is still resolving the seek here. The seeked/timeupdate path
+    // starts the optional extractor after the native media request settles.
   },
 
   async loadWebOsEmbeddedTextSubtitleWindow(timeSeconds) {
@@ -13685,6 +13696,7 @@ export const PlayerScreen = {
       !sourceUrl ||
       !Number.isFinite(sourceTrackId) ||
       sourceTrackId <= 0 ||
+      this.webOsEmbeddedTextSubtitleFallbackUnavailable ||
       this.webOsEmbeddedTextSubtitleLoading
     ) {
       return false;
@@ -13829,8 +13841,24 @@ export const PlayerScreen = {
         this.webOsEmbeddedTextSubtitleTrack === track
       ) {
         this.webOsEmbeddedTextSubtitleLastErrorAt = Date.now();
+        if (error?.code === "RANGE_UNAVAILABLE") {
+          this.webOsEmbeddedTextSubtitleFallbackUnavailable = true;
+        }
+        if (Environment.isWebOS()) {
+          this.webOsEmbeddedTextSubtitleUsingAss = false;
+          this.webOsEmbeddedTextSubtitleUsingHtml = false;
+          this.clearHtmlSubtitleOverlay();
+          void Promise.resolve(
+            PlayerController.setWebOsEmbeddedSubtitleNativeVisibility?.(
+              true,
+              this.selectedEmbeddedSubtitleTrackIndex
+            )
+          ).catch(() => {});
+        }
         console.warn("Embedded text subtitle rendering failed", {
           trackNumber: sourceTrackId,
+          code: error?.code || "",
+          details: error?.details || null,
           error: error?.message || String(error || "")
         });
         if (isTx3gSubtitleTrack(track)) {

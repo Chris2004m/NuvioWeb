@@ -90,6 +90,7 @@ var textWindowCache = new Map();
 var textWindowRequests = new Map();
 var clusterRangeRequests = new Map();
 var activePgsWindowRequests = new Map();
+var activeTextWindowRequests = new Map();
 
 function bitmapSubtitleError(code, message, details) {
   var error = new Error(message);
@@ -726,7 +727,7 @@ function buildClusterRanges(metadata, positions) {
   });
 }
 
-async function loadClusterFrames(mediaUrl, metadata, track, positions) {
+async function loadClusterFrames(mediaUrl, metadata, track, positions, requestContext) {
   var clusterRanges = buildClusterRanges(
     metadata,
     Array.from(new Set(positions)).sort(function (left, right) {
@@ -737,7 +738,12 @@ async function loadClusterFrames(mediaUrl, metadata, track, positions) {
     clusterRanges,
     MAX_CONCURRENT_CLUSTER_REQUESTS,
     async function (range) {
-      var response = await requestClusterRange(mediaUrl, range.absoluteStart, range.clusterSize);
+      var response = await requestClusterRange(
+        mediaUrl,
+        range.absoluteStart,
+        range.clusterSize,
+        requestContext
+      );
       return parseCluster(response.buffer, track, metadata.timecodeScaleNs).map(function (frame) {
         return Object.assign(frame, { clusterPosition: range.clusterPosition });
       });
@@ -937,7 +943,13 @@ async function loadCueFrames(mediaUrl, metadata, track, cues, requestContext) {
     });
     frames.push.apply(
       frames,
-      await loadClusterFrames(mediaUrl, metadata, track, Array.from(fallbackClusters))
+      await loadClusterFrames(
+        mediaUrl,
+        metadata,
+        track,
+        Array.from(fallbackClusters),
+        requestContext
+      )
     );
   }
   frames.sort(compareFrames);
@@ -1279,8 +1291,11 @@ async function mapWithConcurrency(items, concurrency, iteratee) {
   return results;
 }
 
-function requestClusterRange(mediaUrl, absoluteStart, clusterSize) {
+function requestClusterRange(mediaUrl, absoluteStart, clusterSize, requestContext) {
   var absoluteEnd = absoluteStart + clusterSize - 1;
+  if (requestContext) {
+    return requestRange(mediaUrl, absoluteStart, absoluteEnd, MAX_CLUSTER_BYTES, 0, requestContext);
+  }
   var key = mediaUrl + "::" + absoluteStart + "::" + absoluteEnd;
   if (clusterRangeRequests.has(key)) return clusterRangeRequests.get(key);
   var request = requestRange(mediaUrl, absoluteStart, absoluteEnd, MAX_CLUSTER_BYTES);
@@ -1713,7 +1728,7 @@ async function buildWindow(mediaUrl, trackNumber, startSeconds, endSeconds, requ
     );
     loadedFrames.sort(compareFrames);
   } else {
-    loadedFrames = await loadClusterFrames(mediaUrl, metadata, track, positions);
+    loadedFrames = await loadClusterFrames(mediaUrl, metadata, track, positions, requestContext);
   }
   var frames = uniqueFramesInRange(loadedFrames, contextStartMs, endMs);
   var payload =
@@ -1729,7 +1744,14 @@ async function buildWindow(mediaUrl, trackNumber, startSeconds, endSeconds, requ
   });
 }
 
-async function buildTextWindow(mediaUrl, trackNumber, startSeconds, endSeconds, includeAssBody) {
+async function buildTextWindow(
+  mediaUrl,
+  trackNumber,
+  startSeconds,
+  endSeconds,
+  includeAssBody,
+  requestContext
+) {
   var metadata = await loadMetadata(mediaUrl);
   var track = metadata.tracks.find(function (entry) {
     return entry.number === trackNumber && isTextSubtitleTrack(entry);
@@ -1743,7 +1765,7 @@ async function buildTextWindow(mediaUrl, trackNumber, startSeconds, endSeconds, 
   var startMs = Math.max(0, Math.floor(startSeconds * 1000));
   var endMs = Math.max(startMs + 1000, Math.floor(endSeconds * 1000));
   var positions = selectClusterPositions(metadata, trackNumber, startMs, endMs);
-  var loadedFrames = await loadClusterFrames(mediaUrl, metadata, track, positions);
+  var loadedFrames = await loadClusterFrames(mediaUrl, metadata, track, positions, requestContext);
   var frames = selectTextFramesInRange(loadedFrames, startMs, endMs);
   var payload = buildTextSubtitleWindowPayload(track, frames, startMs, endMs, {
     includeAssBody: includeAssBody
@@ -1774,6 +1796,7 @@ async function getEmbeddedTextSubtitleWindow(options) {
   var normalizedWindow = normalizeWindowRange(startSeconds, endSeconds);
   var bucketStart = normalizedWindow.startSeconds;
   var bucketEnd = normalizedWindow.endSeconds;
+  var activeKey = mediaUrl + "::" + trackNumber;
   var cacheKey =
     mediaUrl +
     "::" +
@@ -1785,16 +1808,32 @@ async function getEmbeddedTextSubtitleWindow(options) {
     "::ass=" +
     (includeAssBody ? "1" : "0");
   var cached = getCached(textWindowCache, cacheKey);
-  if (cached) return cached;
+  if (cached) {
+    cancelActiveTextWindowRequest(activeKey);
+    return cached;
+  }
   if (textWindowRequests.has(cacheKey)) return textWindowRequests.get(cacheKey);
-  var request = buildTextWindow(mediaUrl, trackNumber, bucketStart, bucketEnd, includeAssBody);
+  cancelActiveTextWindowRequest(activeKey);
+  var requestContext = { cancelled: false, requests: new Set(), cacheKey: cacheKey };
+  activeTextWindowRequests.set(activeKey, requestContext);
+  var request = buildTextWindow(
+    mediaUrl,
+    trackNumber,
+    bucketStart,
+    bucketEnd,
+    includeAssBody,
+    requestContext
+  );
   textWindowRequests.set(cacheKey, request);
   try {
     var result = await request;
     setCached(textWindowCache, cacheKey, result, WINDOW_CACHE_TTL_MS, MAX_WINDOW_CACHE_ENTRIES);
     return result;
   } finally {
-    textWindowRequests.delete(cacheKey);
+    if (textWindowRequests.get(cacheKey) === request) textWindowRequests.delete(cacheKey);
+    if (activeTextWindowRequests.get(activeKey) === requestContext) {
+      activeTextWindowRequests.delete(activeKey);
+    }
   }
 }
 
@@ -1855,6 +1894,16 @@ function cancelActivePgsWindowRequest(activeKey) {
   activePgsWindowRequests.delete(activeKey);
 }
 
+function cancelActiveTextWindowRequest(activeKey) {
+  var requestContext = activeTextWindowRequests.get(activeKey);
+  if (!requestContext) return;
+  cancelRequestContext(requestContext);
+  if (requestContext.cacheKey) {
+    textWindowRequests.delete(requestContext.cacheKey);
+  }
+  activeTextWindowRequests.delete(activeKey);
+}
+
 function cancelRequestContext(requestContext) {
   requestContext.cancelled = true;
   requestContext.requests.forEach(function (activeRequest) {
@@ -1893,6 +1942,9 @@ function clearBitmapSubtitleCaches() {
   textWindowCache.clear();
   textWindowRequests.clear();
   clusterRangeRequests.clear();
+  Array.from(activeTextWindowRequests.keys()).forEach(function (activeKey) {
+    cancelActiveTextWindowRequest(activeKey);
+  });
   Array.from(activePgsWindowRequests.keys()).forEach(function (activeKey) {
     cancelActivePgsWindowRequest(activeKey);
   });
