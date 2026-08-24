@@ -4333,6 +4333,7 @@ button:focus-visible {
     auto-fill,
     minmax(var(--library-poster-width, 252px), var(--library-poster-width, 252px))
   );
+  grid-gap: 32px 24px; /* Legacy Chromium/Tizen 5 fallback; Android spacing is 16/12dp. */
   gap: 32px 24px;
   align-content: start;
 }
@@ -4355,7 +4356,7 @@ button:focus-visible {
 
 .library-grid-card.focused .library-grid-poster {
   border-color: var(--focus-color);
-  box-shadow: 0 0 0 4px var(--focus-color);
+  box-shadow: none; /* Android TV uses the inside focus border, not an outer halo. */
   background-color: var(--focus-bg);
 }
 
@@ -14331,6 +14332,16 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
   display: none;
 }
 
+.player-subtitle-virtual-spacer {
+  flex: 0 0 auto;
+  width: 1px;
+  pointer-events: none;
+}
+
+.no-flex-gap .player-subtitle-rail > * + * {
+  margin-top: 8px;
+}
+
 .player-audio-track-list {
   width: 444px;
   max-height: 100%;
@@ -20474,7 +20485,10 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
   transform: scale(1.005);
   border-color: var(--secondary-color);
   background: rgb(var(--card-bg-rgb) / 0.98);
+  /* Android TV keeps the focus border inside the card. The outer halo alone
+     can be clipped by the TV list/panel overflow while the list scrolls. */
   box-shadow:
+    inset 0 0 0 2px var(--secondary-color),
     0 0 0 5px var(--secondary-color),
     0 10px 28px rgba(0, 0, 0, 0.28);
 }
@@ -22228,6 +22242,14 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
     rgba(13, 13, 13, 0.16) 76%,
     rgba(13, 13, 13, 0) 100%
   );
+  background: linear-gradient(
+    90deg,
+    var(--bg-color) 0%,
+    rgba(var(--bg-color-rgb-legacy), 0.86) 22%,
+    rgba(var(--bg-color-rgb-legacy), 0.56) 46%,
+    rgba(var(--bg-color-rgb-legacy), 0.16) 76%,
+    rgba(var(--bg-color-rgb-legacy), 0) 100%
+  );
 }
 
 .legacy-tizen .home-screen-shell.home-layout-modern .home-modern-hero-media::after,
@@ -22239,6 +22261,14 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
     rgba(13, 13, 13, 0.25) 89.2%,
     rgba(13, 13, 13, 0.65) 95.5%,
     #0d0d0d 100%
+  );
+  background: linear-gradient(
+    180deg,
+    rgba(var(--bg-color-rgb-legacy), 0) 0%,
+    rgba(var(--bg-color-rgb-legacy), 0) 82%,
+    rgba(var(--bg-color-rgb-legacy), 0.25) 89.2%,
+    rgba(var(--bg-color-rgb-legacy), 0.65) 95.5%,
+    var(--bg-color) 100%
   );
 }
 
@@ -22270,6 +22300,14 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
     rgba(13, 13, 13, 0.42) 76%,
     rgba(13, 13, 13, 0) 100%
   );
+  background: linear-gradient(
+    90deg,
+    var(--bg-color) 0%,
+    rgba(var(--bg-color-rgb-legacy), 0.9) 22%,
+    rgba(var(--bg-color-rgb-legacy), 0.8) 46%,
+    rgba(var(--bg-color-rgb-legacy), 0.42) 76%,
+    rgba(var(--bg-color-rgb-legacy), 0) 100%
+  );
 }
 
 .legacy-tizen
@@ -22285,6 +22323,14 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
     rgba(13, 13, 13, 0.35) 74.8%,
     rgba(13, 13, 13, 0.75) 85.6%,
     #0d0d0d 100%
+  );
+  background: linear-gradient(
+    180deg,
+    rgba(var(--bg-color-rgb-legacy), 0) 0%,
+    rgba(var(--bg-color-rgb-legacy), 0) 64%,
+    rgba(var(--bg-color-rgb-legacy), 0.35) 74.8%,
+    rgba(var(--bg-color-rgb-legacy), 0.75) 85.6%,
+    var(--bg-color) 100%
   );
 }
 
