@@ -540,7 +540,7 @@
     <string name="playback_player_ask">Ερώτηση κάθε φορά</string>
     <string name="playback_internal_player_engine">Εσωτερική μηχανή</string>
     <string name="playback_engine_exoplayer">ExoPlayer</string>
-    <string name="playback_engine_mvplayer">Libmpv</string>
+    <string name="playback_engine_mvplayer">Libmpv (Beta)</string>
     <string name="playback_auto_switch_internal_player_on_error">Αυτόματη εναλλαγή μηχανής σε σφάλμα εκκίνησης</string>
     <string name="playback_auto_switch_internal_player_on_error_sub">Αν αποτύχει η εκκίνηση ροής, γίνεται αυτόματη εναλλαγή μεταξύ ExoPlayer και libmpv.</string>
     <string name="playback_section_audio">Ήχος &amp; Βίντεο</string>

@@ -1313,7 +1313,7 @@
     <string name="auto_skip_outro_sub">アウトロとアニメのエンディングを自動スキップ</string>
     <string name="playback_internal_player_engine">内部エンジン</string>
     <string name="playback_engine_exoplayer">ExoPlayer</string>
-    <string name="playback_engine_mvplayer">Libmpv</string>
+    <string name="playback_engine_mvplayer">Libmpv (ベータ)</string>
     <string name="playback_auto_switch_internal_player_on_error">起動エラー時にエンジンを自動切り替え</string>
     <string name="playback_auto_switch_internal_player_on_error_sub">ストリーム起動に失敗した場合、ExoPlayerとlibmpvを自動で切り替えます。</string>
     <string name="playback_external_forward_subtitles">外部プレーヤーに字幕を転送</string>

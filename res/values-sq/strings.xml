@@ -645,7 +645,7 @@
     <string name="playback_player_ask">Pyet çdo herë</string>
     <string name="playback_internal_player_engine">Motori i brendshëm</string>
     <string name="playback_engine_exoplayer">ExoPlayer</string>
-    <string name="playback_engine_mvplayer">Libmpv</string>
+    <string name="playback_engine_mvplayer">Libmpv (Beta)</string>
     <string name="playback_auto_switch_internal_player_on_error">Ndërro automatikisht motorin në rast gabimi gjatë nisjes</string>
     <string name="playback_auto_switch_internal_player_on_error_sub">Nëse nisja e transmetimit dështon, ndërro automatikisht midis ExoPlayer dhe libmpv.</string>
     <string name="playback_external_forward_subtitles">Dërgo titrat te luajtësi i jashtëm</string>

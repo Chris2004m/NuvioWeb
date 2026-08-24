@@ -325,7 +325,7 @@
     <string name="playback_player_ask">السؤال في كل مرة</string>
     <string name="playback_internal_player_engine">محرك التشغيل الداخلي</string>
     <string name="playback_engine_exoplayer">ExoPlayer</string>
-    <string name="playback_engine_mvplayer">Libmpv</string>
+    <string name="playback_engine_mvplayer">Libmpv (تجريبي)</string>
     <string name="playback_auto_switch_internal_player_on_error">التبديل التلقائي لمحرك التشغيل عند خطأ بالتشغيل</string>
     <string name="playback_auto_switch_internal_player_on_error_sub">إذا فشل بدء التشغيل، سيتم التبديل بين ExoPlayer و libmpv تلقائياً.</string>
     <string name="playback_engine_exoplayer_desc">أفضل توافق مع ميزات Nuvio الحالية.</string>

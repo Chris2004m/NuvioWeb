@@ -1113,7 +1113,7 @@
     <string name="auto_skip_outro_sub">דלג אוטומטית על קטעי סיום</string>
     <string name="playback_internal_player_engine">מנוע פנימי</string>
     <string name="playback_engine_exoplayer">ExoPlayer</string>
-    <string name="playback_engine_mvplayer">Libmpv</string>
+    <string name="playback_engine_mvplayer">Libmpv (בטא)</string>
     <string name="playback_auto_switch_internal_player_on_error">החלף מנוע אוטומטית בשגיאת הפעלה</string>
     <string name="playback_auto_switch_internal_player_on_error_sub">אם הפעלת ה-Stream נכשלת, החלף אוטומטית בין ExoPlayer ל-Libmpv</string>
     <string name="playback_external_forward_subtitles">העבר כתוביות לנגן חיצוני</string>

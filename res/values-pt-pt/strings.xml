@@ -541,7 +541,7 @@
     <string name="playback_player_ask">Perguntar sempre</string>
     <string name="playback_internal_player_engine">Motor interno</string>
     <string name="playback_engine_exoplayer">ExoPlayer</string>
-    <string name="playback_engine_mvplayer">Libmpv</string>
+    <string name="playback_engine_mvplayer">Libmpv (Beta)</string>
     <string name="playback_auto_switch_internal_player_on_error">Mudar automaticamente de motor em caso de erro ao iniciar</string>
     <string name="playback_auto_switch_internal_player_on_error_sub">Se o início do stream falhar, alterna entre o ExoPlayer e a libmpv automaticamente.</string>
     <string name="playback_external_forward_subtitles">Enviar legendas para o leitor externo</string>

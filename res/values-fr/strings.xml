@@ -429,7 +429,7 @@
     <string name="playback_player_ask">Demander à chaque fois</string>
     <string name="playback_internal_player_engine">Moteur interne</string>
     <string name="playback_engine_exoplayer">ExoPlayer</string>
-    <string name="playback_engine_mvplayer">Libmpv</string>
+    <string name="playback_engine_mvplayer">Libmpv (bêta)</string>
     <string name="playback_auto_switch_internal_player_on_error">Changement auto du moteur en cas d’erreur au démarrage</string>
     <string name="playback_auto_switch_internal_player_on_error_sub">Si le démarrage du flux échoue, bascule automatiquement entre ExoPlayer et libmpv.</string>
     <string name="playback_external_forward_subtitles">Transférer les sous-titres au lecteur externe</string>
