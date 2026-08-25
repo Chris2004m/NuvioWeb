@@ -1268,45 +1268,51 @@ function buildAssDialogueLine(track, frame, nextFrame) {
     fields[2] = formatAssTimestamp(endMs);
     return "Dialogue: " + fields.slice(0, 9).concat(fields.slice(9).join(",")).join(",");
   }
-  // Metadata detection is authoritative: only an ASS track's leading fields
-  // are real ASS Style/Name/Margins/Effect (Layer-less short form places
-  // Style at index 2). Preserve them there; ass.js falls back to Default for
-  // any style name not present in the header. \pos/\an tags in Text are kept.
+  // Preserve leading ASS fields only for the two shapes that carry them.
+  // Metadata alone is not enough: webOS can expose ordinary cue text as a
+  // comma-separated row, and treating its first fields as Style/Name/Margins
+  // duplicates that prefix in the generated Dialogue line.
+  var hasShortTiming = fields.length >= 9 && isAssTimestamp(fields[0]) && isAssTimestamp(fields[1]);
+  var hasPositionalShape =
+    isAssTextSubtitleTrack(track) &&
+    fields.length >= 9 &&
+    /^-?\d+$/.test(String(fields[0] || "").trim()) &&
+    /^-?\d+$/.test(String(fields[1] || "").trim()) &&
+    /^-?\d+$/.test(String(fields[4] || "").trim()) &&
+    /^-?\d+$/.test(String(fields[5] || "").trim()) &&
+    /^-?\d+$/.test(String(fields[6] || "").trim()) &&
+    String(fields[7] || "").trim() === "";
+  var hasStructuredFields = hasShortTiming || hasPositionalShape;
   var assText = text.replace(/\r?\n/g, "\\N");
-  if (isAssTextSubtitleTrack(track) && fields.length >= 9) {
-    var style = String(fields[2] || "").trim() || "Default";
-    var name = String(fields[3] || "").trim();
-    var marginL = String(fields[4] || "").trim() || "0";
-    var marginR = String(fields[5] || "").trim() || "0";
-    var marginV = String(fields[6] || "").trim() || "0";
-    var effect = String(fields[7] || "").trim();
-    return (
-      "Dialogue: 0," +
-      formatAssTimestamp(startMs) +
-      "," +
-      formatAssTimestamp(endMs) +
-      "," +
-      style +
-      "," +
-      name +
-      "," +
-      marginL +
-      "," +
-      marginR +
-      "," +
-      marginV +
-      "," +
-      effect +
-      "," +
-      assText
-    );
-  }
+  // Positional form carries the ASS Layer in fields[0]; short SSA has none,
+  // so default it to 0. Preserve a non-zero layer to keep stacking order.
+  var layer = hasPositionalShape ? String(fields[0] || "").trim() || "0" : "0";
+  var style = hasStructuredFields ? String(fields[2] || "").trim() || "Default" : "Default";
+  var name = hasStructuredFields ? String(fields[3] || "").trim() : "";
+  var marginL = hasStructuredFields ? String(fields[4] || "").trim() || "0" : "0";
+  var marginR = hasStructuredFields ? String(fields[5] || "").trim() || "0" : "0";
+  var marginV = hasStructuredFields ? String(fields[6] || "").trim() || "0" : "0";
+  var effect = hasStructuredFields ? String(fields[7] || "").trim() : "";
   return (
-    "Dialogue: 0," +
+    "Dialogue: " +
+    layer +
+    "," +
     formatAssTimestamp(startMs) +
     "," +
     formatAssTimestamp(endMs) +
-    ",Default,,0,0,0,," +
+    "," +
+    style +
+    "," +
+    name +
+    "," +
+    marginL +
+    "," +
+    marginR +
+    "," +
+    marginV +
+    "," +
+    effect +
+    "," +
     assText
   );
 }
