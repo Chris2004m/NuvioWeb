@@ -134,6 +134,7 @@ const WEBOS_REMOTE_MKV_AUDIO_GATE_MAX_WAIT_MS = 30000;
 const WEBOS_NATIVE_STARTUP_LOADING_EXTENSION_MS = 120000;
 const WEBOS_HLS_REBUFFER_STALL_TIMEOUT_MS = 20000;
 const WEBOS_HLS_PLAYBACK_RECOVERY_MAX_ATTEMPTS = 1;
+const TIZEN_NATIVE_HLS_STARTUP_STALL_TIMEOUT_MS = 22000;
 const SOURCE_NAVIGATION_REPEAT_THROTTLE_MS = 112;
 const EPISODE_PANEL_TRANSITION_MS = 220;
 const activeEngineFsPlaybackClaims = new Map();
@@ -12046,6 +12047,12 @@ export const PlayerScreen = {
   getPlaybackStallTimeoutMs({ startup = false } = {}) {
     const playbackEngine = String(PlayerController.playbackEngine || "");
     if (startup) {
+      if (Environment.isTizen() && playbackEngine === "native-hls") {
+        // The native-hls path is the first fallback after AVPlay fails on the
+        // affected Tizen TVs. Bound only this startup fallback; keep hls.js,
+        // AVPlay and post-first-frame buffering on their existing policies.
+        return TIZEN_NATIVE_HLS_STARTUP_STALL_TIMEOUT_MS;
+      }
       if (Environment.isTizen() || Environment.isWebOS()) {
         return playbackEngine.endsWith("avplay") ? 60000 : 45000;
       }
