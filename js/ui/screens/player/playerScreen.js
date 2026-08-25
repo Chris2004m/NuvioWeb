@@ -135,6 +135,9 @@ const WEBOS_NATIVE_STARTUP_LOADING_EXTENSION_MS = 120000;
 const WEBOS_HLS_REBUFFER_STALL_TIMEOUT_MS = 20000;
 const WEBOS_HLS_PLAYBACK_RECOVERY_MAX_ATTEMPTS = 1;
 const TIZEN_NATIVE_HLS_STARTUP_STALL_TIMEOUT_MS = 22000;
+const PLAYBACK_ENGINE_VALIDATION_WINDOW_MS = 30000;
+const PLAYBACK_ENGINE_VALIDATION_MAX_PROGRESS_GAP_SECONDS = 15;
+const POST_VALIDATION_SAME_ENGINE_RECOVERY_MAX_ATTEMPTS = 1;
 const SOURCE_NAVIGATION_REPEAT_THROTTLE_MS = 112;
 const EPISODE_PANEL_TRANSITION_MS = 220;
 const activeEngineFsPlaybackClaims = new Map();
@@ -2744,6 +2747,14 @@ export const PlayerScreen = {
     this.failedPlaybackUrls = new Set();
     this.failedPlaybackStreamIds = new Set();
     this.playbackStallTimer = null;
+    this.playbackEngineValidationEngine = "";
+    this.playbackEngineValidationStartedAt = 0;
+    this.playbackEngineValidationStartSeconds = null;
+    this.playbackEngineValidationLastSeconds = null;
+    this.playbackEngineValidationProgressSeconds = 0;
+    this.playbackEngineValidated = false;
+    this.postValidationRecoveryValidationActive = false;
+    this.postValidationSameEngineRecoveryAttempts = 0;
     this.engineFsStartupRetryTimer = null;
     this.engineFsStartupErrorRetries = 0;
     this.engineFsStallExtensions = 0;
@@ -5469,6 +5480,7 @@ export const PlayerScreen = {
     this.paused = false;
     this.playbackRecoveryActive = false;
     this.playbackRecoveryAttempts = 0;
+    this.resetPlaybackEngineValidation();
     this.hasPresentedPlaybackFrame = false;
     this.startupPlaybackBaselineSeconds = null;
     this.startupPlaybackHasAdvanced = false;
@@ -9016,6 +9028,11 @@ export const PlayerScreen = {
       if (this.isStartupErrorVisible()) {
         return;
       }
+      if (this.hasPresentedPlaybackFrame && !this.playbackEngineValidated) {
+        this.resetPlaybackEngineValidation();
+      } else if (this.postValidationRecoveryValidationActive) {
+        this.resetPostValidationRecoveryValidationWindow();
+      }
       const currentSeconds = this.getPlaybackCurrentSeconds();
       // AVPlay does not provide a browser-native buffering UI. Keep the
       // startup overlay hidden after the first frame, but expose the same
@@ -9058,6 +9075,7 @@ export const PlayerScreen = {
       }
       this.playbackRecoveryActive = false;
       this.playbackRecoveryAttempts = 0;
+      this.beginPlaybackEngineValidation();
       this.bufferingActive = false;
       this.clearBufferingSpinnerTimer();
       if (this.seekLoading) {
@@ -9161,6 +9179,11 @@ export const PlayerScreen = {
           : Boolean(video.ended);
       if (ended) {
         return;
+      }
+      if (this.hasPresentedPlaybackFrame && !this.playbackEngineValidated) {
+        this.resetPlaybackEngineValidation();
+      } else if (this.postValidationRecoveryValidationActive) {
+        this.resetPostValidationRecoveryValidationWindow();
       }
       // Immediate scrobble pause
       if (TrackingScrobbleService.isEnabled()) {
@@ -9267,6 +9290,11 @@ export const PlayerScreen = {
     const onSeeked = () => {
       if (this.isStartupErrorVisible()) {
         return;
+      }
+      if (this.hasPresentedPlaybackFrame && !this.playbackEngineValidated) {
+        this.resetPlaybackEngineValidation();
+      } else if (this.postValidationRecoveryValidationActive) {
+        this.resetPostValidationRecoveryValidationWindow();
       }
       this.attemptPendingPlaybackRestore();
       this.completeSeekLoadingIfReady();
@@ -10222,6 +10250,7 @@ export const PlayerScreen = {
       return false;
     }
     this.hasPresentedPlaybackFrame = true;
+    this.beginPlaybackEngineValidation();
     this.warmBitmapSubtitleSharedResources();
     if (!this.startupTrackPreferenceReady) {
       // Some P2P / engineFs startups expose tracks before the first real frame
@@ -11298,6 +11327,9 @@ export const PlayerScreen = {
     const preservePresentedPlaybackFrame = Boolean(
       preservePlaybackRecoveryState && this.hasPresentedPlaybackFrame
     );
+    if (!preservePresentedPlaybackFrame) {
+      this.resetPlaybackEngineValidation();
+    }
     if (!preservePlaybackRecoveryState) {
       this.playbackRecoveryActive = false;
       this.playbackRecoveryAttempts = 0;
@@ -11772,6 +11804,183 @@ export const PlayerScreen = {
     }
   },
 
+  resetPlaybackEngineValidation() {
+    this.playbackEngineValidationEngine = "";
+    this.playbackEngineValidationStartedAt = 0;
+    this.playbackEngineValidationStartSeconds = null;
+    this.playbackEngineValidationLastSeconds = null;
+    this.playbackEngineValidationProgressSeconds = 0;
+    this.playbackEngineValidated = false;
+    this.postValidationRecoveryValidationActive = false;
+    this.postValidationSameEngineRecoveryAttempts = 0;
+  },
+
+  resetPostValidationRecoveryValidationWindow() {
+    if (!this.postValidationRecoveryValidationActive) {
+      return;
+    }
+    this.playbackEngineValidationStartedAt = 0;
+    this.playbackEngineValidationStartSeconds = null;
+    this.playbackEngineValidationLastSeconds = null;
+    this.playbackEngineValidationProgressSeconds = 0;
+  },
+
+  armPostValidationRecoveryValidation() {
+    if (!this.playbackEngineValidated) {
+      return;
+    }
+    this.postValidationRecoveryValidationActive = true;
+    this.resetPostValidationRecoveryValidationWindow();
+  },
+
+  beginPlaybackEngineValidation() {
+    if (
+      !this.hasPresentedPlaybackFrame ||
+      (this.playbackEngineValidated && !this.postValidationRecoveryValidationActive)
+    ) {
+      return;
+    }
+    const currentEngine = String(PlayerController.playbackEngine || "").trim();
+    if (!currentEngine || !this.activePlaybackUrl) {
+      return;
+    }
+    const currentSeconds = Number(this.getPlaybackCurrentSeconds());
+    if (!Number.isFinite(currentSeconds) || currentSeconds < 0) {
+      return;
+    }
+    if (this.playbackEngineValidationEngine !== currentEngine) {
+      this.playbackEngineValidationEngine = currentEngine;
+      this.playbackEngineValidationStartedAt = Date.now();
+      this.playbackEngineValidationStartSeconds = currentSeconds;
+      this.playbackEngineValidationLastSeconds = currentSeconds;
+      this.playbackEngineValidationProgressSeconds = 0;
+      this.postValidationSameEngineRecoveryAttempts = 0;
+    } else if (!Number(this.playbackEngineValidationStartedAt || 0)) {
+      this.playbackEngineValidationStartedAt = Date.now();
+      this.playbackEngineValidationStartSeconds = currentSeconds;
+      this.playbackEngineValidationLastSeconds = currentSeconds;
+      this.playbackEngineValidationProgressSeconds = 0;
+    }
+  },
+
+  recordPlaybackEngineValidationProgress(currentSeconds = this.getPlaybackCurrentSeconds()) {
+    if (
+      !this.hasPresentedPlaybackFrame ||
+      (this.playbackEngineValidated && !this.postValidationRecoveryValidationActive)
+    ) {
+      return;
+    }
+    const current = Number(currentSeconds);
+    if (!Number.isFinite(current) || current < 0) {
+      return;
+    }
+    this.beginPlaybackEngineValidation();
+    if (!this.playbackEngineValidationEngine) {
+      return;
+    }
+    const last = Number(this.playbackEngineValidationLastSeconds);
+    if (!Number.isFinite(last)) {
+      this.playbackEngineValidationLastSeconds = current;
+      return;
+    }
+    const delta = current - last;
+    if (
+      delta < -STARTUP_PLAYBACK_ADVANCE_EPSILON_SECONDS ||
+      delta > PLAYBACK_ENGINE_VALIDATION_MAX_PROGRESS_GAP_SECONDS
+    ) {
+      this.playbackEngineValidationStartedAt = Date.now();
+      this.playbackEngineValidationStartSeconds = current;
+      this.playbackEngineValidationProgressSeconds = 0;
+    } else if (delta > STARTUP_PLAYBACK_ADVANCE_EPSILON_SECONDS) {
+      this.playbackEngineValidationProgressSeconds += delta;
+    }
+    this.playbackEngineValidationLastSeconds = current;
+  },
+
+  updatePlaybackEngineValidation() {
+    this.beginPlaybackEngineValidation();
+    const engineAlreadyValidated = Boolean(this.playbackEngineValidated);
+    if (this.playbackEngineValidated && !this.postValidationRecoveryValidationActive) {
+      return true;
+    }
+    const currentEngine = String(PlayerController.playbackEngine || "").trim();
+    const validationEngine = String(this.playbackEngineValidationEngine || "").trim();
+    const startedAt = Number(this.playbackEngineValidationStartedAt || 0);
+    if (!currentEngine || currentEngine !== validationEngine || !startedAt) {
+      return engineAlreadyValidated;
+    }
+    if (Date.now() - startedAt < PLAYBACK_ENGINE_VALIDATION_WINDOW_MS) {
+      return engineAlreadyValidated;
+    }
+    if (
+      Number(this.playbackEngineValidationProgressSeconds || 0) <
+      PLAYBACK_ENGINE_VALIDATION_WINDOW_MS / 1000
+    ) {
+      return engineAlreadyValidated;
+    }
+    if (Number(this.lastPlaybackProgressAt || 0) < startedAt) {
+      return engineAlreadyValidated;
+    }
+    const stablePlaybackMs = Date.now() - startedAt;
+    if (this.playbackEngineValidated) {
+      this.postValidationRecoveryValidationActive = false;
+      this.postValidationSameEngineRecoveryAttempts = 0;
+      console.info("Playback engine remained stable after same-engine recovery", {
+        engine: currentEngine,
+        stablePlaybackMs
+      });
+    } else {
+      this.playbackEngineValidated = true;
+      console.info("Playback engine validated after stable playback", {
+        engine: currentEngine,
+        stablePlaybackMs
+      });
+    }
+    return true;
+  },
+
+  isPlaybackEngineValidated() {
+    return this.updatePlaybackEngineValidation();
+  },
+
+  recoverValidatedPlaybackOnStall() {
+    if (!this.isPlaybackEngineValidated()) {
+      return false;
+    }
+    const stalledPlaybackUrl = String(this.activePlaybackUrl || "").trim();
+    const currentEngine = String(PlayerController.playbackEngine || "").trim();
+    if (
+      !stalledPlaybackUrl ||
+      !currentEngine ||
+      currentEngine === "none" ||
+      Number(this.postValidationSameEngineRecoveryAttempts || 0) >=
+        POST_VALIDATION_SAME_ENGINE_RECOVERY_MAX_ATTEMPTS
+    ) {
+      return false;
+    }
+
+    const sourceCandidate =
+      this.getStreamCandidateByUrl(stalledPlaybackUrl) || this.getCurrentStreamCandidate();
+    this.postValidationSameEngineRecoveryAttempts =
+      Number(this.postValidationSameEngineRecoveryAttempts || 0) + 1;
+    console.warn("Playback stalled after engine validation; retrying the same engine", {
+      url: stalledPlaybackUrl,
+      engine: currentEngine,
+      attempt: this.postValidationSameEngineRecoveryAttempts,
+      limit: POST_VALIDATION_SAME_ENGINE_RECOVERY_MAX_ATTEMPTS
+    });
+    this.armPostValidationRecoveryValidation();
+    void this.playStreamByUrl(stalledPlaybackUrl, {
+      preservePanel: true,
+      preservePlaybackState: true,
+      resetSilentAudioState: false,
+      preservePlaybackRecoveryState: true,
+      forceEngine: currentEngine,
+      sourceCandidate
+    });
+    return true;
+  },
+
   markPlaybackProgress() {
     const currentSeconds = this.getPlaybackCurrentSeconds();
     const bufferingBaselineSeconds = Number(this.bufferingSpinnerBaselineSeconds);
@@ -11811,6 +12020,9 @@ export const PlayerScreen = {
     }
     this.bufferingSpinnerBaselineSeconds = currentSeconds;
     this.lastPlaybackProgressAt = Date.now();
+    this.beginPlaybackEngineValidation();
+    this.recordPlaybackEngineValidationProgress(currentSeconds);
+    this.updatePlaybackEngineValidation();
     this.engineFsStallExtensions = 0;
     this.lastEngineFsStallStats = null;
     if (bufferingRecovered) {
@@ -12169,17 +12381,31 @@ export const PlayerScreen = {
       }
 
       const currentPlaybackEngine = String(PlayerController.playbackEngine || "");
+      const playbackEngineValidated = !startup && this.isPlaybackEngineValidated();
+      let skipAutomaticPlaybackRecovery = false;
+
+      if (playbackEngineValidated) {
+        if (this.recoverValidatedPlaybackOnStall()) {
+          return;
+        }
+        // The current engine has already proven that it can play this source.
+        // Do not switch engines after a later rebuffer; let the existing error
+        // presentation handle a failed same-engine recovery.
+        skipAutomaticPlaybackRecovery = true;
+      }
+
       const recoverableHlsPlaybackStall =
         !startup &&
+        !playbackEngineValidated &&
         Environment.isWebOS() &&
         currentPlaybackEngine === "hls.js" &&
         isRecoverableHlsFragmentTimeout(lastHlsErrorDiagnostic);
       const sameEngineHlsRecoveryPending =
         !startup &&
+        !playbackEngineValidated &&
         Environment.isWebOS() &&
         currentPlaybackEngine === "hls.js" &&
         (recoverableHlsPlaybackStall || this.playbackRecoveryActive);
-      let skipAutomaticPlaybackRecovery = false;
       // Match Android's post-first-frame rebuffer behavior: keep the current
       // playback engine for a transient network timeout and bound the retry.
       if (sameEngineHlsRecoveryPending) {
@@ -12197,6 +12423,7 @@ export const PlayerScreen = {
             limit: WEBOS_HLS_PLAYBACK_RECOVERY_MAX_ATTEMPTS,
             hlsError: lastHlsErrorDiagnostic?.details || null
           });
+          this.resetPlaybackEngineValidation();
           void this.playStreamByUrl(stalledPlaybackUrl, {
             preservePanel: true,
             preservePlaybackState: true,
@@ -12212,6 +12439,7 @@ export const PlayerScreen = {
       }
 
       const targetEngine =
+        !playbackEngineValidated &&
         typeof PlayerController.getAlternativePlaybackEngine === "function"
           ? PlayerController.getAlternativePlaybackEngine(this.activePlaybackUrl)
           : null;
@@ -17445,6 +17673,12 @@ export const PlayerScreen = {
     }
     if (scroll) {
       this.scrollSubtitleRailNodeIntoView(target);
+      // Tizen 5 can expose stale scrollHeight/clientHeight for one layout
+      // tick after the in-place focus class update. The full dialog render
+      // already had an asynchronous retry; keep that retry for the lighter
+      // in-place navigation path as well so a focused language cannot remain
+      // outside the visible rail.
+      this.scheduleSubtitleDialogScrollIntoView();
     }
     return true;
   },
@@ -21683,6 +21917,7 @@ export const PlayerScreen = {
       this.renderedSourcesMarkup = null;
       this.clearTrackDiscoveryTimer();
       this.stopLoadingLogoFillAnimation();
+      this.resetPlaybackEngineValidation();
       this.clearPlaybackStallGuard();
       this.bufferingActive = false;
       this.clearBufferingSpinnerTimer();
