@@ -771,7 +771,22 @@ export const StreamScreen = {
   },
 
   shouldUseStreamVirtualization(streams = []) {
-    return Array.isArray(streams) && streams.length > STREAM_VIRTUALIZATION_THRESHOLD;
+    if (!Array.isArray(streams) || !streams.length) {
+      return false;
+    }
+
+    // Android always feeds the picker through LazyColumn, so only a bounded
+    // window of source cards is composed. The constrained Tizen path used to
+    // keep every result in the DOM until the list exceeded 100 items; on
+    // older Samsung TVs that still blocks D-pad delivery while addons append
+    // ordinary-sized result sets. The virtualizer mounts the full list when
+    // it is small (via its minimum window), preserving the existing layout
+    // while removing the unbounded DOM work from this TV path.
+    const threshold =
+      Environment.isTizen() && isPerformanceConstrainedRuntime()
+        ? 0
+        : STREAM_VIRTUALIZATION_THRESHOLD;
+    return streams.length > threshold;
   },
 
   getStreamVirtualKeys(streams = []) {
