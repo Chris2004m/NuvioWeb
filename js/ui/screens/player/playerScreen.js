@@ -108,6 +108,7 @@ import {
 } from "../../../core/player/bitmapSubtitleDecoder.js";
 import { isAssSubtitle, convertAssBodyToVtt } from "../../../core/player/assSubtitle.js";
 import { createAssRenderer } from "../../../core/player/assRenderer.js";
+import { decodeSubtitleResponseBody } from "../../../core/player/subtitleCharsetDetector.js";
 import {
   SUBTITLE_VIRTUALIZATION_DEFAULT_ROW_EXTENT,
   SUBTITLE_VIRTUALIZATION_MIN_WINDOW,
@@ -297,6 +298,11 @@ const AUDIO_TRACK_LANGUAGE_KEY_BY_CODE = {
   tr: "common.turkish",
   vi: "common.vietnamese",
   zh: "common.chinese"
+};
+const LANGUAGE_DISPLAY_OVERRIDES = {
+  id: "Indonesia",
+  in: "Indonesia",
+  ind: "Indonesia"
 };
 // Maps ISO 639-2 (bibliographic + terminologic) and a few legacy codes to
 // the ISO 639-1 / app language ids, so subtitle and audio tracks labelled
@@ -1061,6 +1067,12 @@ function getTrackLanguageLabel(track = {}) {
 
   const normalizedCode = normalizeTrackLanguageCode(rawLanguage);
   const displayCode = normalizedCode ? normalizedCode.split("-")[0] : "";
+  const displayOverride =
+    LANGUAGE_DISPLAY_OVERRIDES[rawLanguage.toLowerCase()] ||
+    LANGUAGE_DISPLAY_OVERRIDES[displayCode];
+  if (displayOverride) {
+    return displayOverride;
+  }
   const locale = typeof I18n.getLocale === "function" ? I18n.getLocale() : "en";
   if (displayCode) {
     const cacheKey = `${locale}::${displayCode}`;
@@ -13393,7 +13405,7 @@ export const PlayerScreen = {
    * to a VTT object URL; callers that need that use
    * resolveSubtitlePlaybackUrl(), whose URL contract is unchanged.
    */
-  async fetchSubtitleRawBody(url, { timeoutMs = 0 } = {}) {
+  async fetchSubtitleRawBody(url, { timeoutMs = 0, languageHint = "" } = {}) {
     const original = String(url || "").trim();
     if (!original) {
       return null;
@@ -13433,8 +13445,12 @@ export const PlayerScreen = {
       if (!response.ok) {
         throw new Error(`Subtitle request failed with HTTP ${response.status}`);
       }
-      const body = await response.text();
       const contentType = String(response.headers?.get("content-type") || "").toLowerCase();
+      const decodedBody =
+        typeof TextDecoder === "function"
+          ? await decodeSubtitleResponseBody(response, { languageHint, contentType })
+          : null;
+      const body = decodedBody ?? (await response.text());
       return { body, sourceUrl: original, contentType, resolvedUrl: response.url || original };
     } catch (directError) {
       if (Environment.isWebOS()) {
@@ -13463,7 +13479,7 @@ export const PlayerScreen = {
     }
   },
 
-  async resolveSubtitlePlaybackUrl(url, { timeoutMs = 0 } = {}) {
+  async resolveSubtitlePlaybackUrl(url, { timeoutMs = 0, languageHint = "" } = {}) {
     const original = String(url || "").trim();
     if (!original) {
       return "";
@@ -13472,7 +13488,7 @@ export const PlayerScreen = {
       return original;
     }
     try {
-      const raw = await this.fetchSubtitleRawBody(url, { timeoutMs });
+      const raw = await this.fetchSubtitleRawBody(url, { timeoutMs, languageHint });
       if (!raw) {
         return "";
       }
@@ -14487,7 +14503,9 @@ export const PlayerScreen = {
     if (Environment.isWebOS() || (Environment.isTizen() && PlayerController.isUsingAvPlay?.())) {
       let raw = null;
       try {
-        raw = await this.fetchSubtitleRawBody(sourceUrl);
+        raw = await this.fetchSubtitleRawBody(sourceUrl, {
+          languageHint: subtitle?.lang || subtitle?.language || subtitle?.languageCode
+        });
       } catch (assFetchError) {
         if (!isCurrentSelection()) {
           return false;
@@ -14581,7 +14599,9 @@ export const PlayerScreen = {
 
     const subtitleUrl = Environment.isTizen()
       ? await this.resolveTizenAvPlaySubtitleUrl(subtitle?.url)
-      : await this.resolveSubtitlePlaybackUrl(subtitle?.url);
+      : await this.resolveSubtitlePlaybackUrl(subtitle?.url, {
+          languageHint: subtitle?.lang || subtitle?.language || subtitle?.languageCode
+        });
     if (!subtitleUrl) {
       return false;
     }
@@ -14589,7 +14609,13 @@ export const PlayerScreen = {
     if (!response.ok) {
       throw new Error(`HTML subtitle fetch failed with HTTP ${response.status}`);
     }
-    const text = await response.text();
+    const decodedText =
+      typeof TextDecoder === "function"
+        ? await decodeSubtitleResponseBody(response, {
+            languageHint: subtitle?.lang || subtitle?.language || subtitle?.languageCode
+          })
+        : null;
+    const text = decodedText ?? (await response.text());
     if (!isCurrentSelection()) {
       return false;
     }
@@ -16943,7 +16969,9 @@ export const PlayerScreen = {
       try {
         avPlaySubtitleUrl = Environment.isTizen()
           ? (await this.resolveTizenAvPlaySubtitleUrl(subtitle.url)) || subtitle.url
-          : (await this.resolveSubtitlePlaybackUrl(subtitle.url)) || subtitle.url;
+          : (await this.resolveSubtitlePlaybackUrl(subtitle.url, {
+              languageHint: subtitle?.lang || subtitle?.language || subtitle?.languageCode
+            })) || subtitle.url;
       } catch (_) {
         avPlaySubtitleUrl = subtitle.url;
       }
@@ -16991,7 +17019,9 @@ export const PlayerScreen = {
     let rawBody = null;
     let detectedAss = false;
     try {
-      const raw = await this.fetchSubtitleRawBody(subtitle.url);
+      const raw = await this.fetchSubtitleRawBody(subtitle.url, {
+        languageHint: subtitle?.lang || subtitle?.language || subtitle?.languageCode
+      });
       rawBody = raw;
       detectedAss = Boolean(
         raw?.body != null &&

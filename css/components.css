@@ -16847,6 +16847,14 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
   color: var(--detail-text-secondary);
 }
 
+.detail-meta-row .detail-meta-genres {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .detail-meta-row.secondary {
   color: var(--detail-text-primary);
   font-size: var(--tv-caption-text);

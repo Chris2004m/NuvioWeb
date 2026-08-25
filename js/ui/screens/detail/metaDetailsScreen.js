@@ -3280,7 +3280,7 @@ export const MetaDetailsScreen = {
 
   renderHeroMetaRows(meta) {
     const hasExternalRatings = hasMdbListRatings(meta?.mdbListRatings);
-    const genresText = normalizeGenreList(meta).map(localizedGenreLabel).join(" • ");
+    const genresText = normalizeGenreList(meta).slice(0, 6).map(localizedGenreLabel).join(" • ");
     const yearText = formatMovieReleaseDate(meta);
     const imdbValue = resolveImdbRating(meta);
     const imdbText =
@@ -3303,7 +3303,7 @@ export const MetaDetailsScreen = {
       .trim()
       .toUpperCase();
     const primaryParts = [
-      genresText ? `<span>${escapeHtml(genresText)}</span>` : "",
+      genresText ? `<span class="detail-meta-genres">${escapeHtml(genresText)}</span>` : "",
       yearText ? `<span>${escapeHtml(yearText)}</span>` : "",
       imdbText &&
       showStandardDetailRatings(

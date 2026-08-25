@@ -328,6 +328,7 @@ function setupWebOsAppLifecycle() {
     }
     void DeviceSessionRegistration.requestForegroundRegistration();
     ProviderCredentialSyncService.requestForegroundPull();
+    StartupSyncService.requestForegroundSync();
     const current = Router.getCurrent();
     if (!current) {
       return;
@@ -413,6 +414,7 @@ function setupProviderCredentialForegroundLifecycle() {
     if (!wasBackgrounded) return;
     wasBackgrounded = false;
     ProviderCredentialSyncService.requestForegroundPull();
+    StartupSyncService.requestForegroundSync();
   };
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") {
