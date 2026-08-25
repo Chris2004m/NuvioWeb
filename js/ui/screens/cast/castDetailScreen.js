@@ -1,6 +1,10 @@
 import { Router } from "../../navigation/router.js";
 import { ScreenUtils } from "../../navigation/screen.js";
-import { TmdbSettingsStore } from "../../../data/local/tmdbSettingsStore.js";
+import {
+  normalizeTmdbLanguageCode,
+  TmdbSettingsStore
+} from "../../../data/local/tmdbSettingsStore.js";
+import { containsCjkOrHangul, resolvePersonName } from "../../../core/tmdb/tmdbMetadataService.js";
 import { Environment } from "../../../platform/environment.js";
 import { TMDB_API_KEY } from "../../../config.js";
 import { I18n } from "../../../i18n/index.js";
@@ -125,7 +129,7 @@ export const CastDetailScreen = {
         return;
       }
 
-      const language = settings.language || "en-US";
+      const language = normalizeTmdbLanguageCode(settings.language || "en-US");
       const url = `${TMDB_BASE_URL}/person/${encodeURIComponent(personId)}?api_key=${encodeURIComponent(apiKey)}&language=${encodeURIComponent(language)}&append_to_response=combined_credits,images`;
       const response = await fetch(url);
       if (!response.ok) {
@@ -136,10 +140,44 @@ export const CastDetailScreen = {
       if (token !== this.loadToken) {
         return;
       }
+      const languageCode = language.split("-", 1)[0].toLowerCase();
+      const localizedName = String(person?.name || "").trim();
+      const originalName = String(person?.original_name || "").trim();
+      const shouldFetchEnglishPerson =
+        languageCode !== "en" &&
+        (String(person?.biography || "").trim() === "" ||
+          (containsCjkOrHangul(localizedName) &&
+            (!originalName || containsCjkOrHangul(originalName))));
+      let englishPerson = null;
+      if (shouldFetchEnglishPerson) {
+        try {
+          const englishUrl = `${TMDB_BASE_URL}/person/${encodeURIComponent(personId)}?api_key=${encodeURIComponent(apiKey)}&language=en&append_to_response=combined_credits,images`;
+          const englishResponse = await fetch(englishUrl);
+          if (englishResponse.ok) {
+            englishPerson = await englishResponse.json();
+          }
+        } catch (error) {
+          console.warn("Cast English name fallback failed", error);
+        }
+      }
+      if (token !== this.loadToken) {
+        return;
+      }
+      const resolvedName =
+        resolvePersonName({
+          localizedName: localizedName,
+          originalName,
+          fallbackEnglishName: englishPerson?.name,
+          preferredLanguage: language
+        }) ||
+        this.params?.castName ||
+        "Unknown";
       this.person = {
         id: String(person?.id || personId),
-        name: person?.name || this.params?.castName || "Unknown",
-        biography: person?.biography || "",
+        name: resolvedName,
+        biography:
+          String(person?.biography || "").trim() ||
+          (languageCode !== "en" ? String(englishPerson?.biography || "").trim() : ""),
         birthday: person?.birthday || "",
         placeOfBirth: person?.place_of_birth || "",
         knownForDepartment: person?.known_for_department || "",
@@ -223,8 +261,8 @@ export const CastDetailScreen = {
                data-poster-src="${escapeAttribute(item.poster || "")}"
                data-backdrop-src="${escapeAttribute(item.poster || "")}">
         <div class="cast-credit-poster"${item.poster ? ` style="background-image:url('${escapeAttribute(item.poster)}')"` : ""}></div>
-        <div class="cast-credit-title">${escapeHtml(item.name)}</div>
-        <div class="cast-credit-subtitle">${escapeHtml(item.subtitle || item.type)}</div>
+        <div class="cast-credit-title" dir="auto">${escapeHtml(item.name)}</div>
+        <div class="cast-credit-subtitle" dir="auto">${escapeHtml(item.subtitle || item.type)}</div>
       </article>
     `;
   },
@@ -260,7 +298,7 @@ export const CastDetailScreen = {
           <div class="cast-detail-hero-content" dir="${direction}">
             <div class="cast-detail-avatar"${person.profile ? ` style="background-image:url('${escapeAttribute(person.profile)}')"` : ""}></div>
             <div class="cast-detail-meta">
-              <h2 class="cast-detail-name">${escapeHtml(person.name || "Unknown")}</h2>
+              <h2 class="cast-detail-name" dir="auto">${escapeHtml(person.name || "Unknown")}</h2>
               <div class="cast-detail-facts">
                 ${person.knownForDepartment ? `<span>${escapeHtml(person.knownForDepartment)}</span>` : ""}
                 ${person.birthday ? `<span>${escapeHtml(person.birthday)}</span>` : ""}

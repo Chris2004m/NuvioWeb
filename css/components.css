@@ -7462,6 +7462,11 @@ button:focus-visible {
   padding-left: var(--settings-marquee-gap, 32px);
 }
 
+.settings-nav-label.is-marquee-active[dir="rtl"]::after {
+  padding-left: 0;
+  padding-right: var(--settings-marquee-gap, 32px);
+}
+
 .settings-nav-label-wrap {
   min-width: 0;
   flex: 1 1 auto;
@@ -17891,6 +17896,7 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
 .stream-route-list {
   height: 100%;
   overflow-y: auto;
+  overflow-anchor: none;
   padding: 8px 8px 10px;
   box-sizing: border-box;
   scrollbar-width: none;

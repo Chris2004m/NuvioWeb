@@ -2420,7 +2420,7 @@ function renderContinueWatchingCard(item, index, options = {}) {
         <span class="home-continue-badge">${escapeHtml(normalized.progressStatus || t("home.continueStatusContinue", {}, "Continue"))}</span>
         <div class="home-continue-copy">
           ${normalized.episodeCode ? `<div class="home-continue-kicker">${escapeHtml(normalized.episodeCode)}</div>` : ""}
-          <div class="home-continue-title">${escapeHtml(normalized.title)}</div>
+          <div class="home-continue-title" dir="auto">${escapeHtml(normalized.title)}</div>
           ${subtitle ? `<div class="home-continue-subtitle">${escapeHtml(subtitle)}</div>` : ""}
         </div>
         <div class="home-continue-progress"><span style="width:${Math.round((normalized.progressFraction || 0) * 100)}%"></span></div>
@@ -2803,8 +2803,8 @@ export function createPosterCardMarkup(
           layoutMode !== "modern" && showLabels && !collectionItem.hideTitle
             ? `
           <div class="home-poster-copy">
-            <div class="home-poster-title">${escapeHtml(collectionItem.name || collectionItem.collectionTitle || "Collection")}</div>
-            ${subtitle ? `<div class="home-poster-subtitle">${escapeHtml(subtitle)}</div>` : ""}
+            <div class="home-poster-title" dir="auto">${escapeHtml(collectionItem.name || collectionItem.collectionTitle || "Collection")}</div>
+            ${subtitle ? `<div class="home-poster-subtitle" dir="auto">${escapeHtml(subtitle)}</div>` : ""}
           </div>
         `
             : ""
@@ -2902,7 +2902,7 @@ export function createPosterCardMarkup(
           ${
             !isLoading && normalized.logo
               ? `<img class="home-poster-expanded-logo" data-src="${escapeAttribute(normalized.logo)}" decoding="async" loading="lazy" alt="${escapeAttribute(normalized.name || "content")}" />`
-              : `<div class="home-poster-expanded-title">${escapeHtml(normalized.name || "Untitled")}</div>`
+              : `<div class="home-poster-expanded-title" dir="auto">${escapeHtml(normalized.name || "Untitled")}</div>`
           }
         </div>
         ${
@@ -2924,8 +2924,8 @@ export function createPosterCardMarkup(
         shouldShowLabels
           ? `
         <div class="home-poster-copy">
-          <div class="home-poster-title">${escapeHtml(normalized.name || "Untitled")}</div>
-          ${subtitle ? `<div class="home-poster-subtitle">${escapeHtml(subtitle)}</div>` : ""}
+          <div class="home-poster-title" dir="auto">${escapeHtml(normalized.name || "Untitled")}</div>
+          ${subtitle ? `<div class="home-poster-subtitle" dir="auto">${escapeHtml(subtitle)}</div>` : ""}
         </div>
       `
           : isLoading

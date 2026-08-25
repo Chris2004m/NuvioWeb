@@ -20243,9 +20243,9 @@ export const PlayerScreen = {
             ${current ? `<div class="player-episode-current">&#10003;</div>` : ""}
           </div>
           <div class="player-episode-copy">
-            <div class="player-episode-item-title">${escapeHtml(episode.title || t("episodes_episode", {}, "Episode"))}</div>
+            <div class="player-episode-item-title" dir="auto">${escapeHtml(episode.title || t("episodes_episode", {}, "Episode"))}</div>
             ${date ? `<div class="player-episode-date">${escapeHtml(date)}</div>` : ""}
-            <div class="player-episode-item-subtitle">${escapeHtml(episode.overview || "")}</div>
+            <div class="player-episode-item-subtitle" dir="auto">${escapeHtml(episode.overview || "")}</div>
           </div>
         </div>
       `;
