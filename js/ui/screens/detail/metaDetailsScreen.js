@@ -7742,7 +7742,25 @@ export const MetaDetailsScreen = {
     const kind = isSeriesDetailMeta(this.meta, this.episodes) ? "series" : "movie";
     const activeTab =
       kind === "series" ? String(this.seriesInsightTab || "") : String(this.movieInsightTab || "");
-    return `${activeTab === "collection" ? "collection" : "morelike"}:${kind}`;
+    const railTab = ["morelike", "trailer", "collection"].includes(activeTab)
+      ? activeTab
+      : "morelike";
+    return `${railTab}:${kind}`;
+  },
+
+  getPreviewRailTabKey(target) {
+    const railKey = String(target?.closest?.(".detail-morelike-track")?.dataset?.scrollKey || "");
+    const railTab = railKey.split(":", 1)[0];
+    if (["morelike", "trailer", "collection"].includes(railTab)) {
+      return railTab;
+    }
+    return this.getActiveInsightTabKey();
+  },
+
+  getInsightTabIndexForPreviewRail(tabs = [], target) {
+    const railTab = this.getPreviewRailTabKey(target);
+    const index = tabs.findIndex((node) => String(node?.dataset?.tab || "") === railTab);
+    return index >= 0 ? index : this.getActiveInsightTabIndex(tabs);
   },
 
   focusInList(list, targetIndex, options = {}) {
@@ -8431,11 +8449,12 @@ export const MetaDetailsScreen = {
       if (direction === "right") return this.focusInList(moreLikeCards, moreLikeIndex + 1) || true;
       if (direction === "up") {
         if (insightTabs.length) {
-          const moreLikeTabIndex = Math.max(
-            0,
-            insightTabs.findIndex((node) => String(node?.dataset?.tab || "") === "morelike")
+          return (
+            this.focusInList(
+              insightTabs,
+              this.getInsightTabIndexForPreviewRail(insightTabs, current)
+            ) || true
           );
-          return this.focusInList(insightTabs, moreLikeTabIndex) || true;
         }
         if (episodes.length) {
           return (
@@ -8661,11 +8680,9 @@ export const MetaDetailsScreen = {
       if (direction === "right") return this.focusInList(moreLikeCards, moreLikeIndex + 1) || true;
       if (direction === "up") {
         if (tabs.length) {
-          const moreLikeTabIndex = Math.max(
-            0,
-            tabs.findIndex((node) => String(node?.dataset?.tab || "") === "morelike")
+          return (
+            this.focusInList(tabs, this.getInsightTabIndexForPreviewRail(tabs, current)) || true
           );
-          return this.focusInList(tabs, moreLikeTabIndex) || true;
         }
         if (cast.length) {
           return this.focusInList(cast, Math.min(moreLikeIndex, cast.length - 1)) || true;

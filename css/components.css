@@ -15903,6 +15903,12 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
   align-items: center;
   gap: 10px;
   margin-bottom: 14px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.series-insight-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .series-insight-tab {
@@ -15912,6 +15918,7 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
   font-size: 22px;
   font-weight: 700;
   padding: 0;
+  flex: 0 0 auto;
   white-space: nowrap;
 }
 
@@ -15919,6 +15926,7 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
   color: rgba(220, 231, 244, 0.62);
   font-size: 22px;
   font-weight: 700;
+  flex: 0 0 auto;
 }
 
 .series-insight-tab.selected {
