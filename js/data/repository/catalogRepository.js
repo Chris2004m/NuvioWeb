@@ -1,4 +1,5 @@
 import { safeApiCall } from "../../core/network/safeApiCall.js";
+import { selectCatalogEntries } from "../../core/util/catalogEntryMapper.js";
 import { CatalogApi } from "../remote/api/catalogApi.js";
 import { addonRepository } from "./addonRepository.js";
 
@@ -45,7 +46,8 @@ class CatalogRepository {
 
     return safeApiCall(() =>
       CatalogApi.getCatalog(url, signal ? { signal } : {}).then((dto) => {
-        const items = (dto?.metas || []).map((meta) => ({
+        const { metas, rawItemCount } = selectCatalogEntries(dto?.metas);
+        const items = metas.map((meta) => ({
           ...this.mapMeta(meta),
           addonBaseUrl,
           addonId,
@@ -53,6 +55,7 @@ class CatalogRepository {
           catalogType: type
         }));
 
+        const hasMore = Boolean(supportsSkip && rawItemCount > 0);
         const row = {
           addonId,
           addonName,
@@ -62,9 +65,10 @@ class CatalogRepository {
           apiType: type,
           items,
           isLoading: false,
-          hasMore: Boolean(supportsSkip && items.length > 0),
+          hasMore,
           currentPage: Math.floor(skip / 100),
-          supportsSkip
+          supportsSkip,
+          nextSkip: hasMore ? skip + rawItemCount : skip
         };
 
         this.catalogCache.set(cacheKey, row);
