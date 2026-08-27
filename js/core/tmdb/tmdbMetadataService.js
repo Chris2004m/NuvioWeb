@@ -3,6 +3,7 @@ import {
   TmdbSettingsStore
 } from "../../data/local/tmdbSettingsStore.js";
 import { TMDB_API_KEY } from "../../config.js";
+import { tmdbShowReleaseInfo } from "../util/tmdbReleaseRange.js";
 
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
 const TMDB_IMAGE_SIZES = {
@@ -519,9 +520,9 @@ export const TmdbMetadataService = {
     });
     const resolvedCredits = resolveCredits(data?.credits, englishPersonNames, lang);
     const logoPath = selectBestLocalizedLogoPath(data?.images?.logos, lang);
-    const releaseYear =
+    const releaseInfoValue =
       type === "tv"
-        ? String(data.first_air_date || "").slice(0, 4)
+        ? tmdbShowReleaseInfo(data.first_air_date, data.last_air_date, data.status)
         : String(data.release_date || "").slice(0, 4);
     const companies = mapCompanies(data?.production_companies);
     const networks = mapCompanies(data?.networks);
@@ -558,7 +559,7 @@ export const TmdbMetadataService = {
         ? data.genres.map((genre) => genre.name).filter(Boolean)
         : [],
       rating: typeof data.vote_average === "number" ? data.vote_average : null,
-      releaseInfo: releaseYear || null,
+      releaseInfo: releaseInfoValue || null,
       released: type === "tv" ? data.first_air_date || null : data.release_date || null,
       runtime: Number.isFinite(runtimeValue) && runtimeValue > 0 ? `${runtimeValue} min` : null,
       status: data?.status || null,
