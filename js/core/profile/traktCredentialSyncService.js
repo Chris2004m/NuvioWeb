@@ -1,6 +1,7 @@
 import { AuthManager } from "../auth/authManager.js";
 import { SupabaseApi } from "../../data/remote/supabase/supabaseApi.js";
 import { TraktAuthStore } from "../../data/local/traktAuthStore.js";
+import { normalizeTraktTokenLifetimeSeconds } from "../../data/local/traktTokenLifetime.js";
 import { ProfileManager } from "./profileManager.js";
 import { getSyncClientId } from "../sync/syncClientIdentity.js";
 
@@ -20,14 +21,6 @@ function resolveProfileId(profileId = null) {
   return 1;
 }
 
-function normalizeLifetimeSeconds(value) {
-  const seconds = Number(value || 0);
-  if (!Number.isFinite(seconds) || seconds <= 0) {
-    return TOKEN_FALLBACK_LIFETIME_SECONDS;
-  }
-  return Math.min(TOKEN_FALLBACK_LIFETIME_SECONDS, Math.trunc(seconds));
-}
-
 function credentialJsonFromState(state = {}) {
   const accessToken = String(state.accessToken || "").trim();
   const refreshToken = String(state.refreshToken || "").trim();
@@ -39,7 +32,9 @@ function credentialJsonFromState(state = {}) {
     refresh_token: refreshToken,
     token_type: String(state.tokenType || "bearer").trim() || "bearer",
     created_at: Number(state.createdAt || Math.floor(Date.now() / 1000)),
-    expires_in: normalizeLifetimeSeconds(state.expiresIn || TOKEN_FALLBACK_LIFETIME_SECONDS)
+    expires_in: normalizeTraktTokenLifetimeSeconds(
+      state.expiresIn || TOKEN_FALLBACK_LIFETIME_SECONDS
+    )
   };
   const username = String(state.username || "").trim();
   const userSlug = String(state.userSlug || "").trim();
@@ -78,7 +73,7 @@ function stateFromCredentialJson(credential = {}) {
     createdAt: Number(
       credential.created_at || credential.createdAt || Math.floor(Date.now() / 1000)
     ),
-    expiresIn: normalizeLifetimeSeconds(
+    expiresIn: normalizeTraktTokenLifetimeSeconds(
       credential.expires_in || credential.expiresIn || TOKEN_FALLBACK_LIFETIME_SECONDS
     ),
     username: credential.username || null,
@@ -92,7 +87,7 @@ function syncSignature(state = {}) {
     state.refreshToken || "",
     state.tokenType || "",
     state.createdAt == null ? "" : String(state.createdAt),
-    state.expiresIn == null ? "" : String(normalizeLifetimeSeconds(state.expiresIn)),
+    state.expiresIn == null ? "" : String(normalizeTraktTokenLifetimeSeconds(state.expiresIn)),
     state.username || "",
     state.userSlug || ""
   ].join("|");
