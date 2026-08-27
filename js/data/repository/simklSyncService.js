@@ -546,6 +546,12 @@ function reconciledPlaybackProgress(snapshot, watchedItems) {
     .filter((progress) => {
       const entry = findEntry(snapshot, progress);
       if (["hold", "dropped"].includes(entry?.status)) return false;
+      if (entry?.status === "completed") {
+        const completedAt = parseDate(entry.last_watched_at, NaN);
+        if (Number.isFinite(completedAt) && completedAt >= Number(progress.updatedAt || 0)) {
+          return false;
+        }
+      }
       return !watchedItems.some(
         (watched) =>
           String(watched.contentId || "").toLowerCase() ===
