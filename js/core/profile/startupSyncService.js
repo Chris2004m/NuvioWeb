@@ -10,8 +10,6 @@ import { SavedLibrarySyncService } from "./savedLibrarySyncService.js";
 import { WatchedItemsSyncService } from "./watchedItemsSyncService.js";
 import { PluginSyncService } from "./pluginSyncService.js";
 import { ProfileSettingsSyncService } from "./profileSettingsSyncService.js";
-import { TraktCredentialSyncService } from "./traktCredentialSyncService.js";
-import { SimklCredentialSyncService } from "./simklCredentialSyncService.js";
 import { ProviderCredentialSyncService } from "./providerCredentialSyncService.js";
 import { SimklSyncService } from "../../data/repository/simklSyncService.js";
 import { CollectionSyncService } from "./collectionSyncService.js";
@@ -533,12 +531,6 @@ export const StartupSyncService = {
     }
 
     await Promise.all([
-      runSurface("Trakt credentials", () =>
-        TraktCredentialSyncService.pullFromRemote(activeProfileId)
-      ),
-      runSurface("Simkl credentials", () =>
-        SimklCredentialSyncService.pullFromRemote(activeProfileId)
-      ),
       runSurface("provider credentials", () =>
         ProviderCredentialSyncService.syncFromRemote(activeProfileId)
       ),
@@ -717,14 +709,6 @@ export const StartupSyncService = {
     const surfaces = [
       ["profiles push", () => ProfileSyncService.push()],
       ["profile settings push", () => ProfileSettingsSyncService.push()],
-      [
-        "Trakt credentials push",
-        () => TraktCredentialSyncService.pushCurrentToRemote(ProfileManager.getActiveProfileId())
-      ],
-      [
-        "Simkl credentials push",
-        () => SimklCredentialSyncService.pushCurrentToRemote(ProfileManager.getActiveProfileId())
-      ],
       ["collections push", () => CollectionSyncService.push()],
       ["home catalog settings push", () => HomeCatalogSettingsSyncService.push()],
       ["plugins push", () => PluginSyncService.push()],

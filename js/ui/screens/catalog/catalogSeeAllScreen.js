@@ -6,6 +6,7 @@ import { Environment } from "../../../platform/environment.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
 import { I18n } from "../../../i18n/index.js";
 import { filterReleasedItems } from "../../../core/util/releaseInfoUtils.js";
+import { mergeCatalogPage } from "../../../core/util/catalogPagination.js";
 import { focusWithoutAutoScroll } from "../../components/sidebarNavigation.js";
 import {
   posterItemFromNode,
@@ -189,7 +190,13 @@ export const CatalogSeeAllScreen = {
     this.items = this.layoutPrefs?.hideUnreleasedContent
       ? filterReleasedItems(initialItems)
       : [...initialItems];
-    this.nextSkip = this.items.length ? 100 : 0;
+    const initialNextSkip = Number(params?.initialNextSkip);
+    this.nextSkip =
+      Number.isFinite(initialNextSkip) && initialNextSkip > 0
+        ? Math.trunc(initialNextSkip)
+        : this.items.length
+          ? 100
+          : 0;
     this.loading = false;
     this.hasMore = true;
     this.lastFocusedKey = this.items[0]?.id ? `item:${this.items[0].id}` : null;
@@ -261,20 +268,18 @@ export const CatalogSeeAllScreen = {
     const incoming = this.layoutPrefs?.hideUnreleasedContent
       ? filterReleasedItems(rawIncoming)
       : rawIncoming;
-    let addedCount = 0;
-    if (rawIncoming.length) {
-      const seen = new Set(this.items.map((item) => item.id));
-      incoming.forEach((item) => {
-        if (!item?.id || seen.has(item.id)) {
-          return;
-        }
-        seen.add(item.id);
-        this.items.push(item);
-        addedCount += 1;
-      });
-      this.nextSkip = skip + 100;
-    }
-    this.hasMore = rawIncoming.length > 0;
+    const merged = mergeCatalogPage(
+      this.items,
+      incoming,
+      skip,
+      rawIncoming.length,
+      result?.data?.nextSkip,
+      result?.data?.hasMore
+    );
+    const addedCount = merged.addedCount;
+    this.items = merged.items;
+    this.nextSkip = merged.nextSkip;
+    this.hasMore = merged.hasMore;
     this.loading = false;
     this.pendingRestoreFocus = true;
     this.preserveViewportOnNextRender = Boolean(preserveViewport && addedCount > 0);

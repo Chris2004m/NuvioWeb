@@ -73,7 +73,8 @@ export function renderModernHomeLayout({
         catalogId: rowData.catalogId || "",
         catalogName: rowData.catalogName || "",
         type: rowData.type || "movie",
-        initialItems: items
+        initialItems: items,
+        initialNextSkip: Number(rowData?.result?.data?.nextSkip || 0)
       });
     }
 

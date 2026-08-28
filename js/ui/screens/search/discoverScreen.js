@@ -578,6 +578,7 @@ export const DiscoverScreen = {
       extraArgs.genre = this.selectedGenre;
     }
 
+    const skip = Math.max(0, Number(this.nextSkip || 0));
     const result = await catalogRepository.getCatalog({
       addonBaseUrl: selectedCatalog.addonBaseUrl,
       addonId: selectedCatalog.addonId,
@@ -585,7 +586,7 @@ export const DiscoverScreen = {
       catalogId: selectedCatalog.catalogId,
       catalogName: selectedCatalog.catalogName,
       type: selectedCatalog.type,
-      skip: Math.max(0, Number(this.nextSkip || 0)),
+      skip,
       extraArgs,
       supportsSkip: true
     });
@@ -621,7 +622,11 @@ export const DiscoverScreen = {
         this.items.push(item);
         addedCount += 1;
       });
-      this.nextSkip = Math.max(0, Number(this.nextSkip || 0)) + 100;
+      const reportedNextSkip = Number(result?.data?.nextSkip);
+      this.nextSkip =
+        Number.isFinite(reportedNextSkip) && reportedNextSkip > skip
+          ? Math.trunc(reportedNextSkip)
+          : skip + incoming.length;
     }
     this.hasMore = incoming.length > 0;
     this.loading = false;

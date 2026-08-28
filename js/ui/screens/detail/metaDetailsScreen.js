@@ -32,6 +32,7 @@ import {
   TraktAuthService
 } from "../../../data/repository/traktAuthService.js";
 import { toTraktImageUrl } from "../../../core/trakt/traktImageUrl.js";
+import { supportsMembershipFor } from "../../../core/tracking/trackingLibraryMembership.js";
 import { Environment } from "../../../platform/environment.js";
 import { Platform } from "../../../platform/index.js";
 import { getTvRuntimePerformanceProfile } from "../../../platform/tvRuntimePerformance.js";
@@ -2779,7 +2780,9 @@ export const MetaDetailsScreen = {
           ? mergeGenreLists(meta.genres, enrichment.genres)
           : meta.genres,
         releaseInfo: settings.useReleaseDates
-          ? meta.releaseInfo || enrichment.releaseInfo
+          ? isSeries
+            ? enrichment.releaseInfo || meta.releaseInfo
+            : meta.releaseInfo || enrichment.releaseInfo
           : meta.releaseInfo,
         released: settings.useReleaseDates
           ? meta.released || meta.releaseDate || meta.release_date || enrichment.released || null
@@ -4810,7 +4813,7 @@ export const MetaDetailsScreen = {
     const tabs = await libraryRepository.getListTabs().catch(() => []);
     const resolvedTabs =
       Array.isArray(tabs) && tabs.length
-        ? tabs.filter((tab) => tab.isMembershipDestination !== false)
+        ? tabs.filter((tab) => supportsMembershipFor(tab, item.itemType))
         : [{ key: "local", title: t("detail.library", {}, "Library"), type: "local" }];
     const snapshot = await libraryRepository
       .getMembershipSnapshot(item)
