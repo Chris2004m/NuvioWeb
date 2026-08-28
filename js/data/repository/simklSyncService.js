@@ -539,10 +539,10 @@ function watchedProjection(snapshot) {
       });
     });
     if (shouldMarkCompletedSeriesWatched(entry.status, hasEpisodeHistory)) {
-      const watchedAt = parseDate(
-        entry.last_watched_at || entry.added_to_watchlist_at,
-        snapshot.lastSyncedAt
-      );
+      const lastWatchedAt = parseDate(entry.last_watched_at, NaN);
+      const watchedAt = Number.isFinite(lastWatchedAt)
+        ? lastWatchedAt
+        : parseDate(entry.added_to_watchlist_at, 0);
       items.push({ ...base, watchedAt });
     }
   });
