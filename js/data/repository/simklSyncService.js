@@ -3,6 +3,7 @@ import { ProfileManager } from "../../core/profile/profileManager.js";
 import { SimklAnimeIdPreference, TraktSettingsStore } from "../local/traktSettingsStore.js";
 import { SimklAuthService } from "./simklAuthService.js";
 import { simklRequest } from "./simklAuthService.js";
+import { shouldMarkCompletedSeriesWatched } from "./simklCompletedSeries.js";
 
 const STORE_KEY = "simklSyncState";
 const SNAPSHOT_SCHEMA_VERSION = 3;
@@ -578,6 +579,7 @@ function watchedProjection(snapshot) {
       return;
     }
     if (["hold", "dropped"].includes(entry.status)) return;
+    let hasEpisodeHistory = false;
     (entry.seasons || []).forEach((season) => {
       (season?.episodes || []).forEach((episode) => {
         if (!episode?.watched_at) return;
@@ -587,6 +589,7 @@ function watchedProjection(snapshot) {
         const seasonNumber = hasTvdbCoordinates ? mappedSeason : Number(season.number || 0);
         const episodeNumber = hasTvdbCoordinates ? mappedEpisode : Number(episode.number || 0);
         if (episodeNumber <= 0) return;
+        hasEpisodeHistory = true;
         const watchedAt = parseDate(episode.watched_at, snapshot.lastSyncedAt);
         const isSimklAbsoluteEpisode = entry.mediaType === "anime" && !hasTvdbCoordinates;
         const watched = {
@@ -614,6 +617,13 @@ function watchedProjection(snapshot) {
         });
       });
     });
+    if (shouldMarkCompletedSeriesWatched(entry.status, hasEpisodeHistory)) {
+      const lastWatchedAt = parseDate(entry.last_watched_at, NaN);
+      const watchedAt = Number.isFinite(lastWatchedAt)
+        ? lastWatchedAt
+        : parseDate(entry.added_to_watchlist_at, 0);
+      items.push({ ...base, watchedAt });
+    }
   });
   return { items, historyItems, watchedShowSeedItems };
 }
