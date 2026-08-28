@@ -13693,7 +13693,7 @@ export const PlayerScreen = {
         try {
           const resolved = await localMediaSubtitleRepository.getExternalSubtitleText(original);
           return {
-            body: resolved.body,
+            body: sanitizeSubtitleMojibake(resolved.body),
             sourceUrl: original,
             contentType: resolved.contentType,
             resolvedUrl: resolved.resolvedUrl || original
