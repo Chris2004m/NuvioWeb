@@ -667,6 +667,7 @@ export const SearchScreen = {
           addonName: entry.addonName,
           catalogId: entry.catalogId,
           catalogName: entry.catalogName,
+          nextSkip: Number(entry.result?.data?.nextSkip || 0),
           hasMore: Boolean(items.length > itemLimit || entry.result?.data?.hasMore),
           items: items.slice(0, itemLimit)
         };
@@ -738,6 +739,7 @@ export const SearchScreen = {
             addonName: catalog.addonName,
             catalogId: catalog.catalogId,
             catalogName: catalog.catalogName,
+            nextSkip: Number(result?.data?.nextSkip || 0),
             hasMore: Boolean(items.length > itemLimit || result?.data?.hasMore),
             items: items.slice(0, itemLimit)
           };
@@ -1906,7 +1908,8 @@ export const SearchScreen = {
       catalogId: node.dataset.catalogId || "",
       catalogName: node.dataset.catalogName || "",
       type: node.dataset.catalogType || "movie",
-      initialItems: Array.isArray(sourceRow?.items) ? sourceRow.items : []
+      initialItems: Array.isArray(sourceRow?.items) ? sourceRow.items : [],
+      initialNextSkip: Number(sourceRow?.nextSkip || 0)
     });
   },
 

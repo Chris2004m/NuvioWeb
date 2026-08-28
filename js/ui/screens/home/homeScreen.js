@@ -2600,7 +2600,8 @@ function renderLegacyCatalogRowsMarkup(rows = [], options = {}) {
         catalogId: rowData.catalogId || "",
         catalogName: rowData.catalogName || "",
         type: rowData.type || "movie",
-        initialItems: items
+        initialItems: items,
+        initialNextSkip: Number(rowData?.result?.data?.nextSkip || 0)
       });
     }
 
@@ -11380,7 +11381,11 @@ export const HomeScreen = {
               duplicatePageRetryCount = 0;
               return;
             }
-            const nextSkip = skip + incomingItems.length;
+            const reportedNextSkip = Number(result.data?.nextSkip);
+            const nextSkip =
+              Number.isFinite(reportedNextSkip) && reportedNextSkip > skip
+                ? Math.trunc(reportedNextSkip)
+                : skip + incomingItems.length;
             const startIndex = latestItems.length;
             // Update in-memory row data
             if (liveRowPayload) {
