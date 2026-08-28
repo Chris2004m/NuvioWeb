@@ -44,6 +44,16 @@ test("episode watch timestamps protect a plan to watch entry", () => {
   assert.deepEqual(destructiveRemovalImpacts(entry), ["watched_history"]);
 });
 
+test("non-null empty fields follow Android presence semantics", () => {
+  const entry = {
+    status: "plantowatch",
+    last_watched_at: "",
+    user_rated_at: "",
+    seasons: [{ episodes: [{ watched_at: "" }] }]
+  };
+  assert.deepEqual(destructiveRemovalImpacts(entry), ["watched_history", "rating"]);
+});
+
 test("a missing entry has no impacts", () => {
   assert.deepEqual(destructiveRemovalImpacts(null), []);
 });

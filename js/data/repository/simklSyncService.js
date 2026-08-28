@@ -284,16 +284,16 @@ export function destructiveRemovalImpacts(entry) {
   if (!entry) return impacts;
   if (
     entry.status !== "plantowatch" ||
-    entry.last_watched_at ||
-    entry.last_watched ||
+    entry.last_watched_at != null ||
+    entry.last_watched != null ||
     Number(entry.watched_episodes_count) > 0 ||
     (entry.seasons || []).some((season) =>
-      (season.episodes || []).some((episode) => episode.watched_at)
+      (season.episodes || []).some((episode) => episode.watched_at != null)
     )
   ) {
     impacts.push("watched_history");
   }
-  if (entry.user_rating != null || entry.user_rated_at) {
+  if (entry.user_rating != null || entry.user_rated_at != null) {
     impacts.push("rating");
   }
   return impacts;
