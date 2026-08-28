@@ -3,7 +3,7 @@ import {
   TmdbSettingsStore
 } from "../../data/local/tmdbSettingsStore.js";
 import { TMDB_API_KEY } from "../../config.js";
-import { tmdbShowReleaseInfo } from "../util/tmdbReleaseRange.js";
+import { tmdbShowReleaseInfo, tmdbYearPart } from "../util/tmdbReleaseRange.js";
 
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
 const TMDB_IMAGE_SIZES = {
@@ -24,6 +24,7 @@ const TOP_RATED_VOTE_COUNT_FLOOR = 200;
 const ENTITY_RAIL_TYPES = ["popular", "top_rated", "recent"];
 const TMDB_ENGLISH_CREDIT_LANGUAGE = "en-US";
 const NATIVE_PERSON_NAME_LANGUAGES = new Set(["ja", "ko", "zh"]);
+const TMDB_RECOMMENDATION_MAX_ITEMS = 12;
 const entityHeaderCache = new Map();
 const entityRailCache = new Map();
 const entityBrowseCache = new Map();
@@ -356,6 +357,37 @@ async function resolveTrailerCandidates({ type, tmdbId, apiKey, language, initia
     language: TMDB_TRAILER_FALLBACK_LANGUAGE
   });
   return rankTmdbVideoCandidates(fallback, TMDB_TRAILER_FALLBACK_LANGUAGE);
+}
+
+async function fetchTmdbShowDetails({ tmdbId, apiKey, language }) {
+  const url = `${TMDB_BASE_URL}/tv/${encodeURIComponent(String(tmdbId))}?api_key=${encodeURIComponent(apiKey)}&language=${encodeURIComponent(language)}`;
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      return null;
+    }
+    return await response.json();
+  } catch (_error) {
+    return null;
+  }
+}
+
+async function resolveRecommendationReleaseInfo(item, { type, apiKey, language }) {
+  if (type !== "tv") {
+    return String(item?.release_date || "").slice(0, 4) || "";
+  }
+
+  const startYear = tmdbYearPart(item?.first_air_date);
+  if (startYear == null) {
+    return "";
+  }
+
+  const details = await fetchTmdbShowDetails({
+    tmdbId: item?.id,
+    apiKey,
+    language
+  });
+  return tmdbShowReleaseInfo(item?.first_air_date, details?.last_air_date, details?.status) || "";
 }
 
 function mapTrailerCandidates(items = []) {
@@ -872,8 +904,11 @@ export const TmdbMetadataService = {
       return [];
     }
     const data = await response.json();
-    return (Array.isArray(data?.results) ? data.results : [])
-      .map((item) => ({
+    const recommendationResults = (Array.isArray(data?.results) ? data.results : [])
+      .filter((item) => Number(item?.id) > 0)
+      .slice(0, TMDB_RECOMMENDATION_MAX_ITEMS);
+    const items = await Promise.all(
+      recommendationResults.map(async (item) => ({
         id: item?.id ? `tmdb:${String(item.id)}` : "",
         type: type === "tv" ? "series" : "movie",
         name: item?.title || item?.name || "Untitled",
@@ -882,14 +917,15 @@ export const TmdbMetadataService = {
         backdrop: toImageUrl(item?.backdrop_path || null, "backdrop"),
         landscapePoster: toImageUrl(item?.backdrop_path || null, "backdrop"),
         description: item?.overview || "",
-        releaseInfo:
-          String(type === "tv" ? item?.first_air_date || "" : item?.release_date || "").slice(
-            0,
-            4
-          ) || "",
+        releaseInfo: await resolveRecommendationReleaseInfo(item, {
+          type,
+          apiKey,
+          language: lang
+        }),
         tmdbRating:
           typeof item?.vote_average === "number" ? Number(item.vote_average.toFixed(1)) : null
       }))
-      .filter((item) => item.id);
+    );
+    return items.filter((item) => item.id);
   }
 };
