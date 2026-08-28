@@ -193,7 +193,10 @@ function decodeCleanly(bytes, charset) {
     return null;
   }
   try {
-    return new TextDecoder(charset, { fatal: true }).decode(bytes);
+    // The detector only passes a bounded sample, which may end halfway through
+    // a multibyte character. Keep malformed-byte rejection while preserving a
+    // valid prefix when the sample boundary cuts only the final character.
+    return new TextDecoder(charset, { fatal: true }).decode(bytes, { stream: true });
   } catch (_) {
     return null;
   }
