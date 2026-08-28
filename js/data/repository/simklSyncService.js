@@ -276,6 +276,30 @@ function statusDefinitionForEntry(entry) {
   return STATUS_DEFINITIONS.find((definition) => definition.status === entry?.status) || null;
 }
 
+// Mirrors Android SimklLibraryEntry.destructiveRemovalImpacts: removing a Simkl
+// entry clears watched history when it is in any status other than plan to
+// watch, or carries watch data, and clears a rating when a rating value or
+// rating timestamp is present.
+export function destructiveRemovalImpacts(entry) {
+  const impacts = [];
+  if (!entry) return impacts;
+  if (
+    entry.status !== "plantowatch" ||
+    entry.last_watched_at != null ||
+    entry.last_watched != null ||
+    Number(entry.watched_episodes_count) > 0 ||
+    (entry.seasons || []).some((season) =>
+      (season.episodes || []).some((episode) => episode.watched_at != null)
+    )
+  ) {
+    impacts.push("watched_history");
+  }
+  if (entry.user_rating != null || entry.user_rated_at != null) {
+    impacts.push("rating");
+  }
+  return impacts;
+}
+
 function toLibraryEntry(entry, snapshot) {
   const media = mediaForEntry(entry);
   const definition = statusDefinitionForEntry(entry);
@@ -708,14 +732,7 @@ export const SimklSyncService = {
       throw new Error("Completed is managed by watched history");
     }
     if (!destination) {
-      const hasHistory = Boolean(
-        entry &&
-        (entry.last_watched_at ||
-          entry.user_rating != null ||
-          (entry.seasons || []).some((season) =>
-            (season.episodes || []).some((episode) => episode.watched_at)
-          ))
-      );
+      const hasHistory = destructiveRemovalImpacts(entry).length > 0;
       if (hasHistory && !destructiveRemovalConfirmed) {
         const error = new Error(
           "Removing this Simkl status would also clear watched history or a rating"
