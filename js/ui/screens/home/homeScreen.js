@@ -123,6 +123,7 @@ import {
   shouldApplyLateContinueWatchingFocus
 } from "./homeFocusPolicy.js";
 import { resolveNextUpCandidates } from "./nextUpCandidateResolver.js";
+import { findAbsoluteEpisodeAnchorIndex } from "./nextUpEpisodeAnchor.js";
 import { shouldSurfaceNextUpForUntrackedSeries } from "./nextUpWatchingPolicy.js";
 import {
   getContinueWatchingRenderItems,
@@ -10194,6 +10195,13 @@ export const HomeScreen = {
         (entry) =>
           Number(entry.season || 0) === anchorSeason && Number(entry.episode || 0) === anchorEpisode
       );
+    }
+
+    if (anchorIndex < 0) {
+      anchorIndex = findAbsoluteEpisodeAnchorIndex(episodes, {
+        season: anchorSeason,
+        episode: anchorEpisode
+      });
     }
 
     if (anchorIndex < 0) {
