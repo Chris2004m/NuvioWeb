@@ -334,19 +334,17 @@ function aliasesForMedia(media = {}, mediaType = "shows") {
 /**
  * True when the viewer still has episodes of `entry` ahead of them.
  *
- * The Watching list alone is too narrow. It excludes On Hold, which is a pause rather than an
- * ending, and Simkl moves an entry to Completed the moment its last aired episode is watched - so a
- * show followed weekly sits at Completed between airings and would drop out until the viewer
- * manually put it back. Every entry carries its own episode counts, which answer the question
- * directly: aired episodes are the total minus the ones not yet out, and anything above what has
- * been watched is still owed to the viewer.
+ * The Watching list alone is too narrow. Simkl moves an entry to Completed the moment its last
+ * aired episode is watched - so a show followed weekly sits at Completed between airings and would
+ * drop out until the viewer manually put it back. Every entry carries its own episode counts,
+ * which answer the question directly: aired episodes are the total minus the ones not yet out,
+ * and anything above what has been watched is still owed to the viewer.
  *
- * Dropped stays out under every reading - unwatched episodes are exactly what dropping a show
- * leaves behind.
+ * On Hold and Dropped are explicit opt-outs, matching Android TV's Continue Watching projection.
  */
 function entryHasEpisodesAhead(entry = {}) {
-  if (entry.status === "dropped") return false;
-  if (entry.status === "watching" || entry.status === "hold") return true;
+  if (["hold", "dropped"].includes(entry.status)) return false;
+  if (entry.status === "watching") return true;
   const total = Number(entry.total_episodes_count || 0);
   const notAired = Number(entry.not_aired_episodes_count || 0);
   const watched = Number(entry.watched_episodes_count || 0);
@@ -558,15 +556,20 @@ function watchedProjection(snapshot) {
     (entry.seasons || []).forEach((season) => {
       (season?.episodes || []).forEach((episode) => {
         if (!episode?.watched_at) return;
-        const seasonNumber = Number(episode.tvdb?.season ?? season.number ?? 0);
-        const episodeNumber = Number(episode.tvdb?.episode ?? episode.number ?? 0);
+        const mappedSeason = Number(episode.tvdb?.season || 0);
+        const mappedEpisode = Number(episode.tvdb?.episode || 0);
+        const hasTvdbCoordinates = mappedSeason > 0 && mappedEpisode > 0;
+        const seasonNumber = hasTvdbCoordinates ? mappedSeason : Number(season.number || 0);
+        const episodeNumber = hasTvdbCoordinates ? mappedEpisode : Number(episode.number || 0);
         if (episodeNumber <= 0) return;
         const watchedAt = parseDate(episode.watched_at, snapshot.lastSyncedAt);
+        const isSimklAbsoluteEpisode = entry.mediaType === "anime" && !hasTvdbCoordinates;
         const watched = {
           ...base,
           season: seasonNumber,
           episode: episodeNumber,
-          watchedAt
+          watchedAt,
+          isSimklAbsoluteEpisode
         };
         items.push(watched);
         watchedShowSeedItems.push({
@@ -581,7 +584,8 @@ function watchedProjection(snapshot) {
           season: seasonNumber,
           episode: episodeNumber,
           seasonNumber,
-          episodeNumber
+          episodeNumber,
+          isSimklAbsoluteEpisode
         });
       });
     });

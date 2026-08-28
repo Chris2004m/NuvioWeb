@@ -104,16 +104,27 @@ function byWatchedAtDescending(left, right) {
 function limitWatchedItems(items, limit) {
   const all = Array.isArray(items) ? items : [];
   const max = Math.max(0, Number(limit || 0));
-  if (!max || all.length <= max) {
+  if (max === 0) {
+    return [];
+  }
+  if (!Number.isFinite(max) || all.length <= max) {
     return all;
   }
 
   const furthestByContent = new Map();
   all.forEach((item) => {
-    const contentId = String(item?.contentId || "").trim();
+    const contentId = String(item?.contentId || "")
+      .trim()
+      .toLowerCase();
     if (!contentId) return;
     const existing = furthestByContent.get(contentId);
-    if (!existing || watchedEpisodeRank(item) > watchedEpisodeRank(existing)) {
+    const itemRank = watchedEpisodeRank(item);
+    const existingRank = watchedEpisodeRank(existing);
+    if (
+      !existing ||
+      itemRank > existingRank ||
+      (itemRank === existingRank && Number(item?.watchedAt || 0) > Number(existing?.watchedAt || 0))
+    ) {
       furthestByContent.set(contentId, item);
     }
   });
@@ -201,7 +212,7 @@ async function deleteWatchedItemsFromCloud(items = [], profileId = activeProfile
 class WatchedItemsRepository {
   async getAll(limit = 2000, profileId = activeProfileId()) {
     const local = WatchedItemsStore.listForProfile(profileId);
-    if (!shouldUseSimkl()) return limitWatchedItems(local, limit);
+    if (!shouldUseSimkl()) return local.slice(0, limit);
     const remote = await SimklSyncService.getWatchedItems().catch(() => []);
     const remoteKeys = new Set(remote.map(watchedKey));
     return limitWatchedItems(

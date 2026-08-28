@@ -1250,6 +1250,44 @@ function normalizeEpisodeEntries(videos = []) {
     });
 }
 
+function mapAbsoluteEpisodeKey(episodes, key) {
+  const [season, episode] = String(key || "")
+    .split(":")
+    .map(Number);
+  if (season !== 1 || episode <= 0) {
+    return null;
+  }
+  const index = findAbsoluteEpisodeAnchorIndex(episodes, { season, episode });
+  const target = index >= 0 ? episodes[index] : null;
+  return target ? episodeKey(target.season, target.episode) : null;
+}
+
+function mapAbsoluteWatchedEpisodeKeys(episodes, watchedEpisodeKeys) {
+  const mapped = new Set(watchedEpisodeKeys || []);
+  Array.from(mapped).forEach((key) => {
+    const mappedKey = mapAbsoluteEpisodeKey(episodes, key);
+    if (mappedKey) {
+      mapped.add(mappedKey);
+    }
+  });
+  return mapped;
+}
+
+function mapAbsoluteEpisodeProgress(episodes, progressByEpisode) {
+  const mapped = new Map(progressByEpisode);
+  progressByEpisode.forEach((entry, key) => {
+    const mappedKey = mapAbsoluteEpisodeKey(episodes, key);
+    if (!mappedKey) {
+      return;
+    }
+    const existing = mapped.get(mappedKey);
+    if (!existing || Number(entry?.updatedAt || 0) > Number(existing?.updatedAt || 0)) {
+      mapped.set(mappedKey, entry);
+    }
+  });
+  return mapped;
+}
+
 function findEpisodeEntry(videos = [], season = null, episode = null) {
   const targetSeason = Number(season);
   const targetEpisode = Number(episode || 0);
@@ -1831,7 +1869,8 @@ function buildNextUpSeedFromWatchedItem(item = {}) {
     durationMs: 100,
     progressPercent: 100,
     updatedAt: watchedAt,
-    source: "watched_items"
+    source: "watched_items",
+    isSimklAbsoluteEpisode: item?.isSimklAbsoluteEpisode === true
   };
 }
 
@@ -10179,10 +10218,17 @@ export const HomeScreen = {
     }
     const showUnairedNextUp = options?.showUnairedNextUp !== false;
 
-    const progressByEpisode = this.buildEpisodeProgressIndex(
+    let progressByEpisode = this.buildEpisodeProgressIndex(
       allProgress,
       completedProgress?.contentId
     );
+    const isSimklAbsoluteEpisode = completedProgress?.isSimklAbsoluteEpisode === true;
+    const resolvedWatchedEpisodeKeys = isSimklAbsoluteEpisode
+      ? mapAbsoluteWatchedEpisodeKeys(episodes, watchedEpisodeKeys)
+      : watchedEpisodeKeys;
+    if (isSimklAbsoluteEpisode) {
+      progressByEpisode = mapAbsoluteEpisodeProgress(episodes, progressByEpisode);
+    }
     const anchorVideoId = String(completedProgress?.videoId || "").trim();
     let anchorIndex = anchorVideoId
       ? episodes.findIndex((entry) => String(entry?.id || "") === anchorVideoId)
@@ -10197,7 +10243,7 @@ export const HomeScreen = {
       );
     }
 
-    if (anchorIndex < 0) {
+    if (anchorIndex < 0 && isSimklAbsoluteEpisode) {
       anchorIndex = findAbsoluteEpisodeAnchorIndex(episodes, {
         season: anchorSeason,
         episode: anchorEpisode
@@ -10234,7 +10280,7 @@ export const HomeScreen = {
       const candidate = episodes[index];
       const key = episodeKey(candidate.season, candidate.episode);
       const candidateProgress = progressByEpisode.get(key);
-      if (watchedEpisodeKeys?.has?.(key)) {
+      if (resolvedWatchedEpisodeKeys?.has?.(key)) {
         continue;
       }
       if (candidateProgress && isCompletedForContinueWatching(candidateProgress)) {
