@@ -123,6 +123,7 @@ import {
   shouldApplyLateContinueWatchingFocus
 } from "./homeFocusPolicy.js";
 import { resolveNextUpCandidates } from "./nextUpCandidateResolver.js";
+import { shouldSurfaceNextUpForUntrackedSeries } from "./nextUpWatchingPolicy.js";
 import {
   getContinueWatchingRenderItems,
   shouldAppendContinueWatchingItems
@@ -10323,6 +10324,15 @@ export const HomeScreen = {
           }
         );
         if (!nextEpisode) {
+          return null;
+        }
+        if (
+          !watchProgressRepository.isTrackedAsWatching(contentId) &&
+          !shouldSurfaceNextUpForUntrackedSeries({
+            seedUpdatedAt: progressEntry?.updatedAt,
+            released: nextEpisode.released
+          })
+        ) {
           return null;
         }
         const hasAired = hasEpisodeAiredForContinueWatching(nextEpisode.released);

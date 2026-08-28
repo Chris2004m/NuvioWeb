@@ -331,6 +331,56 @@ function aliasesForMedia(media = {}, mediaType = "shows") {
   return aliases;
 }
 
+/**
+ * True when the viewer still has episodes of `entry` ahead of them.
+ *
+ * The Watching list alone is too narrow. It excludes On Hold, which is a pause rather than an
+ * ending, and Simkl moves an entry to Completed the moment its last aired episode is watched - so a
+ * show followed weekly sits at Completed between airings and would drop out until the viewer
+ * manually put it back. Every entry carries its own episode counts, which answer the question
+ * directly: aired episodes are the total minus the ones not yet out, and anything above what has
+ * been watched is still owed to the viewer.
+ *
+ * Dropped stays out under every reading - unwatched episodes are exactly what dropping a show
+ * leaves behind.
+ */
+function entryHasEpisodesAhead(entry = {}) {
+  if (entry.status === "dropped") return false;
+  if (entry.status === "watching" || entry.status === "hold") return true;
+  const total = Number(entry.total_episodes_count || 0);
+  const notAired = Number(entry.not_aired_episodes_count || 0);
+  const watched = Number(entry.watched_episodes_count || 0);
+  if (!total) return false;
+  return total - notAired - watched > 0;
+}
+
+/**
+ * True when any Simkl entry behind `contentId` still has episodes ahead of the viewer.
+ *
+ * Simkl splits a franchise into one entry per season, cour or arc, while a meta addon serves the
+ * whole run under a single ID. Finishing one entry therefore leaves plenty of episodes ahead in the
+ * addon's list, and Next Up - which only asks "is there an episode after the furthest one watched?"
+ * - keeps offering them. Grouping by alias means a franchise counts as unfinished while any of its
+ * entries is, which is what the viewer sees on Simkl.
+ *
+ * Answers true when the snapshot holds no entries at all, so a profile without Simkl behaves as
+ * before.
+ */
+function isTrackedAsWatching(snapshot, contentId) {
+  const entries = snapshot?.entries || [];
+  if (!entries.length) return true;
+  const candidate = String(contentId || "")
+    .trim()
+    .toLowerCase();
+  if (!candidate) return true;
+  return entries.some((entry) => {
+    if (!entryHasEpisodesAhead(entry)) return false;
+    const media = mediaForEntry(entry);
+    if (!media) return false;
+    return aliasesForMedia(media, entry.mediaType).has(candidate);
+  });
+}
+
 function parseContentId(contentId) {
   const raw = String(contentId || "").trim();
   if (!raw) return {};
@@ -561,6 +611,10 @@ export const SimklSyncService = {
   statusDefinitions: STATUS_DEFINITIONS,
 
   getSnapshot,
+
+  isTrackedAsWatching(contentId, profileId) {
+    return isTrackedAsWatching(getSnapshot(profileId), contentId);
+  },
 
   async refresh({ force = false } = {}) {
     if (!SimklAuthService.isAuthenticated()) return false;
