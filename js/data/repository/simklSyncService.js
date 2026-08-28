@@ -5,12 +5,13 @@ import { SimklAuthService } from "./simklAuthService.js";
 import { simklRequest } from "./simklAuthService.js";
 
 const STORE_KEY = "simklSyncState";
-const SNAPSHOT_SCHEMA_VERSION = 2;
+const SNAPSHOT_SCHEMA_VERSION = 3;
 const AUTOMATIC_REFRESH_INTERVAL_MS = 15 * 60 * 1000;
-// Simkl requires `extended=full` before episode_watched_at/include_all_episodes
-// can populate seasons[].episodes[]. The anime-specific extension is kept for
-// incremental updates, matching Android's current sync contract.
-const BOOTSTRAP_QUERY = "extended=full&episode_watched_at=yes&include_all_episodes=yes&language=en";
+// Keep the initial import identical to Android's current sync contract. The
+// schema bump forces existing Smart TV snapshots to fetch the richer episode
+// mapping once instead of continuing with the older bootstrap shape.
+const BOOTSTRAP_QUERY =
+  "extended=full_anime_seasons&episode_watched_at=yes&episode_tvdb_id=yes&include_all_episodes=yes&language=en";
 const EXTENDED_QUERY =
   "extended=full_anime_seasons&episode_watched_at=yes&episode_tvdb_id=yes&include_all_episodes=yes&language=en";
 const STATUS_DEFINITIONS = [

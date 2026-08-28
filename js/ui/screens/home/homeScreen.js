@@ -32,6 +32,7 @@ import { StartupSyncService } from "../../../core/profile/startupSyncService.js"
 import { AvatarRepository } from "../../../data/remote/supabase/avatarRepository.js";
 import { MemberAccessRepository } from "../../../data/remote/supabase/memberAccessRepository.js";
 import { Platform } from "../../../platform/index.js";
+import { WatchProgressSource } from "../../../data/local/traktSettingsStore.js";
 import {
   getTvHeroTransitionMode,
   getTvRuntimePerformanceProfile
@@ -1830,6 +1831,17 @@ function buildNextUpSeedFromWatchedItem(item = {}) {
     progressPercent: 100,
     updatedAt: watchedAt,
     source: "watched_items"
+  };
+}
+
+function getContinueWatchingNextUpSeedOptions() {
+  const source =
+    watchProgressRepository.getContinueWatchingSource?.() || WatchProgressSource.NUVIO_SYNC;
+  const useLocalWatchedItemSeeds = source === WatchProgressSource.NUVIO_SYNC;
+  return {
+    applyDaysCap: source === WatchProgressSource.TRAKT,
+    includeProgressSeeds: !useLocalWatchedItemSeeds,
+    includeWatchedItemSeeds: useLocalWatchedItemSeeds
   };
 }
 
@@ -8683,8 +8695,7 @@ export const HomeScreen = {
     this.layoutPrefs = prefs;
     this.sidebarExpanded = Boolean(this.layoutPrefs?.modernSidebar && this.sidebarExpanded);
     this.layoutMode = String(prefs.homeLayout || "classic").toLowerCase();
-    const includeWatchedItemNextUpSeeds =
-      watchProgressRepository.getContinueWatchingSource?.() !== "trakt";
+    const nextUpSeedOptions = getContinueWatchingNextUpSeedOptions();
     const watchedItemsPromise = watchedItemsRepository.getAll(2000).catch(() => []);
     watchedItemsPromise.then((watchedItems) => {
       if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
@@ -8987,9 +8998,7 @@ export const HomeScreen = {
           this.continueWatching,
           this.watchedItems,
           {
-            applyDaysCap: !includeWatchedItemNextUpSeeds,
-            includeProgressSeeds: !includeWatchedItemNextUpSeeds,
-            includeWatchedItemSeeds: includeWatchedItemNextUpSeeds,
+            ...nextUpSeedOptions,
             nextUpFromFurthestEpisode: prefs.nextUpFromFurthestEpisode
           }
         ).slice(0, CW_MAX_NEXT_UP_LOOKUPS);
@@ -10259,10 +10268,7 @@ export const HomeScreen = {
       Array.isArray(nextUpProgressCandidates) && nextUpProgressCandidates.length
         ? nextUpProgressCandidates
         : this.selectNextUpProgressCandidates(allProgress, inProgressItems, watchedItems, {
-            applyDaysCap: watchProgressRepository.getContinueWatchingSource?.() === "trakt",
-            includeProgressSeeds: watchProgressRepository.getContinueWatchingSource?.() === "trakt",
-            includeWatchedItemSeeds:
-              watchProgressRepository.getContinueWatchingSource?.() !== "trakt",
+            ...getContinueWatchingNextUpSeedOptions(),
             nextUpFromFurthestEpisode: this.layoutPrefs?.nextUpFromFurthestEpisode
           });
 
