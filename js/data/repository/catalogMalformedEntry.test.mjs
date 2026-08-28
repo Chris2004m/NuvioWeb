@@ -51,5 +51,6 @@ test("catalog skips malformed entries and preserves pagination count", async () 
     ["First", "  Third  "],
     "kept names are preserved verbatim"
   );
+  assert.equal(result.data.nextSkip, 15, "pagination advances by the raw entry count");
   assert.equal(result.data.hasMore, true, "raw entry count keeps pagination going");
 });

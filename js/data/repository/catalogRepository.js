@@ -73,6 +73,7 @@ class CatalogRepository {
           isLoading: false,
           hasMore: Boolean(supportsSkip && metas.length > 0),
           currentPage: Math.floor(skip / 100),
+          nextSkip: supportsSkip && metas.length > 0 ? skip + metas.length : skip,
           supportsSkip
         };
 
