@@ -6,11 +6,17 @@
  */
 
 function hasText(value) {
-  return typeof value === "string" ? value.trim().length > 0 : Boolean(value);
+  return typeof value === "string" && value.trim().length > 0;
 }
 
 export function isMappableCatalogEntry(meta) {
-  return Boolean(meta) && typeof meta === "object" && hasText(meta.id) && hasText(meta.name);
+  return (
+    Boolean(meta) &&
+    typeof meta === "object" &&
+    !Array.isArray(meta) &&
+    hasText(meta.id) &&
+    hasText(meta.name)
+  );
 }
 
 export function selectCatalogEntries(rawMetas) {

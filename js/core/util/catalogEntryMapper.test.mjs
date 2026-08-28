@@ -50,8 +50,11 @@ test("returns an empty result for missing or non array input", () => {
 test("isMappableCatalogEntry guards null, non objects, and blank fields", () => {
   assert.equal(isMappableCatalogEntry(null), false);
   assert.equal(isMappableCatalogEntry("nope"), false);
+  assert.equal(isMappableCatalogEntry([]), false);
   assert.equal(isMappableCatalogEntry({ id: "tt1" }), false);
   assert.equal(isMappableCatalogEntry({ name: "No id" }), false);
   assert.equal(isMappableCatalogEntry({ id: "  ", name: "Blank id" }), false);
+  assert.equal(isMappableCatalogEntry({ id: 123, name: "Numeric id" }), false);
+  assert.equal(isMappableCatalogEntry({ id: "tt1", name: 123 }), false);
   assert.equal(isMappableCatalogEntry({ id: "tt1", name: "Ok" }), true);
 });
