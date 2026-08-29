@@ -14260,13 +14260,10 @@ export const PlayerScreen = {
         windowData.windowEndSeconds || startSeconds + EMBEDDED_TEXT_SUBTITLE_WINDOW_SECONDS
       );
       const assBody = String(windowData.assBody || "");
-      const shouldUseAss =
-        Boolean(assBody) &&
-        (this.webOsEmbeddedTextSubtitleUsingAss ||
-          windowData.hasAdvancedAssOverrideTags ||
-          isAssSubtitleCodec(windowData.codecId) ||
-          isAssSubtitleCodec(track?.codec) ||
-          isAssSubtitleCodec(track?.codec_name));
+      // TODO(ass.js): re-enable ASS renderer once webOS time/loop is fixed.
+      // Disabled: ASS renderer freezes on webOS (cue stuck, see 0.3.44).
+      // Force VTT/HTML fallback which correctly advances (ass.js kept).
+      const shouldUseAss = false;
       if (shouldUseAss) {
         const assResult = await this.applyAssSubtitleBody({
           body: assBody,
