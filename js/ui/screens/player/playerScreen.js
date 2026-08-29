@@ -14260,11 +14260,13 @@ export const PlayerScreen = {
         windowData.windowEndSeconds || startSeconds + EMBEDDED_TEXT_SUBTITLE_WINDOW_SECONDS
       );
       const assBody = String(windowData.assBody || "");
+      // Select the renderer from stable track metadata. The advanced-tag flag
+      // is local to this extraction window and can otherwise switch from the
+      // VTT fallback to ass.js while playback is already running, leaving the
+      // newly-created renderer stuck on its initial cue.
       const shouldUseAss =
         Boolean(assBody) &&
-        (this.webOsEmbeddedTextSubtitleUsingAss ||
-          windowData.hasAdvancedAssOverrideTags ||
-          isAssSubtitleCodec(windowData.codecId) ||
+        (isAssSubtitleCodec(windowData.codecId) ||
           isAssSubtitleCodec(track?.codec) ||
           isAssSubtitleCodec(track?.codec_name));
       if (shouldUseAss) {
