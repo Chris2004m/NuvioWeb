@@ -58,6 +58,7 @@ import { WebOsAudioCompatibilityStore } from "../../../data/local/webOsAudioComp
 import { matchStreamBadges } from "../../../core/streams/streamBadgeRules.js";
 import { hasReleaseToken } from "../../../core/streams/releaseToken.js";
 import { selectAutoPlayStream } from "../../../core/streams/streamAutoPlaySelector.js";
+import { orderStreamsByAddonOrder } from "../../../core/streams/streamOrdering.js";
 import { metaRepository } from "../../../data/repository/metaRepository.js";
 import { I18n } from "../../../i18n/index.js";
 import { Environment } from "../../../platform/environment.js";
@@ -65,6 +66,7 @@ import { TizenCapabilities } from "../../../platform/tizen/tizenCapabilities.js"
 import { Router } from "../../navigation/router.js";
 import { renderLoadingIndicator } from "../../components/loadingIndicator.js";
 import { DirectDebridResolver } from "../../../core/debrid/directDebridResolver.js";
+import { DebridStreamPresentation } from "../../../core/debrid/directDebridStreamPresentation.js";
 import { TrackingScrobbleService } from "../../../data/repository/trackingScrobbleService.js";
 import { WebOsEngineFsResolver } from "../../../core/p2p/webosEngineFsResolver.js";
 import { TizenStreamingServerResolver } from "../../../core/p2p/tizenStreamingServerResolver.js";
@@ -3877,6 +3879,12 @@ export const PlayerScreen = {
             stream.raw?.streamOrigin?.sourceProviderId ||
             null
         };
+        const rawAddonOrderIndex =
+          stream.addonOrderIndex ??
+          stream.raw?.addonOrderIndex ??
+          stream.streamOrigin?.addonOrderIndex ??
+          stream.raw?.streamOrigin?.addonOrderIndex;
+        const addonOrderIndex = rawAddonOrderIndex == null ? null : Number(rawAddonOrderIndex);
         const entry = {
           id: stream.id || `stream-${index}-${streamUrl}`,
           label: stream.name || stream.title || stream.label || `Source ${index + 1}`,
@@ -3894,6 +3902,7 @@ export const PlayerScreen = {
             stream.raw?.streamOrigin?.sourceProviderId ||
             null,
           streamOrigin,
+          addonOrderIndex: Number.isFinite(addonOrderIndex) ? addonOrderIndex : null,
           mimeType: stream.mimeType || stream.raw?.mimeType || stream.type || stream.source || null,
           sourceType: stream.sourceType || stream.mimeType || stream.type || stream.source || "",
           url: streamUrl,
@@ -7956,7 +7965,11 @@ export const PlayerScreen = {
     const cache = this.streamCandidatesByVideoId || (this.streamCandidatesByVideoId = new Map());
     if (cache.has(cacheKey)) {
       const cached = cache.get(cacheKey);
-      const cachedStreams = Array.isArray(cached) ? cached.map((stream) => ({ ...stream })) : [];
+      const cachedStreams = orderStreamsByAddonOrder(
+        Array.isArray(cached) ? cached.map((stream) => ({ ...stream })) : [],
+        [],
+        { isDirectDebrid: (stream) => DebridStreamPresentation.isDirectDebrid(stream) }
+      );
       options.onChunk?.(cachedStreams);
       return cachedStreams;
     }
@@ -7964,7 +7977,11 @@ export const PlayerScreen = {
       this.streamCandidatesLoadPromises || (this.streamCandidatesLoadPromises = new Map());
     if (loadPromises.has(cacheKey)) {
       const loaded = await loadPromises.get(cacheKey);
-      const loadedStreams = Array.isArray(loaded) ? loaded.map((stream) => ({ ...stream })) : [];
+      const loadedStreams = orderStreamsByAddonOrder(
+        Array.isArray(loaded) ? loaded.map((stream) => ({ ...stream })) : [],
+        [],
+        { isDirectDebrid: (stream) => DebridStreamPresentation.isDirectDebrid(stream) }
+      );
       options.onChunk?.(loadedStreams);
       return loadedStreams;
     }
@@ -7981,13 +7998,21 @@ export const PlayerScreen = {
             return;
           }
           partialItems = mergeStreamItems(partialItems, chunkItems);
-          options.onChunk?.(partialItems.map((stream) => ({ ...stream })));
+          options.onChunk?.(
+            orderStreamsByAddonOrder(partialItems, [], {
+              isDirectDebrid: (stream) => DebridStreamPresentation.isDirectDebrid(stream)
+            }).map((stream) => ({ ...stream }))
+          );
         }
       })
       .then((streamResult) => {
-        const streamItems = mergeStreamItems(
-          partialItems,
-          streamResult?.status === "success" ? flattenStreamGroups(streamResult) : []
+        const streamItems = orderStreamsByAddonOrder(
+          mergeStreamItems(
+            partialItems,
+            streamResult?.status === "success" ? flattenStreamGroups(streamResult) : []
+          ),
+          [],
+          { isDirectDebrid: (stream) => DebridStreamPresentation.isDirectDebrid(stream) }
         );
         cache.set(
           cacheKey,
@@ -19017,17 +19042,9 @@ export const PlayerScreen = {
   },
 
   getOrderedStreamCandidates() {
-    return (this.streamCandidates || [])
-      .map((stream, index) => ({ stream, index }))
-      .sort((left, right) => {
-        const leftOrder = Number(left.stream?.addonOrderIndex ?? Number.MAX_SAFE_INTEGER);
-        const rightOrder = Number(right.stream?.addonOrderIndex ?? Number.MAX_SAFE_INTEGER);
-        if (leftOrder !== rightOrder) {
-          return leftOrder - rightOrder;
-        }
-        return left.index - right.index;
-      })
-      .map((entry) => entry.stream);
+    return orderStreamsByAddonOrder(this.streamCandidates || [], [], {
+      isDirectDebrid: (stream) => DebridStreamPresentation.isDirectDebrid(stream)
+    });
   },
 
   getFilteredSources(orderedStreams = this.getOrderedStreamCandidates()) {
