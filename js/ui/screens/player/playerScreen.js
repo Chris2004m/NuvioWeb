@@ -739,6 +739,42 @@ function isTx3gSubtitleTrack(track = {}) {
   return isTx3gSubtitleCodec(getTx3gSubtitleCodecValue(track));
 }
 
+function isSubRipSubtitleCodec(value) {
+  const normalized = cleanDisplayText(value)
+    .toLowerCase()
+    .replace(/[\s_-]+/g, "");
+  return [
+    "subrip",
+    "srt",
+    "stext/utf8",
+    "stext/srt",
+    "text/srt",
+    "text/xsubrip",
+    "application/xsubrip"
+  ].includes(normalized);
+}
+
+function getSubRipSubtitleCodecValue(track = {}) {
+  return (
+    track?.codec ||
+    track?.subtitleCodec ||
+    track?.codec_name ||
+    track?.codecId ||
+    track?.codec_id ||
+    track?.format ||
+    track?.raw?.codec ||
+    track?.raw?.codec_name ||
+    track?.raw?.codecId ||
+    track?.raw?.codec_id ||
+    track?.raw?.format ||
+    ""
+  );
+}
+
+function isSubRipSubtitleTrack(track = {}) {
+  return isSubRipSubtitleCodec(getSubRipSubtitleCodecValue(track));
+}
+
 function getBitmapSubtitleFormatLabel(track = {}) {
   const format = getEmbeddedBitmapSubtitleFormat(track);
   if (format === "pgs") {
@@ -823,6 +859,14 @@ function isBitmapSubtitleSupportError(error) {
 
 function isTizenTx3gEmbeddedSubtitleTrack(track = {}) {
   return Environment.isTizen() && isTx3gSubtitleTrack(track);
+}
+
+function isTizenSubRipEmbeddedSubtitleTrack(track = {}) {
+  return Environment.isTizen() && isSubRipSubtitleTrack(track);
+}
+
+function isTizenEmbeddedTextSubtitleFallbackTrack(track = {}) {
+  return isTizenTx3gEmbeddedSubtitleTrack(track) || isTizenSubRipEmbeddedSubtitleTrack(track);
 }
 
 function isAssSubtitleCodec(value) {
@@ -4614,6 +4658,10 @@ export const PlayerScreen = {
           nativeTrackIndex += 1;
         }
         const sourceTrackId = Number(track?.id);
+        // Tizen's /tracks endpoint exposes id as a zero-based ordinal within
+        // the media type; the Matroska fallback resolves that ordinal to the
+        // actual TrackNumber before reading blocks.
+        const sourceTrackOrdinal = sourceTrackId;
         const rawLanguage = getTrackLanguageValue(track);
         const normalizedLanguage = normalizeTrackLanguageCode(rawLanguage);
         const languageKey = normalizeSubtitleLanguageKey(
@@ -4628,6 +4676,10 @@ export const PlayerScreen = {
           id: `embedded-subtitle-${index}`,
           embeddedTrackIndex: index,
           sourceTrackId: Number.isFinite(sourceTrackId) ? sourceTrackId : -1,
+          sourceTrackOrdinal:
+            Number.isFinite(sourceTrackOrdinal) && sourceTrackOrdinal >= 0
+              ? sourceTrackOrdinal
+              : -1,
           nativeTrackIndex: isTizenAvPlayMetadata
             ? currentNativeTrackIndex
             : bitmapSubtitle
@@ -9020,7 +9072,7 @@ export const PlayerScreen = {
   },
 
   refreshSubtitleTrackRendering() {
-    if (this.isTizenTx3gEmbeddedSubtitleActive()) {
+    if (this.isTizenEmbeddedTextSubtitleActive()) {
       this.renderWebOsEmbeddedTextSubtitleAtCurrentTime();
       return;
     }
@@ -9085,9 +9137,10 @@ export const PlayerScreen = {
     });
   },
 
-  isTizenTx3gEmbeddedSubtitleActive() {
+  isTizenEmbeddedTextSubtitleActive() {
     return (
-      Environment.isTizen() && isTizenTx3gEmbeddedSubtitleTrack(this.webOsEmbeddedTextSubtitleTrack)
+      Environment.isTizen() &&
+      isTizenEmbeddedTextSubtitleFallbackTrack(this.webOsEmbeddedTextSubtitleTrack)
     );
   },
 
@@ -14135,7 +14188,8 @@ export const PlayerScreen = {
     const overlayActive =
       this.webOsEmbeddedTextSubtitleUsingHtml ||
       String(this.htmlSubtitleSelectedId || "").startsWith("webos-embedded-text-") ||
-      String(this.htmlSubtitleSelectedId || "").startsWith("tizen-tx3g-");
+      String(this.htmlSubtitleSelectedId || "").startsWith("tizen-tx3g-") ||
+      String(this.htmlSubtitleSelectedId || "").startsWith("tizen-embedded-text-");
     if (this.webOsEmbeddedTextSubtitleUsingAss) {
       this.destroyAssSubtitleRenderer();
     }
@@ -14209,12 +14263,16 @@ export const PlayerScreen = {
     const track = this.webOsEmbeddedTextSubtitleTrack;
     const sourceUrl = this.getTrackProbeUrl();
     const sourceTrackId = Number(track?.sourceTrackId);
+    const sourceTrackOrdinal = Number(track?.sourceTrackOrdinal);
+    const isTizenSubRipFallback = isTizenSubRipEmbeddedSubtitleTrack(track);
+    const hasValidTrackSelector = isTizenSubRipFallback
+      ? Number.isFinite(sourceTrackOrdinal) && sourceTrackOrdinal >= 0
+      : Number.isFinite(sourceTrackId) && sourceTrackId > 0;
     if (
-      (!Environment.isWebOS() && !isTizenTx3gEmbeddedSubtitleTrack(track)) ||
+      (!Environment.isWebOS() && !isTizenEmbeddedTextSubtitleFallbackTrack(track)) ||
       !track ||
       !sourceUrl ||
-      !Number.isFinite(sourceTrackId) ||
-      sourceTrackId <= 0 ||
+      !hasValidTrackSelector ||
       this.webOsEmbeddedTextSubtitleFallbackUnavailable ||
       this.webOsEmbeddedTextSubtitleLoading
     ) {
@@ -14230,7 +14288,8 @@ export const PlayerScreen = {
     try {
       const windowData = await localMediaEmbeddedSubtitleRepository.getWindow({
         url: sourceUrl,
-        trackNumber: sourceTrackId,
+        trackNumber: isTizenSubRipFallback ? undefined : sourceTrackId,
+        trackOrdinal: isTizenSubRipFallback ? sourceTrackOrdinal : undefined,
         startSeconds,
         endSeconds: startSeconds + EMBEDDED_TEXT_SUBTITLE_WINDOW_SECONDS,
         includeAssBody:
@@ -14319,7 +14378,7 @@ export const PlayerScreen = {
         Boolean(windowData.assBody);
       const cues = this.parseSubtitleCues(windowData.body);
       const shouldUseHtml =
-        isTizenTx3gEmbeddedSubtitleTrack(track) ||
+        isTizenEmbeddedTextSubtitleFallbackTrack(track) ||
         this.webOsEmbeddedTextSubtitleUsingHtml ||
         Boolean(windowData.hasAssOverrideTags) ||
         (isAssTrack && cues.length > 0);
@@ -14328,7 +14387,7 @@ export const PlayerScreen = {
       }
 
       if (!this.webOsEmbeddedTextSubtitleUsingHtml) {
-        const nativeRendererHidden = isTizenTx3gEmbeddedSubtitleTrack(track)
+        const nativeRendererHidden = isTizenEmbeddedTextSubtitleFallbackTrack(track)
           ? Boolean(PlayerController.applyAvPlaySubtitleRenderMode?.("html"))
           : typeof PlayerController.setWebOsEmbeddedSubtitleNativeVisibility === "function"
             ? await Promise.resolve(
@@ -14351,7 +14410,9 @@ export const PlayerScreen = {
       this.htmlSubtitleCues = cues;
       this.htmlSubtitleSelectedId = isTizenTx3gEmbeddedSubtitleTrack(track)
         ? `tizen-tx3g-${this.selectedEmbeddedSubtitleTrackIndex}`
-        : `webos-embedded-text-${this.selectedEmbeddedSubtitleTrackIndex}`;
+        : isTizenSubRipEmbeddedSubtitleTrack(track)
+          ? `tizen-embedded-text-${this.selectedEmbeddedSubtitleTrackIndex}`
+          : `webos-embedded-text-${this.selectedEmbeddedSubtitleTrackIndex}`;
       this.renderHtmlSubtitleOverlayCue([]);
       this.renderHtmlSubtitleOverlayAtCurrentTime();
       this.scheduleHtmlSubtitleOverlayRender();
@@ -14378,6 +14439,7 @@ export const PlayerScreen = {
         }
         console.warn("Embedded text subtitle rendering failed", {
           trackNumber: sourceTrackId,
+          trackOrdinal: sourceTrackOrdinal,
           code: error?.code || "",
           details: error?.details || null,
           error: error?.message || String(error || "")
@@ -14385,10 +14447,10 @@ export const PlayerScreen = {
         if (isTx3gSubtitleTrack(track)) {
           this.markEmbeddedTextSubtitleUnsupported(track);
         }
-        if (isTizenTx3gEmbeddedSubtitleTrack(track)) {
+        if (isTizenEmbeddedTextSubtitleFallbackTrack(track)) {
           // Keep playback alive when the optional extractor is unavailable on
-          // an older supported firmware; AVPlay can still render natively on
-          // devices that implement tx3g despite the documented gap.
+          // a supported firmware; AVPlay can still render natively on devices
+          // that implement the selected text codec despite the documented gap.
           PlayerController.applyAvPlaySubtitleRenderMode?.("native");
         }
       }
@@ -14813,6 +14875,17 @@ export const PlayerScreen = {
       !Environment.isTizen() ||
       typeof PlayerController.isUsingAvPlay !== "function" ||
       !PlayerController.isUsingAvPlay()
+    ) {
+      return;
+    }
+    // SubRip is rendered from the bounded Matroska extractor below. Ignore a
+    // late AVPlay callback only while that HTML overlay is active, so a failed
+    // extractor can still fall back to native AVPlay rendering.
+    if (
+      isTizenSubRipEmbeddedSubtitleTrack(this.webOsEmbeddedTextSubtitleTrack) &&
+      this.webOsEmbeddedTextSubtitleUsingHtml &&
+      (typeof PlayerController.shouldRenderAvPlaySubtitleCallbacksInHtml !== "function" ||
+        PlayerController.shouldRenderAvPlaySubtitleCallbacksInHtml())
     ) {
       return;
     }
@@ -17001,7 +17074,8 @@ export const PlayerScreen = {
     this.clearBitmapSubtitleOverlay({ dispose: true });
 
     let applied = false;
-    const useTizenTx3gHtmlFallback = isTizenTx3gEmbeddedSubtitleTrack(embeddedTrack);
+    const useTizenEmbeddedTextHtmlFallback =
+      isTizenEmbeddedTextSubtitleFallbackTrack(embeddedTrack);
     if (
       Environment.isTizen() &&
       typeof PlayerController.isUsingAvPlay === "function" &&
@@ -17012,7 +17086,7 @@ export const PlayerScreen = {
         typeof PlayerController.setAvPlaySubtitleTrack === "function" &&
         Number.isFinite(nativeTrackIndex)
           ? PlayerController.setAvPlaySubtitleTrack(nativeTrackIndex, {
-              renderMode: useTizenTx3gHtmlFallback ? "html" : this.subtitleRenderMode
+              renderMode: useTizenEmbeddedTextHtmlFallback ? "html" : this.subtitleRenderMode
             })
           : false;
     } else {
@@ -17045,7 +17119,7 @@ export const PlayerScreen = {
     if (
       embeddedTrack &&
       !embeddedTrack.bitmapSubtitle &&
-      (Environment.isWebOS() || useTizenTx3gHtmlFallback)
+      (Environment.isWebOS() || useTizenEmbeddedTextHtmlFallback)
     ) {
       this.webOsEmbeddedTextSubtitleTrack = embeddedTrack;
       this.webOsEmbeddedTextSubtitleUsingHtml = false;
