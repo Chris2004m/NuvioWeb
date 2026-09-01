@@ -978,6 +978,11 @@ export const PluginManager = {
 
   async addRepository(input) {
     if (!canEdit()) throw new Error("Plugin settings are read-only for this profile");
+    // Repository loading is asynchronous. Keep the operation bound to the
+    // effective profile that authorized it so a profile switch while the
+    // manifest/code is downloading cannot write the result into the new
+    // active profile.
+    const targetProfileId = getEffectivePluginProfileId();
     const rawInput = String(input || "").trim();
     const rawUrl = isPluginShortCode(rawInput)
       ? await resolvePluginShortCode(rawInput)
@@ -994,23 +999,26 @@ export const PluginManager = {
         repoType: PLUGIN_REPOSITORY_TYPES.EXTERNAL_DEX,
         name: rawUrl.split("/").pop() || "CloudStream extension"
       });
-      const state = currentState();
+      const state = currentState(targetProfileId);
       const repositoryKey = repositoryIdentity(repository.url);
       if (!state.repositories.some((entry) => repositoryIdentity(entry.url) === repositoryKey)) {
-        PluginStore.replace({
-          ...state,
-          repositories: [...state.repositories, repository],
-          syncDirty: true
-        });
+        PluginStore.replace(
+          {
+            ...state,
+            repositories: [...state.repositories, repository],
+            syncDirty: true
+          },
+          targetProfileId
+        );
       }
       return repository;
     }
     const normalizedUrl = canonicalizePluginUrl(rawUrl);
     const validation = validatePluginUrl(normalizedUrl);
     if (!validation.ok) throw new Error(validation.reason);
-    const state = currentState();
+    const initialState = currentState(targetProfileId);
     const identity = repositoryIdentity(normalizedUrl);
-    const existing = state.repositories.find(
+    const existing = initialState.repositories.find(
       (entry) => identity && repositoryIdentity(entry.url) === identity
     );
     if (existing) return existing;
@@ -1023,6 +1031,17 @@ export const PluginManager = {
     const sourceUrl = loaded.sourceUrl;
     const manifest = normalizePluginManifest(document, sourceUrl);
     const external = await loadExternalMetadata(document, sourceUrl, quota);
+    // Re-read after the network work. A pull or another UI action may have
+    // changed the repository list while the document was loading; never let
+    // this add operation replace that newer state with its old snapshot.
+    const state = currentState(targetProfileId);
+    const sourceIdentity = repositoryIdentity(sourceUrl);
+    const existingAfterLoad = state.repositories.find(
+      (entry) =>
+        (identity && repositoryIdentity(entry.url) === identity) ||
+        (sourceIdentity && repositoryIdentity(entry.url) === sourceIdentity)
+    );
+    if (existingAfterLoad) return existingAfterLoad;
     const saveExternalRepository = () => {
       const repository = createRemoteStub({
         url: canonicalizePluginUrl(rawUrl),
@@ -1048,7 +1067,7 @@ export const PluginManager = {
         ],
         syncDirty: true
       };
-      PluginStore.replace(next);
+      PluginStore.replace(next, targetProfileId);
       return repository;
     };
     // Android tries a specific external .json feed before treating it as a
@@ -1069,8 +1088,38 @@ export const PluginManager = {
             ?.enabled !== false,
         type: PLUGIN_REPOSITORY_TYPES.NUVIO_JS
       };
-      const next = await hydrateJsRepository(state, repository, manifest, { markDirty: true });
-      PluginStore.replace(next);
+      const hydrationRevision = PluginStore.getRevision(targetProfileId);
+      const next = await hydrateJsRepository(state, repository, manifest, {
+        markDirty: true,
+        profileId: targetProfileId
+      });
+      const currentAfterHydration = currentState(targetProfileId);
+      if (PluginStore.getRevision(targetProfileId) !== hydrationRevision) {
+        const concurrentRepository = currentAfterHydration.repositories.find(
+          (entry) => repositoryIdentity(entry.url) === repositoryIdentity(repository.url)
+        );
+        if (concurrentRepository) return concurrentRepository;
+        const hydratedScrapers = next.scrapers.filter(
+          (entry) => entry.repositoryId === repository.id
+        );
+        const merged = {
+          ...currentAfterHydration,
+          repositories: [
+            ...currentAfterHydration.repositories.filter((entry) => entry.id !== repository.id),
+            next.repositories.find((entry) => entry.id === repository.id) || repository
+          ],
+          scrapers: [
+            ...currentAfterHydration.scrapers.filter(
+              (entry) => entry.repositoryId !== repository.id
+            ),
+            ...hydratedScrapers
+          ],
+          syncDirty: true
+        };
+        PluginStore.replace(merged, targetProfileId);
+        return merged.repositories.find((entry) => entry.id === repository.id);
+      }
+      PluginStore.replace(next, targetProfileId);
       return repository;
     }
     if (external) return saveExternalRepository();
@@ -1079,9 +1128,11 @@ export const PluginManager = {
 
   async refreshRepository(repositoryId) {
     if (!canEdit()) throw new Error("Plugin settings are read-only for this profile");
-    const state = currentState();
+    const targetProfileId = getEffectivePluginProfileId();
+    const state = currentState(targetProfileId);
     const repository = state.repositories.find((entry) => entry.id === repositoryId);
     if (!repository) throw new Error("Repository not found");
+    const refreshRevision = PluginStore.getRevision(targetProfileId);
     if (!isExecutablePluginRepository(repository)) {
       if (
         repository.type === PLUGIN_REPOSITORY_TYPES.EXTERNAL_DEX &&
@@ -1091,7 +1142,7 @@ export const PluginManager = {
         const external = await loadExternalMetadata(loaded.document, loaded.sourceUrl, quotaFor());
         if (!external) throw new Error("CloudStream repository metadata is invalid");
         const scrapers = externalScrapers(repository, external);
-        PluginStore.replace({
+        const refreshedState = {
           ...state,
           repositories: state.repositories.map((entry) =>
             entry.id === repository.id
@@ -1112,7 +1163,25 @@ export const PluginManager = {
           // Refresh updates local metadata/provider cache only. Android does
           // not enqueue a repository push for this operation.
           syncDirty: state.syncDirty
-        });
+        };
+        const currentAfterRefresh = currentState(targetProfileId);
+        if (PluginStore.getRevision(targetProfileId) !== refreshRevision) {
+          if (!currentAfterRefresh.repositories.some((entry) => entry.id === repository.id)) {
+            return { ok: false, reason: "Repository was removed during refresh" };
+          }
+          if (
+            currentAfterRefresh.syncDirty ||
+            cloudRepositoryFingerprint(currentAfterRefresh) !== cloudRepositoryFingerprint(state)
+          ) {
+            return { ok: true, preservedLocalChanges: true, metadataOnly: true };
+          }
+          PluginStore.replace(
+            mergeLocalOnlyChanges(state, refreshedState, currentAfterRefresh),
+            targetProfileId
+          );
+        } else {
+          PluginStore.replace(refreshedState, targetProfileId);
+        }
         return { ok: true, metadataOnly: true };
       }
       return { ok: false, reason: "CloudStream/DEX repositories are metadata-only on Web TV" };
@@ -1126,9 +1195,23 @@ export const PluginManager = {
       manifest,
       // Refresh updates local metadata/provider cache only. Android does not
       // enqueue a repository push for this operation.
-      { markDirty: false }
+      { markDirty: false, profileId: targetProfileId }
     );
-    PluginStore.replace(next);
+    const currentAfterRefresh = currentState(targetProfileId);
+    if (PluginStore.getRevision(targetProfileId) !== refreshRevision) {
+      if (!currentAfterRefresh.repositories.some((entry) => entry.id === repository.id)) {
+        return { ok: false, reason: "Repository was removed during refresh" };
+      }
+      if (
+        currentAfterRefresh.syncDirty ||
+        cloudRepositoryFingerprint(currentAfterRefresh) !== cloudRepositoryFingerprint(state)
+      ) {
+        return { ok: true, preservedLocalChanges: true };
+      }
+      PluginStore.replace(mergeLocalOnlyChanges(state, next, currentAfterRefresh), targetProfileId);
+    } else {
+      PluginStore.replace(next, targetProfileId);
+    }
     return { ok: true };
   },
 
