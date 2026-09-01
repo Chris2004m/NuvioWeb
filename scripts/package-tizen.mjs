@@ -108,6 +108,7 @@ function buildConfigXml({
 ${serviceFeature}  <icon src="icon.png"/>
   <name>${appName}</name>
   <tizen:privilege name="http://tizen.org/privilege/internet"/>
+  <tizen:privilege name="http://tizen.org/privilege/unlimitedstorage"/>
 ${applicationLaunchPrivilege}  <tizen:privilege name="http://developer.samsung.com/privilege/network.public"/>
   <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
 ${engineFsService}${pluginService}  <tizen:profile name="tv-samsung"/>
@@ -522,6 +523,18 @@ function hasTizenServiceEntry(configXml, serviceId, contentPath) {
   ).test(String(configXml || ""));
 }
 
+function assertTizenStoragePrivilege(configXml) {
+  if (
+    !/<tizen:privilege\s+name=["']http:\/\/tizen\.org\/privilege\/unlimitedstorage["']/i.test(
+      configXml
+    )
+  ) {
+    throw new Error(
+      "Tizen WGT config.xml is missing the unlimitedstorage privilege required by the IndexedDB plugin-code cache."
+    );
+  }
+}
+
 function assertTizenServiceManifest(
   configXml,
   { requireEngineFsService = false, requirePluginService = false } = {}
@@ -602,6 +615,7 @@ async function assertTizenServicePackage(
     throw new Error("Tizen WGT is missing config.xml.");
   }
   const configXml = await configEntry.async("string");
+  assertTizenStoragePrivilege(configXml);
   assertTizenServiceManifest(configXml, {
     requireEngineFsService,
     requirePluginService

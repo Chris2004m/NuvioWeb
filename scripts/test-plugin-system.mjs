@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import dns from "node:dns";
 import http from "node:http";
 import { readFile } from "node:fs/promises";
+import { promisify } from "node:util";
 import vm from "node:vm";
 import { createPluginHttpServer } from "../services/plugin-http.cjs";
 import {
@@ -55,6 +57,7 @@ import {
 } from "../js/core/profile/pluginSyncService.js";
 
 const root = new URL("..", import.meta.url);
+const execFileAsync = promisify(execFile);
 
 if (!globalThis.localStorage) {
   const testStorage = new Map();
@@ -773,7 +776,7 @@ async function testRawScraperTestContract() {
         settings: { pluginsEnabled: true, groupStreamsByRepository: false }
       })
     );
-    PluginCodeStore.save(
+    await PluginCodeStore.save(
       scraperId,
       "module.exports.getStreams = function(){ return []; };",
       {},
@@ -791,13 +794,357 @@ async function testRawScraperTestContract() {
   } finally {
     PluginManager.ensureRuntime = previousEnsureRuntime;
     PluginRuntime.executePlugin = previousExecutePlugin;
-    PluginCodeStore.remove(scraperId);
+    await PluginCodeStore.remove(scraperId);
     PluginStore.replace({ ...previousState, syncDirty: false });
     if (previousWorker === undefined) delete globalThis.Worker;
     else globalThis.Worker = previousWorker;
     if (previousAllowBrowser === undefined)
       delete globalThis.__NUVIO_ALLOW_BROWSER_PLUGIN_RUNTIME__;
     else globalThis.__NUVIO_ALLOW_BROWSER_PLUGIN_RUNTIME__ = previousAllowBrowser;
+  }
+}
+
+async function testPluginCodeCacheContract() {
+  await PluginCodeStore.clearAll();
+
+  const legacyProbe = await execFileAsync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      `const calls = [];
+     const values = new Map([['pluginCodeCache', '{"entries":{"large":{"code":"x"}}}']]);
+     globalThis.localStorage = {
+       getItem: (key) => values.get(String(key)) ?? null,
+       setItem: (key, value) => values.set(String(key), String(value)),
+       removeItem: (key) => { calls.push(String(key)); values.delete(String(key)); }
+     };
+     await import('./js/data/local/pluginCodeStore.js');
+     console.log(JSON.stringify({ value: values.get('pluginCodeCache') ?? null, calls }));`
+    ],
+    { cwd: new URL("..", import.meta.url), encoding: "utf8" }
+  );
+  assert.deepEqual(
+    JSON.parse(legacyProbe.stdout.trim()),
+    {
+      value: null,
+      calls: ["pluginCodeCache"]
+    },
+    "legacy pluginCodeCache must be removed without being parsed or migrated"
+  );
+
+  const originalSetItem = globalThis.localStorage.setItem;
+  const writes = [];
+  globalThis.localStorage.setItem = (key, value) => {
+    writes.push([String(key), String(value)]);
+    return originalSetItem.call(globalThis.localStorage, key, value);
+  };
+  try {
+    const saveResult = PluginCodeStore.save("async-provider", "éé", {}, { maxBytes: 8 });
+    assert.equal(typeof saveResult.then, "function", "cache save must be asynchronous");
+    assert.equal(await saveResult, true);
+    const getResult = PluginCodeStore.get("async-provider");
+    assert.equal(typeof getResult.then, "function", "cache get must be asynchronous");
+    assert.equal((await getResult).code, "éé");
+    assert.deepEqual(writes, [], "plugin source code must never be persisted in localStorage");
+
+    await PluginCodeStore.clearAll();
+    await PluginCodeStore.save("old", "1234", {}, { maxBytes: 4 });
+    await PluginCodeStore.save("new", "5678", {}, { maxBytes: 4 });
+    assert.equal(await PluginCodeStore.get("old"), null, "LRU quota should evict the oldest entry");
+    assert.equal((await PluginCodeStore.get("new")).code, "5678");
+    assert.equal(
+      await PluginCodeStore.totalBytes(),
+      4,
+      "quota accounting should reflect evictions"
+    );
+
+    await PluginCodeStore.clearAll();
+    await PluginCodeStore.save("profile-one-old", "1111", {}, { profile: "1", maxBytes: 4 });
+    await PluginCodeStore.save("profile-one-new", "2222", {}, { profile: "1", maxBytes: 4 });
+    await PluginCodeStore.save("profile-two-old", "3333", {}, { profile: "2", maxBytes: 4 });
+    await PluginCodeStore.save("profile-two-new", "4444", {}, { profile: "2", maxBytes: 4 });
+    assert.equal(await PluginCodeStore.get("profile-one-old", "1"), null);
+    assert.equal((await PluginCodeStore.get("profile-one-new", "1")).code, "2222");
+    assert.equal(await PluginCodeStore.get("profile-two-old", "2"), null);
+    assert.equal((await PluginCodeStore.get("profile-two-new", "2")).code, "4444");
+    assert.equal(await PluginCodeStore.totalBytes("1"), 4);
+    assert.equal(await PluginCodeStore.totalBytes("2"), 4);
+
+    await PluginCodeStore.clearAll();
+    await PluginCodeStore.save("same-provider", "profile-one", {}, { profile: "1" });
+    await PluginCodeStore.save("same-provider", "profile-two", {}, { profile: "2" });
+    assert.equal((await PluginCodeStore.get("same-provider", "1")).code, "profile-one");
+    assert.equal((await PluginCodeStore.get("same-provider", "2")).code, "profile-two");
+    assert.equal(await PluginCodeStore.clearProfile("2"), true);
+    assert.equal(await PluginCodeStore.get("same-provider", "2"), null);
+    assert.equal((await PluginCodeStore.get("same-provider", "1")).code, "profile-one");
+    assert.equal(
+      await PluginCodeStore.clearProfile("1"),
+      false,
+      "primary profile cannot be cleared by profile deletion"
+    );
+  } finally {
+    globalThis.localStorage.setItem = originalSetItem;
+    await PluginCodeStore.clearAll();
+  }
+}
+
+async function testPluginCodeCacheFailureFallbacks() {
+  const runProbe = async (failure) => {
+    const { stdout } = await execFileAsync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        `globalThis.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
+         const database = {
+           objectStoreNames: { contains: () => true },
+           transaction() {
+             const transaction = { objectStore: () => ({ put() {}, get() {}, delete() {}, clear() {} }) };
+             queueMicrotask(() => transaction.onabort?.());
+             return transaction;
+           }
+         };
+         globalThis.indexedDB = {
+           open() {
+             const request = { result: ${failure === "transaction" ? "database" : "null"} };
+             queueMicrotask(() => request.${failure === "open" ? "onerror" : "onsuccess"}?.());
+             return request;
+           }
+         };
+         const warnings = [];
+         console.warn = (...args) => warnings.push(args.join(' '));
+         const { PluginCodeStore } = await import('./js/data/local/pluginCodeStore.js');
+         const saved = await PluginCodeStore.save('fallback-provider', 'fallback-code');
+         const entry = await PluginCodeStore.get('fallback-provider');
+         const removed = await PluginCodeStore.remove('fallback-provider');
+         const hidden = await PluginCodeStore.get('fallback-provider');
+         const cleared = await PluginCodeStore.clearAll();
+         console.log(JSON.stringify({ saved, code: entry?.code ?? null, removed, hidden, cleared, warnings: warnings.length }));`
+      ],
+      { cwd: new URL("..", import.meta.url), encoding: "utf8" }
+    );
+    return JSON.parse(stdout.trim().split("\n").at(-1));
+  };
+
+  const expected = {
+    saved: true,
+    code: "fallback-code",
+    removed: false,
+    hidden: null,
+    cleared: false,
+    warnings: 2
+  };
+  assert.deepEqual(
+    await runProbe("open"),
+    expected,
+    "open failure must use usable memory fallback and report unverified persistent cleanup"
+  );
+  assert.deepEqual(
+    await runProbe("transaction"),
+    expected,
+    "transaction failure must use usable memory fallback and report unverified persistent cleanup"
+  );
+}
+
+async function testPluginCodeCacheProfileBoundedEnumeration() {
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      `globalThis.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
+       globalThis.IDBKeyRange = {
+         bound: (lower, upper, lowerOpen = false, upperOpen = false) => ({ lower, upper, lowerOpen, upperOpen })
+       };
+       const records = new Map([
+         ['1:plugin_a', { key: '1:plugin_a', code: 'aa', bytes: 2, lastUsedAt: 1 }],
+         ['2:plugin_b', { key: '2:plugin_b', code: 'bbbb', bytes: 4, lastUsedAt: 2 }]
+       ]);
+       const ranges = [];
+       const visited = [];
+       const request = (result) => { const r = { result }; queueMicrotask(() => r.onsuccess?.()); return r; };
+       const store = {
+         get: (key) => request(records.get(key)),
+         put: (value) => { records.set(value.key, value); return request(value.key); },
+         delete: (key) => { records.delete(key); return request(undefined); },
+         clear: () => { records.clear(); return request(undefined); },
+         openCursor(range) {
+           ranges.push(range ?? null);
+           const keys = [...records.keys()].sort().filter((key) =>
+             !range || (key >= range.lower && key <= range.upper));
+           const r = {};
+           let index = 0;
+           const step = () => {
+             if (index >= keys.length) { r.result = null; r.onsuccess?.(); return; }
+             const key = keys[index++];
+             visited.push(key);
+             r.result = { key, value: records.get(key), continue: () => queueMicrotask(step) };
+             r.onsuccess?.();
+           };
+           queueMicrotask(step);
+           return r;
+         }
+       };
+       const database = {
+         objectStoreNames: { contains: () => true },
+         transaction() {
+           const tx = { objectStore: () => store };
+           setTimeout(() => tx.oncomplete?.(), 0);
+           return tx;
+         }
+       };
+       globalThis.indexedDB = { open() { const r = { result: database }; queueMicrotask(() => r.onsuccess?.()); return r; } };
+       const { PluginCodeStore } = await import('./js/data/local/pluginCodeStore.js');
+       const total = await PluginCodeStore.totalBytes('1');
+       const saved = await PluginCodeStore.save('extra', 'zz', {}, { profile: '1', maxBytes: 1024 });
+       const cleared = await PluginCodeStore.clear('1');
+       const remaining = [...records.keys()];
+       console.log(JSON.stringify({ total, saved, cleared, ranges, visited, remaining }));`
+    ],
+    { cwd: new URL("..", import.meta.url), encoding: "utf8" }
+  );
+  const result = JSON.parse(stdout.trim().split("\n").at(-1));
+  assert.equal(result.total, 2, "totalBytes must count only the effective profile");
+  assert.equal(result.saved, true);
+  assert.equal(result.cleared, true);
+  assert.equal(
+    result.ranges.length,
+    3,
+    "save, clear, and totalBytes each enumerate the profile once"
+  );
+  for (const range of result.ranges) {
+    assert.deepEqual(
+      range,
+      { lower: "1:", upper: "1:\uffff", lowerOpen: false, upperOpen: false },
+      "profile enumeration must use a prefix-bounded key range"
+    );
+  }
+  assert.equal(
+    result.visited.some((key) => key.startsWith("2:")),
+    false,
+    "another profile's records must never be visited"
+  );
+  assert.deepEqual(
+    result.remaining,
+    ["2:plugin_b"],
+    "clearing one profile must leave other profiles' persistent records intact"
+  );
+}
+
+async function testPluginManagerAwaitsCacheRemoval() {
+  const previousState = PluginStore.get();
+  const originalRemove = PluginCodeStore.remove;
+  let release;
+  let settled = false;
+  PluginStore.replace(
+    normalizePluginState({
+      repositories: [
+        {
+          id: "await-repository",
+          url: "https://example.com/repo",
+          type: PLUGIN_REPOSITORY_TYPES.NUVIO_JS
+        }
+      ],
+      scrapers: [
+        {
+          id: "await-provider",
+          repositoryId: "await-repository",
+          type: PLUGIN_REPOSITORY_TYPES.NUVIO_JS
+        }
+      ]
+    })
+  );
+  PluginCodeStore.remove = () =>
+    new Promise((resolve) => {
+      release = resolve;
+    });
+  try {
+    const removal = PluginManager.removeRepository("await-repository").then((value) => {
+      settled = true;
+      return value;
+    });
+    await Promise.resolve();
+    assert.equal(settled, false, "repository removal must await asynchronous cache deletion");
+    release(true);
+    assert.equal(await removal, true);
+  } finally {
+    PluginCodeStore.remove = originalRemove;
+    PluginStore.replace({ ...previousState, syncDirty: false });
+  }
+}
+
+async function testTypedRepositoryReconciliationAwaitsCleanup() {
+  const previousState = PluginStore.get();
+  const originalRemove = PluginCodeStore.remove;
+  const releases = [];
+  let settled = false;
+  PluginStore.replace(
+    normalizePluginState({
+      repositories: [
+        {
+          id: "typed-dex-repository",
+          url: "https://example.com/typed-dex",
+          type: PLUGIN_REPOSITORY_TYPES.NUVIO_JS
+        },
+        {
+          id: "typed-legacy-repository",
+          url: "https://example.com/typed-legacy",
+          type: PLUGIN_REPOSITORY_TYPES.NUVIO_JS
+        }
+      ],
+      scrapers: [
+        {
+          id: "typed-dex-provider",
+          repositoryId: "typed-dex-repository",
+          type: PLUGIN_REPOSITORY_TYPES.NUVIO_JS
+        },
+        {
+          id: "typed-legacy-provider",
+          repositoryId: "typed-legacy-repository",
+          type: PLUGIN_REPOSITORY_TYPES.NUVIO_JS
+        }
+      ]
+    })
+  );
+  PluginCodeStore.remove = () => new Promise((resolve) => releases.push(resolve));
+  try {
+    const reconciliation = PluginManager.reconcileWithRemoteRepoUrls([
+      { url: "https://example.com/typed-dex", repoType: PLUGIN_REPOSITORY_TYPES.EXTERNAL_DEX },
+      { url: "https://example.com/typed-legacy", repoType: PLUGIN_REPOSITORY_TYPES.LEGACY }
+    ]).then((value) => {
+      settled = true;
+      return value;
+    });
+    for (let attempt = 0; attempt < 10 && releases.length < 1; attempt += 1) {
+      await Promise.resolve();
+    }
+    assert.equal(settled, false, "typed repository reconciliation must await cache cleanup");
+    assert.equal(releases.length, 1, "the first typed transition must await cache cleanup");
+    releases.shift()(true);
+    for (let attempt = 0; attempt < 10 && releases.length < 1; attempt += 1) {
+      await Promise.resolve();
+    }
+    assert.equal(releases.length, 1, "the second typed transition must await cache cleanup");
+    releases.shift()(true);
+    const reconciled = await reconciliation;
+    assert.equal(
+      reconciled.repositories.find((entry) => entry.id === "typed-dex-repository").type,
+      PLUGIN_REPOSITORY_TYPES.EXTERNAL_DEX
+    );
+    assert.equal(
+      reconciled.repositories.find((entry) => entry.id === "typed-legacy-repository").type,
+      PLUGIN_REPOSITORY_TYPES.LEGACY
+    );
+    assert.equal(
+      reconciled.scrapers.length,
+      0,
+      "typed metadata-only transitions remove executable rows"
+    );
+  } finally {
+    PluginCodeStore.remove = originalRemove;
+    PluginStore.replace({ ...previousState, syncDirty: false });
   }
 }
 
@@ -986,7 +1333,7 @@ async function testDexReconciliationSafety() {
     PluginStore.replace(dexState);
     // Android allows a user-initiated DEX removal even though Web TV cannot
     // execute DEX code. The cloud row must therefore be removable here too.
-    assert.equal(PluginManager.removeRepository("dex-reconciliation"), true);
+    assert.equal(await PluginManager.removeRepository("dex-reconciliation"), true);
     assert.equal(
       PluginStore.get().repositories.some((entry) => entry.id === "dex-reconciliation"),
       false
@@ -1219,14 +1566,17 @@ async function testPluginCodeProfileIsolation() {
   const scraperId = "profile-isolated-scraper";
   try {
     await ProfileManager.setActiveProfile("2");
-    PluginCodeStore.remove(scraperId);
-    PluginCodeStore.remove(scraperId, "1");
-    assert.equal(PluginCodeStore.save(scraperId, "secondary-code", {}, { maxBytes: 1024 }), true);
-    assert.equal(PluginCodeStore.get(scraperId)?.code, "secondary-code");
-    assert.equal(PluginCodeStore.get(scraperId, "1"), null);
+    await PluginCodeStore.remove(scraperId);
+    await PluginCodeStore.remove(scraperId, "1");
+    assert.equal(
+      await PluginCodeStore.save(scraperId, "secondary-code", {}, { maxBytes: 1024 }),
+      true
+    );
+    assert.equal((await PluginCodeStore.get(scraperId))?.code, "secondary-code");
+    assert.equal(await PluginCodeStore.get(scraperId, "1"), null);
   } finally {
-    PluginCodeStore.remove(scraperId, "2");
-    PluginCodeStore.remove(scraperId, "1");
+    await PluginCodeStore.remove(scraperId, "2");
+    await PluginCodeStore.remove(scraperId, "1");
     await ProfileManager.setActiveProfile(previousProfileId);
   }
 }
@@ -2010,6 +2360,11 @@ async function testWorkerRuntime() {
 async function main() {
   testModelsAndSecurity();
   await testRuntimeArtifactsAndContracts();
+  await testPluginCodeCacheContract();
+  await testPluginCodeCacheFailureFallbacks();
+  await testPluginCodeCacheProfileBoundedEnumeration();
+  await testPluginManagerAwaitsCacheRemoval();
+  await testTypedRepositoryReconciliationAwaitsCleanup();
   await testTizenPluginServiceLifecycle();
   await testTizenPluginServiceStartOrder();
   await testTizenEngineFsGenericProxyGate();
