@@ -33,7 +33,23 @@ const singleFlight = new PluginExecutionFlight();
 const queuedExecutions = [];
 let runningExecutions = 0;
 let runtimeReadyPromise = null;
+let reconcileTail = Promise.resolve();
 export const ANDROID_PLUGIN_MANAGEMENT_USER_AGENT = "NuvioTV/1.0";
+
+function withReconcileLock(task) {
+  const previous = reconcileTail;
+  let current = null;
+  current = previous
+    .catch(() => {})
+    .then(task)
+    .finally(() => {
+      if (reconcileTail === current) {
+        reconcileTail = Promise.resolve();
+      }
+    });
+  reconcileTail = current;
+  return current;
+}
 
 function currentState() {
   return normalizePluginState(PluginStore.get());
@@ -302,6 +318,18 @@ function repositoryIdentity(url) {
   return (
     isJsonEndpoint(normalized) ? normalized : canonicalizePluginUrl(normalized, { manifest: true })
   ).toLowerCase();
+}
+
+function remoteRepositoryTypeHint(remote = {}) {
+  const url = canonicalizePluginUrl(remote?.url || remote?.url_template || remote?.urlTemplate);
+  if (/\.cs3(?:$|[?#])/i.test(url)) {
+    return PLUGIN_REPOSITORY_TYPES.EXTERNAL_DEX;
+  }
+  const declaredType = remote?.repoType ?? remote?.repo_type ?? remote?.type;
+  const hasExplicitType = remote?.repoTypeDeclared === true || declaredType != null;
+  return hasExplicitType
+    ? normalizePluginRepositoryType(declaredType, PLUGIN_REPOSITORY_TYPES.UNKNOWN)
+    : null;
 }
 
 async function fetchRepositoryDocument(url, quota) {
@@ -871,7 +899,10 @@ export const PluginManager = {
     PluginStore.replace({
       ...state,
       settings: { ...state.settings, pluginsEnabled: Boolean(enabled) },
-      syncDirty: true
+      // Android keeps this setting local; it is not part of the remote
+      // `plugins` repository payload. Preserve a repository mutation that may
+      // already be waiting to be pushed.
+      syncDirty: state.syncDirty
     });
     return true;
   },
@@ -882,7 +913,10 @@ export const PluginManager = {
     PluginStore.replace({
       ...state,
       settings: { ...state.settings, groupStreamsByRepository: Boolean(enabled) },
-      syncDirty: true
+      // Android keeps this setting local; it is not part of the remote
+      // `plugins` repository payload. Preserve a repository mutation that may
+      // already be waiting to be pushed.
+      syncDirty: state.syncDirty
     });
     return true;
   },
@@ -1020,7 +1054,9 @@ export const PluginManager = {
             ...state.scrapers.filter((entry) => entry.repositoryId !== repository.id),
             ...scrapers
           ],
-          syncDirty: true
+          // Refresh updates local metadata/provider cache only. Android does
+          // not enqueue a repository push for this operation.
+          syncDirty: state.syncDirty
         });
         return { ok: true, metadataOnly: true };
       }
@@ -1033,7 +1069,9 @@ export const PluginManager = {
       state,
       { ...repository, url: manifestUrl, name: manifest.name },
       manifest,
-      { markDirty: true }
+      // Refresh updates local metadata/provider cache only. Android does not
+      // enqueue a repository push for this operation.
+      { markDirty: false }
     );
     PluginStore.replace(next);
     return { ok: true };
@@ -1043,12 +1081,7 @@ export const PluginManager = {
     if (!canEdit()) return false;
     const state = currentState();
     const repository = state.repositories.find((entry) => entry.id === repositoryId);
-    if (
-      !repository ||
-      repository.type === PLUGIN_REPOSITORY_TYPES.UNKNOWN ||
-      isExternalDexRepository(repository)
-    )
-      return false;
+    if (!repository || repository.type === PLUGIN_REPOSITORY_TYPES.UNKNOWN) return false;
     const scraperIds = state.scrapers
       .filter((entry) => entry.repositoryId === repositoryId)
       .map((entry) => entry.id);
@@ -1059,6 +1092,10 @@ export const PluginManager = {
       scrapers: state.scrapers.filter((entry) => entry.repositoryId !== repositoryId),
       syncDirty: true
     });
+    // Android permits removing DEX repositories and pushes user-initiated
+    // removals immediately so a subsequent pull cannot re-add them before the
+    // debounced add/update sync runs.
+    PluginStore.flushCloudSync();
     return true;
   },
 
@@ -1066,7 +1103,7 @@ export const PluginManager = {
     if (!canEdit()) return false;
     const state = currentState();
     const repository = state.repositories.find((entry) => entry.id === repositoryId);
-    if (!repository || isExternalDexRepository(repository)) return false;
+    if (!repository) return false;
     PluginStore.replace({
       ...state,
       repositories: state.repositories.map((entry) =>
@@ -1095,7 +1132,8 @@ export const PluginManager = {
       scrapers: state.scrapers.map((entry) =>
         entry.id === scraperId ? { ...entry, enabled: Boolean(enabled) } : entry
       ),
-      syncDirty: true
+      // Scraper enablement is local-only on Android and has no remote row.
+      syncDirty: state.syncDirty
     });
     return true;
   },
@@ -1117,181 +1155,222 @@ export const PluginManager = {
           ? { ...entry, enabled: Boolean(enabled) }
           : entry
       ),
-      syncDirty: true
+      // Scraper enablement is local-only on Android and has no remote row.
+      syncDirty: state.syncDirty
     });
     return true;
   },
 
-  async reconcileWithRemoteRepoUrls(remotePlugins = [], { removeMissingLocal = true } = {}) {
-    const incoming = (Array.isArray(remotePlugins) ? remotePlugins : [])
-      .map((entry) => (typeof entry === "string" ? { url: entry } : entry || {}))
-      .map((entry) => ({
-        ...entry,
-        url: canonicalizePluginUrl(entry.url || entry.url_template || entry.urlTemplate)
-      }))
-      .filter((entry) => entry.url)
-      .filter(
-        (entry, index, values) =>
-          values.findIndex(
-            (candidate) => repositoryIdentity(candidate.url) === repositoryIdentity(entry.url)
-          ) === index
-      );
-    const state = currentState();
-    if (!incoming.length) return state;
-    let next = { ...state };
-    const unknownRemoteRows = [];
-    for (const remote of incoming) {
-      const detected = await classifyRemoteRepository(remote, quotaFor());
-      const type = detected.type;
-      const detectedRemote = { ...remote, url: detected.url || remote.url, repoType: type };
-      const remoteIdentity = repositoryIdentity(remote.url);
-      const detectedIdentity = repositoryIdentity(detectedRemote.url);
-      const existing = next.repositories.find((entry) => {
-        const localIdentity = repositoryIdentity(entry.url);
-        return (
-          localIdentity && (localIdentity === remoteIdentity || localIdentity === detectedIdentity)
+  async reconcileWithRemoteRepoUrls(
+    remotePlugins = [],
+    { removeMissingLocal = true, authoritativeSnapshot = false, expectedRevision = null } = {}
+  ) {
+    return withReconcileLock(async () => {
+      const incoming = (Array.isArray(remotePlugins) ? remotePlugins : [])
+        .map((entry) => (typeof entry === "string" ? { url: entry } : entry || {}))
+        .map((entry) => ({
+          ...entry,
+          url: canonicalizePluginUrl(entry.url || entry.url_template || entry.urlTemplate)
+        }))
+        .filter((entry) => entry.url)
+        .filter(
+          (entry, index, values) =>
+            values.findIndex(
+              (candidate) => repositoryIdentity(candidate.url) === repositoryIdentity(entry.url)
+            ) === index
         );
-      });
-      if (existing) {
-        if (type === PLUGIN_REPOSITORY_TYPES.UNKNOWN) {
-          unknownRemoteRows.push(remote.raw || remote);
-          continue;
-        }
-        if (
-          type === PLUGIN_REPOSITORY_TYPES.EXTERNAL_DEX ||
-          type === PLUGIN_REPOSITORY_TYPES.LEGACY
-        ) {
-          // A typed DEX row is opaque to Web. A normal pull contains only the
-          // repository row, not the Android-side binary metadata, so keeping
-          // the local DEX entry byte-for-byte is safer than rebuilding it and
-          // accidentally dropping its preserved scraper metadata or flag.
-          if (
-            type === PLUGIN_REPOSITORY_TYPES.EXTERNAL_DEX &&
-            existing.type === PLUGIN_REPOSITORY_TYPES.EXTERNAL_DEX &&
-            !detected.metadata
-          ) {
+      const state = currentState();
+      const reconciliationRevision = PluginStore.getRevision();
+      if (expectedRevision != null && reconciliationRevision !== Number(expectedRevision)) {
+        return state;
+      }
+      // Match Android's empty-snapshot guard: an empty successful response is
+      // not evidence that the local profile should be cleared.
+      if (!incoming.length) return state;
+      let next = { ...state };
+      const unknownRemoteRows = [];
+      for (const remote of incoming) {
+        const remoteIdentity = repositoryIdentity(remote.url);
+        const existingByRemoteIdentity = next.repositories.find(
+          (entry) => repositoryIdentity(entry.url) === remoteIdentity
+        );
+        // Android trusts the typed row for repositories it already knows. Do
+        // the same so every pull does not re-download each manifest just to
+        // rediscover a type that Supabase already supplied.
+        const typeHint = remoteRepositoryTypeHint(remote);
+        const detected =
+          existingByRemoteIdentity && typeHint !== null
+            ? { type: typeHint, url: remote.url }
+            : await classifyRemoteRepository(remote, quotaFor());
+        const type = detected.type;
+        const detectedRemote = { ...remote, url: detected.url || remote.url, repoType: type };
+        const detectedIdentity = repositoryIdentity(detectedRemote.url);
+        const existing = next.repositories.find((entry) => {
+          const localIdentity = repositoryIdentity(entry.url);
+          return (
+            localIdentity &&
+            (localIdentity === remoteIdentity || localIdentity === detectedIdentity)
+          );
+        });
+        if (existing) {
+          if (type === PLUGIN_REPOSITORY_TYPES.UNKNOWN) {
+            unknownRemoteRows.push(remote.raw || remote);
             continue;
           }
-          const external =
-            type === PLUGIN_REPOSITORY_TYPES.EXTERNAL_DEX
-              ? detected.metadata ||
-                normalizeExternalRepositoryMetadata(detected.document, detected.url)
-              : null;
-          // A typed remote transition is authoritative for execution policy:
-          // remove any cached JS code before retaining the row as metadata-only.
-          next = replaceRepositoryAsNonExecutable(next, existing, remote, detected, external);
+          if (
+            type === PLUGIN_REPOSITORY_TYPES.EXTERNAL_DEX ||
+            type === PLUGIN_REPOSITORY_TYPES.LEGACY
+          ) {
+            // A typed DEX row is opaque to Web. A normal pull contains only the
+            // repository row, not the Android-side binary metadata, so keeping
+            // the local DEX entry byte-for-byte is safer than rebuilding it and
+            // accidentally dropping its preserved scraper metadata or flag.
+            if (
+              type === PLUGIN_REPOSITORY_TYPES.EXTERNAL_DEX &&
+              existing.type === PLUGIN_REPOSITORY_TYPES.EXTERNAL_DEX &&
+              !detected.metadata
+            ) {
+              continue;
+            }
+            const external =
+              type === PLUGIN_REPOSITORY_TYPES.EXTERNAL_DEX
+                ? detected.metadata ||
+                  normalizeExternalRepositoryMetadata(detected.document, detected.url)
+                : null;
+            // A typed remote transition is authoritative for execution policy:
+            // remove any cached JS code before retaining the row as metadata-only.
+            next = replaceRepositoryAsNonExecutable(next, existing, remote, detected, external);
+            continue;
+          }
+          if (
+            type === PLUGIN_REPOSITORY_TYPES.NUVIO_JS &&
+            existing.type !== PLUGIN_REPOSITORY_TYPES.NUVIO_JS
+          ) {
+            try {
+              next = await hydrateDetectedJsRepository(next, existing, remote, detected);
+            } catch (error) {
+              console.warn("Plugin sync JS repository rehydration failed:", error);
+            }
+          }
           continue;
         }
-        if (
-          type === PLUGIN_REPOSITORY_TYPES.NUVIO_JS &&
-          existing.type !== PLUGIN_REPOSITORY_TYPES.NUVIO_JS
-        ) {
-          try {
-            next = await hydrateDetectedJsRepository(next, existing, remote, detected);
-          } catch (error) {
-            console.warn("Plugin sync JS repository rehydration failed:", error);
-          }
+        if (type === PLUGIN_REPOSITORY_TYPES.UNKNOWN) {
+          unknownRemoteRows.push(remote.raw || remote);
+          next.repositories = [...next.repositories, createRemoteStub(detectedRemote)];
+          continue;
         }
-        continue;
-      }
-      if (type === PLUGIN_REPOSITORY_TYPES.UNKNOWN) {
-        unknownRemoteRows.push(remote.raw || remote);
-        next.repositories = [...next.repositories, createRemoteStub(detectedRemote)];
-        continue;
-      }
-      if (type === PLUGIN_REPOSITORY_TYPES.NUVIO_JS) {
-        try {
-          const manifestUrl = detected.url || canonicalizePluginUrl(remote.url, { manifest: true });
-          const manifest =
-            detected.manifest ||
-            normalizePluginManifest(await fetchJson(manifestUrl, quotaFor()), manifestUrl);
-          if (manifest)
-            next = await hydrateJsRepository(
-              next,
-              {
-                ...createRemoteStub({ ...remote, url: manifestUrl, repoType: type }),
-                type,
-                url: manifestUrl,
-                name: manifest.name
-              },
-              manifest
-            );
-        } catch (error) {
-          console.warn("Plugin sync JS repository hydration failed:", error);
+        if (type === PLUGIN_REPOSITORY_TYPES.NUVIO_JS) {
+          try {
+            const manifestUrl =
+              detected.url || canonicalizePluginUrl(remote.url, { manifest: true });
+            const manifest =
+              detected.manifest ||
+              normalizePluginManifest(await fetchJson(manifestUrl, quotaFor()), manifestUrl);
+            if (manifest)
+              next = await hydrateJsRepository(
+                next,
+                {
+                  ...createRemoteStub({ ...remote, url: manifestUrl, repoType: type }),
+                  type,
+                  url: manifestUrl,
+                  name: manifest.name
+                },
+                manifest
+              );
+          } catch (error) {
+            console.warn("Plugin sync JS repository hydration failed:", error);
+            next.repositories = [
+              ...next.repositories,
+              createRemoteStub({ ...remote, repoType: type })
+            ];
+          }
+        } else {
+          const stub = createRemoteStub({ ...detectedRemote, repoType: type });
+          const external =
+            detected.metadata ||
+            normalizeExternalRepositoryMetadata(detected.document, detected.url);
+          const scrapers = external ? externalScrapers(stub, external) : [];
           next.repositories = [
             ...next.repositories,
-            createRemoteStub({ ...remote, repoType: type })
+            { ...stub, metadata: external || stub.metadata, scraperCount: scrapers.length }
+          ];
+          next.scrapers = [
+            ...next.scrapers.filter((entry) => entry.repositoryId !== stub.id),
+            ...scrapers
           ];
         }
-      } else {
-        const stub = createRemoteStub({ ...detectedRemote, repoType: type });
-        const external =
-          detected.metadata || normalizeExternalRepositoryMetadata(detected.document, detected.url);
-        const scrapers = external ? externalScrapers(stub, external) : [];
-        next.repositories = [
-          ...next.repositories,
-          { ...stub, metadata: external || stub.metadata, scraperCount: scrapers.length }
-        ];
-        next.scrapers = [
-          ...next.scrapers.filter((entry) => entry.repositoryId !== stub.id),
-          ...scrapers
-        ];
       }
-    }
-    if (removeMissingLocal) {
-      const remoteIdentities = new Set(incoming.map((entry) => repositoryIdentity(entry.url)));
-      const removed = next.repositories.filter(
-        (entry) => !remoteIdentities.has(repositoryIdentity(entry.url))
-      );
-      removed
-        .filter((entry) => entry.type === PLUGIN_REPOSITORY_TYPES.NUVIO_JS)
-        .flatMap((entry) =>
-          next.scrapers
-            .filter((scraper) => scraper.repositoryId === entry.id)
-            .map((scraper) => scraper.id)
+      // A local add/remove/toggle may have happened while a remote manifest was
+      // being hydrated. Never commit the stale working copy over that newer
+      // local state; the caller will flush its pending dirty snapshot instead.
+      if (PluginStore.getRevision() !== reconciliationRevision) {
+        return PluginStore.get();
+      }
+      if (removeMissingLocal && incoming.length) {
+        const remoteIdentities = new Set(incoming.map((entry) => repositoryIdentity(entry.url)));
+        const removed = next.repositories.filter(
+          (entry) => !remoteIdentities.has(repositoryIdentity(entry.url))
+        );
+        removed
+          .filter((entry) => entry.type === PLUGIN_REPOSITORY_TYPES.NUVIO_JS)
+          .flatMap((entry) =>
+            next.scrapers
+              .filter((scraper) => scraper.repositoryId === entry.id)
+              .map((scraper) => scraper.id)
+          )
+          .forEach((id) => PluginCodeStore.remove(id));
+        // A successful typed snapshot is authoritative, just like Android's
+        // complete remote list. Callers that consume an older/partial source
+        // can omit authoritativeSnapshot and retain opaque local entries.
+        const opaqueTypes = [
+          PLUGIN_REPOSITORY_TYPES.UNKNOWN,
+          PLUGIN_REPOSITORY_TYPES.LEGACY,
+          PLUGIN_REPOSITORY_TYPES.EXTERNAL_DEX
+        ];
+        next.repositories = next.repositories.filter(
+          (entry) =>
+            remoteIdentities.has(repositoryIdentity(entry.url)) ||
+            (!authoritativeSnapshot && opaqueTypes.includes(entry.type))
+        );
+        next.scrapers = next.scrapers.filter((entry) =>
+          next.repositories.some((repo) => repo.id === entry.repositoryId)
+        );
+      }
+      const ordered = incoming
+        .map((entry) =>
+          next.repositories.find(
+            (repo) => repositoryIdentity(repo.url) === repositoryIdentity(entry.url)
+          )
         )
-        .forEach((id) => PluginCodeStore.remove(id));
-      // A DEX or future/opaque repository is outside this client's delete
-      // authority. Keep it even when an older server response omits the row;
-      // Android may execute/reconcile DEX locally, but Web must never turn a
-      // partial/legacy cloud response into a destructive DEX removal.
-      next.repositories = next.repositories.filter(
-        (entry) =>
-          remoteIdentities.has(repositoryIdentity(entry.url)) ||
-          [
-            PLUGIN_REPOSITORY_TYPES.UNKNOWN,
-            PLUGIN_REPOSITORY_TYPES.LEGACY,
-            PLUGIN_REPOSITORY_TYPES.EXTERNAL_DEX
-          ].includes(entry.type)
+        .filter(Boolean);
+      const extras = next.repositories.filter(
+        (repo) =>
+          !incoming.some((entry) => repositoryIdentity(entry.url) === repositoryIdentity(repo.url))
       );
-      next.scrapers = next.scrapers.filter((entry) =>
-        next.repositories.some((repo) => repo.id === entry.repositoryId)
-      );
-    }
-    const ordered = incoming
-      .map((entry) =>
-        next.repositories.find(
-          (repo) => repositoryIdentity(repo.url) === repositoryIdentity(entry.url)
-        )
-      )
-      .filter(Boolean);
-    const extras = next.repositories.filter(
-      (repo) =>
-        !incoming.some((entry) => repositoryIdentity(entry.url) === repositoryIdentity(repo.url))
-    );
-    PluginStore.replace({
-      ...next,
-      repositories: ordered.concat(extras),
-      unknownRemoteRows: [...state.unknownRemoteRows, ...unknownRemoteRows]
-        .filter((entry, index, values) => {
-          const key = JSON.stringify(entry || {});
-          return values.findIndex((candidate) => JSON.stringify(candidate || {}) === key) === index;
-        })
-        .slice(0, 256),
-      rawRemoteRows: incoming.map((entry) => entry.raw || entry),
-      syncDirty: state.syncDirty
+      if (PluginStore.getRevision() !== reconciliationRevision) {
+        return PluginStore.get();
+      }
+      const preservedUnknownRows = authoritativeSnapshot
+        ? unknownRemoteRows
+        : [...state.unknownRemoteRows, ...unknownRemoteRows];
+      PluginStore.replace({
+        ...next,
+        repositories: ordered.concat(extras),
+        // A complete remote snapshot also makes previously preserved opaque
+        // rows stale; partial callers keep the old safety behavior.
+        unknownRemoteRows: preservedUnknownRows
+          .filter((entry, index, values) => {
+            const key = JSON.stringify(entry || {});
+            return (
+              values.findIndex((candidate) => JSON.stringify(candidate || {}) === key) === index
+            );
+          })
+          .slice(0, 256),
+        rawRemoteRows: incoming.map((entry) => entry.raw || entry),
+        syncDirty: state.syncDirty
+      });
+      return PluginStore.get();
     });
-    return PluginStore.get();
   },
 
   async executeScrapersStreaming({
@@ -1460,7 +1539,8 @@ export const PluginManager = {
           [scraperId]: settings && typeof settings === "object" ? settings : {}
         }
       },
-      syncDirty: true
+      // Per-scraper settings are local-only on Android and have no remote row.
+      syncDirty: state.syncDirty
     });
     return true;
   },

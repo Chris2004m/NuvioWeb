@@ -10203,10 +10203,14 @@ button:focus-visible {
   font-size: 21px;
 }
 
-.library-view-mode-button.selected,
+.library-view-mode-button.selected {
+  background: var(--focus-bg, #303030);
+}
+
 .library-view-mode-button.focused {
   border-color: var(--focus-color, #fff);
-  background: var(--focus-bg, #303030);
+  background: #fff;
+  color: #121212;
 }
 
 .library-cloud-toolbar {
@@ -11103,8 +11107,11 @@ html.legacy-webos .debug-console-log-frame {
 
 .plugins-main {
   min-height: 0;
+  min-width: 0;
   flex: 1 1 auto;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding-block: 56px 80px;
   scrollbar-width: none;
 }
 
@@ -11114,6 +11121,7 @@ html.legacy-webos .debug-console-log-frame {
 
 .plugins-panel {
   width: min(100%, 1660px);
+  min-width: 0;
   margin: 0 auto;
   padding: 4px 0 80px;
 }
@@ -11553,6 +11561,7 @@ html.legacy-webos .debug-console-log-frame {
   align-items: center;
   justify-content: space-between;
   gap: 18px;
+  min-width: 0;
   min-height: 64px;
   padding: 10px 0;
 }

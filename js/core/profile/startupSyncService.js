@@ -401,8 +401,18 @@ export const StartupSyncService = {
       return true;
     }
     if (!force && !allowWarmRepeat && canUsePersistedWarmSync(key, includeProfileSettings, now)) {
-      this.lastPullCompleted = true;
-      return true;
+      // Android's warm cycle still refreshes the complete plugin surface. A
+      // Smart TV that returned early here could keep an Android-added or
+      // removed repository stale for the six-hour warm TTL.
+      const pluginResult = await runSurface("warm plugins", () =>
+        PluginSyncService.pull(profileId)
+      );
+      const pluginSucceeded = pluginResult.ok && PluginSyncService.getLastPullStatus?.() === "ok";
+      this.lastPullCompleted = pluginSucceeded;
+      if (!pluginSucceeded && isSyncBackoffActive()) {
+        this.scheduleBackoffRetry({ notifyPullCompleted });
+      }
+      return pluginSucceeded;
     }
 
     let requestPromise = null;
@@ -558,7 +568,7 @@ export const StartupSyncService = {
       runSurface("home catalog settings", () =>
         HomeCatalogSettingsSyncService.pull(activeProfileId)
       ),
-      runSurface("plugins", () => PluginSyncService.pull()),
+      runSurface("plugins", () => PluginSyncService.pull(activeProfileId)),
       runSurface("addons", () => LibrarySyncService.pull()),
       runSurface("saved library", () => SavedLibrarySyncService.pull(activeProfileId))
     ]);
@@ -711,7 +721,7 @@ export const StartupSyncService = {
       ["profile settings push", () => ProfileSettingsSyncService.push()],
       ["collections push", () => CollectionSyncService.push()],
       ["home catalog settings push", () => HomeCatalogSettingsSyncService.push()],
-      ["plugins push", () => PluginSyncService.push()],
+      ["plugins push", () => PluginSyncService.push(profileId)],
       ["addons push", () => LibrarySyncService.push()],
       ["saved library push", () => SavedLibrarySyncService.push(profileId)],
       ["watched items push", () => WatchedItemsSyncService.push(profileId)],

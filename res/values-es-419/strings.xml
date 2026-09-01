@@ -2511,4 +2511,5 @@
     <string name="settings.plugins.openSubtitle">Administrar proveedores Nuvio JS ejecutables y metadatos externos conservados</string>
     <string name="settings.plugins.refreshRepository">Actualizar repositorio</string>
     <string name="settings.plugins.removeRepository">Eliminar repositorio</string>
+    <string name="home.continueStatusWatchedPercent">Visto {{percent}}%</string>
 </resources>

@@ -1086,4 +1086,5 @@
     <string name="settings.plugins.openSubtitle">Gestionează furnizorii Nuvio JS executabili și metadatele externe păstrate</string>
     <string name="settings.plugins.refreshRepository">Reîmprospătează depozitul</string>
     <string name="settings.plugins.removeRepository">Elimină depozitul</string>
+    <string name="home.continueStatusWatchedPercent">Vizionat {{percent}}%</string>
 </resources>

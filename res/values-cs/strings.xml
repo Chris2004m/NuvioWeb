@@ -2316,4 +2316,5 @@
     <string name="settings.plugins.openSubtitle">Spravovat spustitelné poskytovatele Nuvio JS a zachovaná externí metadata</string>
     <string name="settings.plugins.refreshRepository">Obnovit repozitář</string>
     <string name="settings.plugins.removeRepository">Odebrat repozitář</string>
+    <string name="home.continueStatusWatchedPercent">Sledováno {{percent}} %</string>
 </resources>

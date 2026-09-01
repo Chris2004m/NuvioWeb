@@ -65,6 +65,48 @@ diagnostics e pulizia cache. Le porte attuali sono:
 - Tizen: `2711`, con fallback `11471`; EngineFS e subtitle service mantengono le proprie porte;
 - webOS: `2721`, separata dal servizio media.
 
+### Lifecycle del servizio Tizen
+
+Il `PluginService` Tizen è un Web Service applicativo separato, avviato solo quando il coordinatore
+deve eseguire una chiamata di rete. Il file del servizio espone `module.exports.onStart` come punto
+di ingresso, crea il server HTTP una sola volta per lifecycle e chiude il server in `onExit` (con
+`onStop` come alias per firmware meno recenti), seguendo lo stesso contratto del servizio EngineFS.
+Il WGT carica inoltre `services/tizen/wrt-service-bridge.js` come modulo Tizen dedicato. Il
+coordinatore usa la stessa catena di avvio compatibile di EngineFS: `launchAppControl`,
+`tizen.application.launch` e infine `wrt:service.startService`; quando `web.service` risulta non
+disponibile, salta `launchAppControl` e prova prima il servizio WRT, poi il fallback applicativo.
+Il bridge normalizza sia il modulo WRT diretto sia il namespace ES con `default`, perché i firmware
+non espongono sempre la stessa forma JavaScript. `web.service=false` resta quindi un segnale di
+compatibilità e non una prova che il servizio dichiarato non sia avviabile: la prova operativa è la
+risposta del servizio locale.
+Ogni metodo è considerato riuscito solo dopo che il servizio ha risposto al health-check: una
+chiamata Tizen accettata senza un bind locale non blocca i tentativi successivi. Il coordinatore
+mantiene inoltre un budget complessivo di startup e registra metodo, ID, runtime Tizen e capability
+`web.service` quando tutti i tentativi falliscono.
+Il manifest WGT e il wrapper `sync:tizen` usano un ID nella forma `${packageId}.PluginService`,
+`auto-restart="false"` e `on-boot="false"`. Il coordinatore prova prima le porte locali, poi avvia
+esplicitamente il servizio e accetta un endpoint solo se `GET /health` conferma nome e versione del
+protocollo prima di inviare manifest o richieste provider.
+
+Il bind prova la porta `2711` e usa `11471` solo se la prima è occupata, usando l'overload
+`server.listen(port)` già impiegato dal runtime EngineFS funzionante; l'app verifica poi il listener
+su `127.0.0.1` e `localhost`. Il servizio resta silenzioso quando il lifecycle e il bind riescono;
+registra solo collisioni di porta, errori del server e impossibilità di avviare il listener. Il
+coordinatore app considera comunque riuscito un avvio soltanto dopo il proprio `GET /health`.
+
+Il bootstrap del servizio carica soltanto il modulo Node `http`, necessario per il bind e per
+`/health`. I moduli opzionali `url`, `net`, `dns`, `https` e `zlib` vengono caricati al primo fetch;
+un modulo non disponibile sul runtime Web Service leggero non può quindi impedire l'avvio del
+listener e produce un errore limitato alla singola richiesta.
+
+Se il coordinatore non raggiunge `/health`, non prova a interpretare il repository: lo conserva come
+`UNKNOWN` e non scarica codice. Un `Failed to fetch` durante il riconoscimento indica quindi un
+problema del confine app-servizio Tizen oppure del lifecycle del servizio; un errore HTTP restituito
+dal servizio verso il sito remoto conserva invece status e messaggio del provider. Per il playback,
+quando la sorgente richiede header che AVPlay non può inoltrare, il coordinatore usa il proxy locale
+EngineFS; il proxy viene deciso dalla risposta reale di `/settings`, non dal solo valore
+`web.service`.
+
 Il protocollo del servizio è volutamente più piccolo del contratto del plugin: il servizio conosce
 solo health/capabilities, richieste HTTP, cancellazione, diagnostics e `cache/clear`; non riceve
 repository, manifest o codice JavaScript e non decide l'ordine dei provider. Refresh del manifest,
@@ -103,19 +145,29 @@ immutabile del package e ogni esecuzione crea un contesto nuovo.
   cache eseguibile associata quando la rimozione è esplicita. Il campo storico `repository.enabled`
   resta persistito per compatibilità/sync ma non è un gate di esecuzione, come nel manager Android.
 - I vecchi `pluginSources` e `pluginsEnabled` vengono migrati senza perdere le sorgenti.
-- Risultato remoto vuoto o pull fallito non cancella lo stato locale.
+- Risultato remoto vuoto o pull fallito non cancella lo stato locale. Una snapshot remota tipizzata,
+  valida e non vuota è invece completa: rimuove anche i repository locali assenti, inclusi quelli DEX,
+  come il reconcile Android.
 - Transizione remota tipizzata JS -> DEX/legacy cancella il codice eseguibile prima di mantenere
   la riga metadata-only. La transizione verso JS reidrata manifest e provider solo se il manifest
   è valido; in caso di errore resta il vecchio stato noto.
-- Le righe sconosciute/future sono conservate, non rimosse e non riscritte.
-- Un repository `EXTERNAL_DEX` / `.cs3` non è rimovibile o disabilitabile dalla UI Web; il manager
-  rifiuta comunque le stesse mutazioni anche se invocate programmaticamente. Questo blocco è
-  locale al Web: non modifica lo stato Android e non disabilita il repository nel cloud.
+- Le righe sconosciute/future sono conservate, non rimosse e non riscritte quando il reconcile non ha
+  una snapshot tipizzata completa.
+- Un repository `EXTERNAL_DEX` / `.cs3` resta metadata-only e non viene eseguito sul Web TV; la
+  rimozione della repository è invece disponibile come su Android e viene propagata al cloud.
 
-Ogni modifica locale eseguibile viene marcata `syncDirty` e accodata con debounce per il profilo
-effettivo; modifiche ravvicinate producono una sola RPC. Il push attende un eventuale push già in
-corso, rispetta il backoff globale e usa l'ID del profilo come destinazione. Un profilo secondario
-che eredita il principale non può generare un push del set principale.
+Le modifiche al set delle repository (aggiunta, rimozione e `repository.enabled`) vengono marcate
+`syncDirty` e accodate con debounce per il profilo effettivo; modifiche ravvicinate producono una sola
+RPC. Toggle globali, toggle dei provider, impostazioni dei provider e refresh del manifest restano
+locali come su Android e non generano un push del catalogo `plugins`. Il push attende un eventuale
+push già in corso, rispetta il backoff globale e usa l'ID del profilo come destinazione. Un profilo
+secondario che eredita il principale non può generare un push del set principale. Un pull che trova
+una modifica locale pendente la pubblica prima di leggere il remoto e non applica uno snapshot se una
+modifica locale arriva durante il pull.
+
+Il pull dei plugin viene eseguito nel ciclo startup completo, nel warm cycle e quando si entra nella
+pagina Plugin; le richieste concorrenti per lo stesso profilo vengono accorpate e le riconciliazioni
+sono serializzate.
 
 Il pull legge `plugins` con `repo_type` quando presente. Il push usa esclusivamente la RPC
 tipizzata `sync_push_plugins` e non usa più una sequenza distruttiva DELETE/UPSERT. Se lo schema

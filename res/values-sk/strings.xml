@@ -2732,4 +2732,5 @@
     <string name="plugin_security_note">Kód pluginu beží v obmedzenom Workeri. Sieť riadi služba TV priložená v balíku s verejnými cieľmi HTTP(S), limitmi veľkosti, časovými limitmi a zrušením; bez prístupu k úložisku TV alebo natívnym API.</string>
     <string name="plugin_default_supported_types">movie/tv</string>
     <string name="settings.plugins.openSubtitle">Spravovať spustiteľných poskytovateľov Nuvio JS a zachované externé metadáta</string>
+    <string name="home.continueStatusWatchedPercent">Pozreté {{percent}} %</string>
 </resources>

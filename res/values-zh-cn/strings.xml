@@ -2504,4 +2504,5 @@
     <string name="settings.plugins.openSubtitle">管理可执行的 Nuvio JS 提供者和已保留的外部元数据</string>
     <string name="settings.plugins.refreshRepository">刷新仓库</string>
     <string name="settings.plugins.removeRepository">删除仓库</string>
+    <string name="home.continueStatusWatchedPercent">已观看 {{percent}}%</string>
 </resources>

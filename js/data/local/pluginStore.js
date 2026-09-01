@@ -11,10 +11,12 @@ import {
 const PLUGIN_STATE_KEY = "pluginState";
 const LEGACY_SOURCES_KEY = "pluginSources";
 const LEGACY_ENABLED_KEY = "pluginsEnabled";
-const PLUGIN_SYNC_DEBOUNCE_MS = 750;
+const PLUGIN_SYNC_DEBOUNCE_MS = 500;
 
 const pluginSyncTimers = new Map();
 const pluginSyncInFlight = new Map();
+const pluginStateRevisions = new Map();
+const pluginRemoteSyncDepth = new Map();
 
 function readProfiles() {
   const profiles = LocalStore.get("profiles", []);
@@ -27,6 +29,21 @@ export function getEffectivePluginProfileId(profileId = ProfileManager.getActive
     (entry) => String(entry?.id || entry?.profileIndex || "") === normalized
   );
   return profile?.usesPrimaryPlugins && normalized !== "1" ? "1" : normalized;
+}
+
+function normalizedPluginProfileId(profileId = ProfileManager.getActiveProfileId()) {
+  return String(getEffectivePluginProfileId(profileId) || "1");
+}
+
+function isRemoteSyncActive(profileId) {
+  return Number(pluginRemoteSyncDepth.get(normalizedPluginProfileId(profileId)) || 0) > 0;
+}
+
+function cancelPluginCloudSync(profileId) {
+  const normalizedProfileId = normalizedPluginProfileId(profileId);
+  const timer = pluginSyncTimers.get(normalizedProfileId);
+  if (timer) clearTimeout(timer);
+  pluginSyncTimers.delete(normalizedProfileId);
 }
 
 const scopedStore = createProfileScopedStore({
@@ -52,7 +69,9 @@ function migrateLegacyIfNeeded(profileId) {
       groupStreamsByRepository: false,
       scraperSettings: {}
     },
-    syncDirty: Array.isArray(legacySources) && legacySources.length > 0
+    // Legacy URL-template sources have no Android/cloud repository row. Keep
+    // them locally without blocking synchronization of modern repositories.
+    syncDirty: false
   });
   scopedStore.replaceForProfile(effectiveProfileId, migrated, { silentSync: true });
   LocalStore.set(`${PLUGIN_STATE_KEY}:migrationComplete`, true);
@@ -64,17 +83,23 @@ function readState(profileId = ProfileManager.getActiveProfileId()) {
 }
 
 function writeState(profileId, state) {
-  const effectiveProfileId = getEffectivePluginProfileId(profileId);
+  const effectiveProfileId = normalizedPluginProfileId(profileId);
   const normalized = normalizePluginState(state);
   scopedStore.replaceForProfile(effectiveProfileId, normalized, { silentSync: true });
-  if (normalized.syncDirty) {
+  pluginStateRevisions.set(
+    effectiveProfileId,
+    Number(pluginStateRevisions.get(effectiveProfileId) || 0) + 1
+  );
+  if (normalized.syncDirty && !isRemoteSyncActive(effectiveProfileId)) {
     queuePluginCloudSync(effectiveProfileId);
+  } else if (!normalized.syncDirty) {
+    cancelPluginCloudSync(effectiveProfileId);
   }
   return normalized;
 }
 
 function queuePluginCloudSync(profileId, delayMs = PLUGIN_SYNC_DEBOUNCE_MS) {
-  const normalizedProfileId = String(getEffectivePluginProfileId(profileId) || "1");
+  const normalizedProfileId = normalizedPluginProfileId(profileId);
   const previousTimer = pluginSyncTimers.get(normalizedProfileId);
   if (previousTimer) {
     clearTimeout(previousTimer);
@@ -82,6 +107,10 @@ function queuePluginCloudSync(profileId, delayMs = PLUGIN_SYNC_DEBOUNCE_MS) {
   const timer = setTimeout(
     () => {
       pluginSyncTimers.delete(normalizedProfileId);
+      if (isRemoteSyncActive(normalizedProfileId)) {
+        queuePluginCloudSync(normalizedProfileId, PLUGIN_SYNC_DEBOUNCE_MS);
+        return;
+      }
       const activePush = pluginSyncInFlight.get(normalizedProfileId);
       const run = async () => {
         if (activePush) {
@@ -141,8 +170,52 @@ export const PluginStore = {
     return this.update((state) => ({ ...state, syncDirty: true }), profileId);
   },
 
-  clearDirty(profileId = ProfileManager.getActiveProfileId()) {
-    return this.update((state) => ({ ...state, syncDirty: false }), profileId);
+  getRevision(profileId = ProfileManager.getActiveProfileId()) {
+    return Number(pluginStateRevisions.get(normalizedPluginProfileId(profileId)) || 0);
+  },
+
+  beginRemoteSync(profileId = ProfileManager.getActiveProfileId()) {
+    const normalizedProfileId = normalizedPluginProfileId(profileId);
+    pluginRemoteSyncDepth.set(
+      normalizedProfileId,
+      Number(pluginRemoteSyncDepth.get(normalizedProfileId) || 0) + 1
+    );
+  },
+
+  endRemoteSync(profileId = ProfileManager.getActiveProfileId()) {
+    const normalizedProfileId = normalizedPluginProfileId(profileId);
+    const nextDepth = Math.max(0, Number(pluginRemoteSyncDepth.get(normalizedProfileId) || 0) - 1);
+    if (nextDepth) {
+      pluginRemoteSyncDepth.set(normalizedProfileId, nextDepth);
+      return false;
+    }
+    pluginRemoteSyncDepth.delete(normalizedProfileId);
+    if (!readState(normalizedProfileId).syncDirty) return false;
+    queuePluginCloudSync(normalizedProfileId, 0);
+    return true;
+  },
+
+  flushCloudSync(profileId = ProfileManager.getActiveProfileId()) {
+    const normalizedProfileId = normalizedPluginProfileId(profileId);
+    if (isRemoteSyncActive(normalizedProfileId) || !readState(normalizedProfileId).syncDirty) {
+      return false;
+    }
+    queuePluginCloudSync(normalizedProfileId, 0);
+    return true;
+  },
+
+  clearDirty(profileId = ProfileManager.getActiveProfileId(), expectedRevision = null) {
+    const normalizedProfileId = normalizedPluginProfileId(profileId);
+    if (
+      expectedRevision != null &&
+      this.getRevision(normalizedProfileId) !== Number(expectedRevision)
+    ) {
+      return false;
+    }
+    const state = readState(normalizedProfileId);
+    if (!state.syncDirty) return false;
+    writeState(normalizedProfileId, { ...state, syncDirty: false });
+    return true;
   },
 
   clearProfile(profileId) {
@@ -151,6 +224,9 @@ export const PluginStore = {
     // A secondary profile that inherits the primary plugin set has no private
     // plugin state to remove. Never clear profile 1 through that alias.
     if (getEffectivePluginProfileId(normalizedProfileId) !== normalizedProfileId) return false;
+    cancelPluginCloudSync(normalizedProfileId);
+    pluginStateRevisions.delete(normalizedProfileId);
+    pluginRemoteSyncDepth.delete(normalizedProfileId);
     scopedStore.clearProfile(normalizedProfileId, { silentSync: true });
     return true;
   },
@@ -160,7 +236,7 @@ export const PluginStore = {
       (state) => ({
         ...state,
         legacySources: [...state.legacySources, createLegacySource(source, index)],
-        syncDirty: true
+        syncDirty: state.syncDirty
       }),
       profileId
     );

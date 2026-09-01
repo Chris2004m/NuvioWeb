@@ -26,6 +26,7 @@ const tizenEngineFsServiceRelativePath = "services/tizen/enginefs-service.js";
 const tizenEngineFsRuntimeDirRelativePath = "services/tizen/runtime";
 const tizenPluginServiceRelativePath = "services/tizen/plugin-service.js";
 const tizenPluginServiceSupportRelativePath = "services/plugin-http.cjs";
+const tizenPluginServiceBridgeRelativePath = "services/tizen/wrt-service-bridge.js";
 
 function isTruthy(value) {
   return /^(1|true|yes|on)$/i.test(String(value || ""));
@@ -150,7 +151,10 @@ function validateStoreServiceOptions({
   }
 }
 
-function buildIndexHtml() {
+function buildIndexHtml({ includePluginService = false } = {}) {
+  const pluginServiceBridge = includePluginService
+    ? `  <script type="module" src="${tizenPluginServiceBridgeRelativePath}"></script>\n`
+    : "";
   return `<!DOCTYPE html>
 <html lang="en" class="no-flex-gap no-css-grid no-css-math no-backdrop-filter no-aspect-ratio">
 <head>
@@ -160,7 +164,7 @@ function buildIndexHtml() {
   <title>${appName}</title>
   <script src="$WEBAPIS/webapis/webapis.js"></script>
   <script src="assets/runtime/legacy-features.js"></script>
-  <link rel="stylesheet" href="css/base.css" />
+${pluginServiceBridge}  <link rel="stylesheet" href="css/base.css" />
   <link rel="stylesheet" href="css/layout.css" />
   <link rel="stylesheet" href="css/components.css" />
   <link rel="stylesheet" href="css/themes.css" />
@@ -268,6 +272,7 @@ async function stageTizenEngineFsService() {
 }
 
 async function stageTizenPluginService() {
+  await mkdir(path.join(stagingDir, "services", "tizen"), { recursive: true });
   await Promise.all([
     cp(
       path.join(rootDir, tizenPluginServiceRelativePath),
@@ -276,6 +281,10 @@ async function stageTizenPluginService() {
     cp(
       path.join(rootDir, "services", "plugin-http.cjs"),
       path.join(stagingDir, tizenPluginServiceSupportRelativePath)
+    ),
+    cp(
+      path.join(rootDir, tizenPluginServiceBridgeRelativePath),
+      path.join(stagingDir, tizenPluginServiceBridgeRelativePath)
     )
   ]);
 }
@@ -321,10 +330,18 @@ async function stagePackage({
       }),
       "utf8"
     ),
-    writeFile(path.join(stagingDir, "index.html"), buildIndexHtml(), "utf8"),
+    writeFile(
+      path.join(stagingDir, "index.html"),
+      buildIndexHtml({ includePluginService }),
+      "utf8"
+    ),
     writeFile(
       path.join(stagingDir, "main.js"),
-      buildMainJs({ packageId, includeEngineFsService, includePluginService }),
+      buildMainJs({
+        packageId,
+        includeEngineFsService,
+        includePluginService
+      }),
       "utf8"
     )
   ]);
@@ -485,6 +502,135 @@ async function findWgtFiles(directory) {
     .map((entry) => path.join(directory, entry.name));
 }
 
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function readTizenPackageId(configXml) {
+  const match = String(configXml || "").match(
+    /<tizen:application\b[^>]*\bpackage=["']([^"']+)["']/i
+  );
+  return match ? match[1] : "";
+}
+
+function hasTizenServiceEntry(configXml, serviceId, contentPath) {
+  const escapedServiceId = escapeRegExp(serviceId);
+  const escapedContentPath = escapeRegExp(contentPath);
+  return new RegExp(
+    `<tizen:service\\b(?=[^>]*\\bid=["']${escapedServiceId}["'])[^>]*>[\\s\\S]*?<tizen:content\\b[^>]*\\bsrc=["']${escapedContentPath}["'][\\s\\S]*?<\\/tizen:service\\s*>`,
+    "i"
+  ).test(String(configXml || ""));
+}
+
+function assertTizenServiceManifest(
+  configXml,
+  { requireEngineFsService = false, requirePluginService = false } = {}
+) {
+  const packageId = readTizenPackageId(configXml);
+  if ((requireEngineFsService || requirePluginService) && !packageId) {
+    throw new Error("Tizen WGT config.xml is missing the application package id.");
+  }
+
+  const missingManifestEntry = [];
+  if (requireEngineFsService || requirePluginService) {
+    if (!/<feature\s+name=["']http:\/\/tizen\.org\/feature\/web\.service["']/i.test(configXml)) {
+      missingManifestEntry.push("web.service feature");
+    }
+    if (
+      !/<tizen:privilege\s+name=["']http:\/\/tizen\.org\/privilege\/application\.launch["']/i.test(
+        configXml
+      )
+    ) {
+      missingManifestEntry.push("application.launch privilege");
+    }
+  }
+  if (
+    requireEngineFsService &&
+    !hasTizenServiceEntry(
+      configXml,
+      `${packageId}.EngineFsService`,
+      tizenEngineFsServiceRelativePath
+    )
+  ) {
+    missingManifestEntry.push("EngineFS service declaration");
+  }
+  if (
+    requirePluginService &&
+    !hasTizenServiceEntry(configXml, `${packageId}.PluginService`, tizenPluginServiceRelativePath)
+  ) {
+    missingManifestEntry.push("Plugin service declaration");
+  }
+  if (missingManifestEntry.length) {
+    throw new Error(
+      `Tizen WGT config.xml is missing required service metadata: ${missingManifestEntry.join(", ")}.`
+    );
+  }
+  return packageId;
+}
+
+function requiredTizenServiceFiles({
+  requireEngineFsService = false,
+  requirePluginService = false
+}) {
+  return [
+    ...(requireEngineFsService
+      ? [
+          tizenEngineFsServiceRelativePath,
+          `${tizenEngineFsRuntimeDirRelativePath}/media-http.cjs`,
+          `${tizenEngineFsRuntimeDirRelativePath}/tx3g-subtitle-parser.cjs`,
+          `${tizenEngineFsRuntimeDirRelativePath}/tx3g-subtitle-service.cjs`,
+          `${tizenEngineFsRuntimeDirRelativePath}/embedded-text-subtitle-parser.cjs`
+        ]
+      : []),
+    ...(requirePluginService
+      ? [
+          tizenPluginServiceRelativePath,
+          tizenPluginServiceSupportRelativePath,
+          tizenPluginServiceBridgeRelativePath
+        ]
+      : [])
+  ];
+}
+
+async function assertTizenServicePackage(
+  outputPath,
+  { requireEngineFsService = false, requirePluginService = false } = {}
+) {
+  const zip = await JSZip.loadAsync(await readFile(outputPath));
+  const configEntry = zip.file("config.xml");
+  if (!configEntry) {
+    throw new Error("Tizen WGT is missing config.xml.");
+  }
+  const configXml = await configEntry.async("string");
+  assertTizenServiceManifest(configXml, {
+    requireEngineFsService,
+    requirePluginService
+  });
+
+  const missingServiceEntry = requiredTizenServiceFiles({
+    requireEngineFsService,
+    requirePluginService
+  }).find((fileName) => !zip.file(fileName));
+  if (missingServiceEntry) {
+    throw new Error(`Tizen WGT is missing the packaged service file ${missingServiceEntry}.`);
+  }
+
+  if (requirePluginService) {
+    const indexEntry = zip.file("index.html");
+    if (!indexEntry) {
+      throw new Error("Tizen WGT is missing index.html for the Tizen service bridge.");
+    }
+    const indexHtml = await indexEntry.async("string");
+    if (
+      !/<script\s+type=["']module["']\s+src=["']services\/tizen\/wrt-service-bridge\.js["']/i.test(
+        indexHtml
+      )
+    ) {
+      throw new Error("Tizen WGT is missing the wrt:service module bridge.");
+    }
+  }
+}
+
 async function assertSignedTizenPackage(
   outputPath,
   { requireEngineFsService = false, requirePluginService = false } = {}
@@ -509,51 +655,10 @@ async function assertSignedTizenPackage(
       'Tizen WGT contains on-boot="true", which is not allowed for Store submission.'
     );
   }
-
-  if (requireEngineFsService) {
-    const requiredServiceEntries = [
-      tizenEngineFsServiceRelativePath,
-      `${tizenEngineFsRuntimeDirRelativePath}/media-http.cjs`,
-      `${tizenEngineFsRuntimeDirRelativePath}/tx3g-subtitle-parser.cjs`,
-      `${tizenEngineFsRuntimeDirRelativePath}/tx3g-subtitle-service.cjs`,
-      `${tizenEngineFsRuntimeDirRelativePath}/embedded-text-subtitle-parser.cjs`
-    ];
-    const missingServiceEntry = requiredServiceEntries.find((fileName) => !zip.file(fileName));
-    if (missingServiceEntry) {
-      throw new Error(
-        `Store Tizen WGT is missing the EngineFS service file ${missingServiceEntry}.`
-      );
-    }
-    const missingManifestEntry = [
-      /<feature\s+name=["']http:\/\/tizen\.org\/feature\/web\.service["']/i,
-      /<tizen:privilege\s+name=["']http:\/\/tizen\.org\/privilege\/application\.launch["']/i,
-      /<tizen:service\b[\s\S]*?<tizen:content\s+src=["']services\/tizen\/enginefs-service\.js["']/i
-    ].find((pattern) => !pattern.test(configXml));
-    if (missingManifestEntry) {
-      throw new Error(
-        "Store Tizen WGT is missing the manifest entries required for the local EngineFS service."
-      );
-    }
-  }
-  if (requirePluginService) {
-    const requiredServiceEntries = [
-      tizenPluginServiceRelativePath,
-      tizenPluginServiceSupportRelativePath
-    ];
-    const missingServiceEntry = requiredServiceEntries.find((fileName) => !zip.file(fileName));
-    if (missingServiceEntry) {
-      throw new Error(`Store Tizen WGT is missing the Plugin service file ${missingServiceEntry}.`);
-    }
-    const missingManifestEntry = [
-      /<tizen:service\b[\s\S]*?<tizen:content\s+src=["']services\/tizen\/plugin-service\.js["']/i,
-      /<tizen:privilege\s+name=["']http:\/\/tizen\.org\/privilege\/application\.launch["']/i
-    ].find((pattern) => !pattern.test(configXml));
-    if (missingManifestEntry) {
-      throw new Error(
-        "Store Tizen WGT is missing the manifest entries required for the Plugin service."
-      );
-    }
-  }
+  await assertTizenServicePackage(outputPath, {
+    requireEngineFsService,
+    requirePluginService
+  });
 }
 
 async function packageWithOfficialTizenCli({
@@ -581,7 +686,10 @@ async function packageWithOfficialTizenCli({
 
   const [signedPackagePath] = candidates;
   await cp(signedPackagePath, outputPath);
-  await assertSignedTizenPackage(outputPath, { requireEngineFsService, requirePluginService });
+  await assertSignedTizenPackage(outputPath, {
+    requireEngineFsService,
+    requirePluginService
+  });
 }
 
 async function packageTizen() {
@@ -622,6 +730,10 @@ async function packageTizen() {
       compression: "DEFLATE"
     });
     await writeFile(outputPath, buffer);
+    await assertTizenServicePackage(outputPath, {
+      requireEngineFsService: options.includeEngineFsService,
+      requirePluginService: options.includePluginService
+    });
   }
 
   console.log(`Tizen WGT created: ${outputPath}`);

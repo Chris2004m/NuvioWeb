@@ -2768,4 +2768,5 @@
     <string name="plugin_security_note">Kod pluginu działa w ograniczonym Workerze. Sieć jest obsługiwana przez dołączoną usługę TV, z publicznymi celami HTTP(S), limitami rozmiaru, limitami czasu i anulowaniem, bez dostępu do pamięci TV ani natywnych API.</string>
     <string name="plugin_default_supported_types">movie/tv</string>
     <string name="settings.plugins.openSubtitle">Zarządzaj wykonywalnymi dostawcami Nuvio JS i zachowanymi zewnętrznymi metadanymi</string>
+    <string name="home.continueStatusWatchedPercent">Obejrzano {{percent}}%</string>
 </resources>

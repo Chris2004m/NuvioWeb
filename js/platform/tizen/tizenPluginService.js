@@ -10,8 +10,15 @@ const LOCAL_BASE_URLS = [
 const START_TIMEOUT_MS = 12000;
 const PROBE_TIMEOUT_MS = 2500;
 const SERVICE_START_CALL_TIMEOUT_MS = 4000;
+// A Web Service start acknowledgement only means that Tizen queued the
+// service. Give the lightweight runtime enough time to initialize on a cold
+// TV boot, while keeping the same overall startup budget as EngineFS.
+const START_ATTEMPT_HEALTH_TIMEOUT_MS = 8500;
 const DEFAULT_OPERATION = "http://tizen.org/appcontrol/operation/default";
+const PLUGIN_SERVICE_NAME = "nuvio-plugin-network";
+const PLUGIN_PROTOCOL_VERSION = 1;
 let startPromise = null;
+let wrtServiceModulePromise = null;
 
 function withTimeout(promise, timeoutMs, message) {
   let timer = 0;
@@ -29,7 +36,9 @@ function serviceId() {
   try {
     const appInfo = globalThis.tizen?.application?.getCurrentApplication?.()?.appInfo;
     const packageId = String(appInfo?.packageId || "").trim();
-    return packageId ? `${packageId}.PluginService` : "";
+    if (packageId) return `${packageId}.PluginService`;
+    const appId = String(appInfo?.id || "").trim();
+    return appId ? `${appId}.PluginService` : "";
   } catch (_) {
     return "";
   }
@@ -73,35 +82,133 @@ async function startWithApplication(id) {
   return callbackCall(application.launch.bind(application), [id]);
 }
 
-async function startWithLegacyService(id) {
-  const service =
-    globalThis.wrt?.service || globalThis.webapis?.wrt?.service || globalThis.webapis?.service;
-  if (!service) throw new Error("Tizen legacy service API unavailable");
+function normalizeWrtServiceModule(moduleValue) {
+  const candidates = [
+    moduleValue,
+    moduleValue?.default,
+    moduleValue?.service,
+    moduleValue?.default?.service
+  ];
+  for (const candidate of candidates) {
+    if (
+      candidate &&
+      (typeof candidate.startService === "function" || typeof candidate.start === "function")
+    ) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+async function loadWrtServiceModule() {
+  const globalService =
+    globalThis.__NUVIO_TIZEN_WRT_SERVICE__ ||
+    globalThis.wrt?.service ||
+    globalThis.webapis?.wrt?.service ||
+    globalThis.webapis?.service;
+  const normalizedGlobalService = normalizeWrtServiceModule(globalService);
+  if (normalizedGlobalService) return normalizedGlobalService;
+  if (!wrtServiceModulePromise) {
+    wrtServiceModulePromise = (async () => {
+      try {
+        // Keep the dynamic import out of the bundle's parse path so older
+        // Tizen engines can still use the application/legacy fallbacks.
+        const dynamicImport = Function("specifier", "return import(specifier);");
+        return normalizeWrtServiceModule(await dynamicImport("wrt:service"));
+      } catch (_) {
+        return null;
+      }
+    })();
+  }
+  return wrtServiceModulePromise;
+}
+
+async function startWithWrtService(id, { onVariant } = {}) {
+  const service = await loadWrtServiceModule();
+  if (!service) throw new Error("Tizen wrt:service API unavailable");
   if (typeof service.startService === "function") {
     try {
+      onVariant?.("string");
       return await callbackCall(service.startService.bind(service), [id]);
-    } catch (_) {
+    } catch (firstError) {
+      onVariant?.("string-failed", firstError);
+      onVariant?.("object");
       return callbackCall(service.startService.bind(service), [{ id }]);
     }
   }
-  if (typeof service.start === "function") return callbackCall(service.start.bind(service), [id]);
+  if (typeof service.start === "function") {
+    onVariant?.("start-alias");
+    return callbackCall(service.start.bind(service), [id]);
+  }
   throw new Error("Tizen service start API unavailable");
 }
 
-async function requestStart(id) {
-  const attempts = [startWithApplicationControl, startWithApplication, startWithLegacyService];
+function getStartAttempts(id, webServiceSupported) {
+  const compatibleAttempts = [
+    {
+      method: "tizen-application-control-default",
+      start: () => startWithApplicationControl(id)
+    },
+    {
+      method: "tizen-application-launch",
+      start: () => startWithApplication(id)
+    },
+    {
+      method: "wrt-service-startService",
+      start: (options) => startWithWrtService(id, options)
+    }
+  ];
+  // Samsung warns that application-control launches can disturb the
+  // foreground app when web.service is reported as unavailable. Keep the
+  // same compatibility order as EngineFS: application-control, application
+  // launch, then the dedicated wrt:service API. If the capability is false,
+  // use the legacy-safe order used by EngineFS and skip application-control.
+  const attempts =
+    webServiceSupported === false
+      ? compatibleAttempts.slice(2, 3).concat(compatibleAttempts.slice(1, 2))
+      : compatibleAttempts;
+  return attempts;
+}
+
+async function requestStartAndWaitForHealth(id, { webServiceSupported = null } = {}) {
+  const attempts = getStartAttempts(id, webServiceSupported);
   const errors = [];
+  const deadline = Date.now() + START_TIMEOUT_MS;
+
   for (const attempt of attempts) {
+    const remainingBeforeStart = deadline - Date.now();
+    if (remainingBeforeStart <= 250) break;
+
+    let acknowledged = false;
     try {
       await withTimeout(
-        attempt(id),
-        SERVICE_START_CALL_TIMEOUT_MS,
-        "Tizen plugin service start timed out"
+        attempt.start(),
+        Math.min(SERVICE_START_CALL_TIMEOUT_MS, remainingBeforeStart),
+        `${attempt.method} service start call timed out`
       );
-      return attempt.name;
+      acknowledged = true;
+
+      const remainingBeforeHealth = deadline - Date.now();
+      if (remainingBeforeHealth <= 250) {
+        throw new Error("startup deadline reached before the health check");
+      }
+
+      const reachable = await waitForBaseUrl(
+        Math.min(START_ATTEMPT_HEALTH_TIMEOUT_MS, remainingBeforeHealth)
+      );
+      return { ...reachable, method: attempt.method };
     } catch (error) {
-      errors.push(String(error?.message || error));
+      const detail = String(error?.message || error);
+      const message = acknowledged
+        ? `${attempt.method} acknowledged but /health was not reachable: ${detail}`
+        : `${attempt.method} start failed: ${detail}`;
+      errors.push(message);
+      console.warn(`[Nuvio PluginService] ${message}`);
     }
+  }
+
+  if (!errors.length) {
+    errors.push("startup deadline reached before a service start attempt could complete");
   }
   throw new Error(errors.join("; "));
 }
@@ -124,30 +231,52 @@ async function requestJson(url, options = {}, timeoutMs = PROBE_TIMEOUT_MS) {
 }
 
 async function probe(baseUrl, timeoutMs = PROBE_TIMEOUT_MS) {
-  return { baseUrl, payload: await requestJson(`${baseUrl}/health`, {}, timeoutMs) };
+  const payload = await requestJson(`${baseUrl}/health`, {}, timeoutMs);
+  if (
+    payload?.returnValue !== true ||
+    payload?.service !== PLUGIN_SERVICE_NAME ||
+    Number(payload?.protocolVersion || 0) !== PLUGIN_PROTOCOL_VERSION
+  ) {
+    throw new Error("Tizen plugin service health is incompatible");
+  }
+  return { baseUrl, payload };
 }
 
 async function findBaseUrl(timeoutMs = PROBE_TIMEOUT_MS) {
-  let lastError = null;
-  for (const baseUrl of LOCAL_BASE_URLS) {
-    try {
-      return await probe(baseUrl, timeoutMs);
-    } catch (error) {
-      lastError = error;
-    }
+  const results = await Promise.all(
+    LOCAL_BASE_URLS.map(async (baseUrl) => {
+      try {
+        return { baseUrl, result: await probe(baseUrl, timeoutMs) };
+      } catch (error) {
+        return { baseUrl, error };
+      }
+    })
+  );
+  const reachable = results.find((entry) => entry.result);
+  if (reachable) {
+    return reachable.result;
   }
-  throw lastError || new Error("No Tizen plugin service responded");
+
+  const details = results
+    .map((entry) => `${entry.baseUrl}: ${String(entry.error?.message || entry.error || "failed")}`)
+    .join("; ");
+  throw new Error(details || "No Tizen plugin service responded");
 }
 
 async function waitForBaseUrl(timeoutMs = START_TIMEOUT_MS) {
   const startedAt = Date.now();
   let lastError = null;
   while (Date.now() - startedAt < timeoutMs) {
+    const remaining = timeoutMs - (Date.now() - startedAt);
+    if (remaining <= 0) break;
     try {
-      return await findBaseUrl(1200);
+      return await findBaseUrl(Math.min(1200, remaining));
     } catch (error) {
       lastError = error;
-      await new Promise((resolve) => setTimeout(resolve, 350));
+      const delay = Math.min(350, timeoutMs - (Date.now() - startedAt));
+      if (delay > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
     }
   }
   throw lastError || new Error("Timed out waiting for the Tizen plugin service");
@@ -177,9 +306,14 @@ export const TizenPluginService = {
       startPromise = (async () => {
         const id = serviceId();
         if (!id) throw new Error("Tizen plugin service id is unavailable");
-        const startMethod = await requestStart(id);
-        const reachable = await waitForBaseUrl();
-        return { ...reachable, serviceId: id, startMethod };
+        try {
+          const startResult = await requestStartAndWaitForHealth(id, {
+            webServiceSupported: capabilities.webServiceSupported
+          });
+          return { ...startResult, serviceId: id, startMethod: startResult.method };
+        } catch (error) {
+          throw new Error(`${id}: ${String(error?.message || error)}`);
+        }
       })().finally(() => {
         startPromise = null;
       });
@@ -187,7 +321,14 @@ export const TizenPluginService = {
     try {
       return { status: "success", ...(await startPromise), started: true };
     } catch (error) {
-      return { status: "error", detail: String(error?.message || error) };
+      const detail = String(error?.message || error);
+      const runtime =
+        `tizen=${capabilities.tizenVersion || "unknown"}, ` +
+        `chromium=${capabilities.chromiumMajorVersion || "unknown"}, ` +
+        `web.service=${String(capabilities.webServiceSupported ?? "unknown")}`;
+      const diagnosticDetail = `${detail} [${runtime}]`;
+      console.error(`[Nuvio PluginService] startup failed: ${diagnosticDetail}`);
+      return { status: "error", detail: diagnosticDetail };
     }
   },
 

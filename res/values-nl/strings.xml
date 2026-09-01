@@ -1239,4 +1239,5 @@
     <string name="plugin_test_found_streams">%1$d streams gevonden</string>
     <string name="plugin_default_supported_types">movie/tv</string>
     <string name="settings.plugins.openSubtitle">Uitvoerbare Nuvio JS-providers en bewaarde externe metadata beheren</string>
+    <string name="home.continueStatusWatchedPercent">{{percent}}% bekeken</string>
 </resources>

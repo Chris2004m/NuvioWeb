@@ -1331,4 +1331,5 @@
     <string name="settings.plugins.openSubtitle">Futtatható Nuvio JS-szolgáltatók és megőrzött külső metaadatok kezelése</string>
     <string name="settings.plugins.refreshRepository">Tároló frissítése</string>
     <string name="settings.plugins.removeRepository">Tároló eltávolítása</string>
+    <string name="home.continueStatusWatchedPercent">Megnézve: {{percent}}%</string>
 </resources>

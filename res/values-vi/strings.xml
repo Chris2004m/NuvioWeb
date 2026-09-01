@@ -1278,4 +1278,5 @@
     <string name="plugin_test_found_streams">Đã tìm thấy %1$d luồng</string>
     <string name="plugin_default_supported_types">movie/tv</string>
     <string name="settings.plugins.openSubtitle">Quản lý nhà cung cấp Nuvio JS có thể thực thi và siêu dữ liệu bên ngoài được giữ lại</string>
+    <string name="home.continueStatusWatchedPercent">Đã xem {{percent}}%</string>
 </resources>

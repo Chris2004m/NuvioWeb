@@ -2746,4 +2746,5 @@
     <string name="plugin_security_note">Eklenti kodu sınırlı bir Worker içinde çalışır. Ağ erişimi pakete dahil TV hizmeti üzerinden sağlanır; herkese açık HTTP(S) hedefleri, boyut sınırları, zaman aşımları ve iptal uygulanır; TV depolamasına veya yerel API'lere erişim yoktur.</string>
     <string name="plugin_default_supported_types">movie/tv</string>
     <string name="settings.plugins.openSubtitle">Çalıştırılabilir Nuvio JS sağlayıcılarını ve korunan harici meta verileri yönet</string>
+    <string name="home.continueStatusWatchedPercent">%{{percent}} izlendi</string>
 </resources>

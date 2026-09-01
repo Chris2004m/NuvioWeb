@@ -63,7 +63,8 @@ const requiredPluginKeys = [
   "settings.plugins.addRepositoryPrompt",
   "settings.plugins.openSubtitle",
   "settings.plugins.refreshRepository",
-  "settings.plugins.removeRepository"
+  "settings.plugins.removeRepository",
+  "home.continueStatusWatchedPercent"
 ];
 
 const criticalKeys = [

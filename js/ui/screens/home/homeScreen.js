@@ -6084,7 +6084,7 @@ export const HomeScreen = {
       if (buildHeroIdentity(currentHero) !== scheduledHeroIdentity) {
         return;
       }
-      requestAnimationFrame(async () => {
+      requestAnimationFrame(() => {
         if (Number(this.heroFocusToken || 0) !== focusToken) {
           return;
         }
@@ -6100,10 +6100,11 @@ export const HomeScreen = {
           void this.enrichCurrentHeroAsync(latestHero, focusToken, { deferCommit: true });
           return;
         }
-        // Commit the hero as one scene. Updating the copy before the matching
-        // backdrop/logo are ready lets a fast D-pad sequence show new text over
-        // the previous movie's artwork on slower TV engines.
-        await preloadHeroAssets(latestHero, "modern");
+        // Commit after focus settles, without making the whole Hero wait for
+        // both media requests. Each layer already starts/reuses its own
+        // guarded preload before swapping, matching Android's independent
+        // AsyncImage loading path.
+        void preloadHeroAssets(latestHero, "modern");
         if (Number(this.heroFocusToken || 0) !== focusToken) {
           return;
         }

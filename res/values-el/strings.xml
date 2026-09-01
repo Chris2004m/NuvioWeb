@@ -2613,4 +2613,5 @@
     <string name="settings.plugins.openSubtitle">Διαχείριση εκτελέσιμων παρόχων Nuvio JS και διατηρημένων εξωτερικών μεταδεδομένων</string>
     <string name="settings.plugins.refreshRepository">Ανανέωση αποθετηρίου</string>
     <string name="settings.plugins.removeRepository">Αφαίρεση αποθετηρίου</string>
+    <string name="home.continueStatusWatchedPercent">Παρακολουθήθηκε {{percent}}%</string>
 </resources>

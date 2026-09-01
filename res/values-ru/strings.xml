@@ -2438,4 +2438,5 @@
     <string name="settings.plugins.openSubtitle">Управлять исполняемыми провайдерами Nuvio JS и сохранёнными внешними метаданными</string>
     <string name="settings.plugins.refreshRepository">Обновить репозиторий</string>
     <string name="settings.plugins.removeRepository">Удалить репозиторий</string>
+    <string name="home.continueStatusWatchedPercent">Просмотрено {{percent}}%</string>
 </resources>

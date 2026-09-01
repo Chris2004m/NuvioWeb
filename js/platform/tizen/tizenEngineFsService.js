@@ -89,9 +89,31 @@ async function startViaApplicationControl(serviceId, operation = TIZEN_DEFAULT_O
   return invokeCallbackApi(application.launchAppControl.bind(application), [appControl, serviceId]);
 }
 
+function normalizeWrtServiceModule(moduleValue) {
+  const candidates = [
+    moduleValue,
+    moduleValue?.default,
+    moduleValue?.service,
+    moduleValue?.default?.service
+  ];
+  for (const candidate of candidates) {
+    if (
+      candidate &&
+      (typeof candidate.startService === "function" || typeof candidate.start === "function")
+    ) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
 async function startViaWrtService(serviceId) {
-  const wrtService =
-    globalThis.wrt?.service || globalThis.webapis?.wrt?.service || globalThis.webapis?.service;
+  const wrtService = normalizeWrtServiceModule(
+    globalThis.__NUVIO_TIZEN_WRT_SERVICE__ ||
+      globalThis.wrt?.service ||
+      globalThis.webapis?.wrt?.service ||
+      globalThis.webapis?.service
+  );
   if (!wrtService) {
     throw new Error("wrt service API unavailable");
   }
@@ -225,10 +247,15 @@ export const TizenEngineFsService = {
       return { status: "unsupported", detail: "Not running on Tizen" };
     }
     const capabilities = TizenCapabilities.get();
-    if (purpose !== "p2p" && !capabilities.supportsWebService) {
+    // `http://tizen.org/feature/web.service` is a capability hint, not proof
+    // that an already-packaged service cannot be started. Some Samsung TV
+    // firmware reports web.service=false while the declared EngineFS service
+    // is still launchable (P2P is the working real-device example). The
+    // loopback health/settings probe below is the authoritative check.
+    if (!capabilities.engineFsServicePackaged) {
       return {
         status: "unsupported",
-        detail: "Tizen web service support is unavailable on this TV"
+        detail: "Tizen EngineFS service is not packaged"
       };
     }
     if (purpose === "p2p" && !capabilities.supportsP2p) {

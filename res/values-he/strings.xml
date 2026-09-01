@@ -1631,4 +1631,5 @@
     <string name="settings.plugins.openSubtitle">ניהול ספקי Nuvio JS ניתנים להרצה ומטא-נתונים חיצוניים שנשמרו</string>
     <string name="settings.plugins.refreshRepository">רענן מאגר</string>
     <string name="settings.plugins.removeRepository">הסר מאגר</string>
+    <string name="home.continueStatusWatchedPercent">נצפו {{percent}}%</string>
 </resources>

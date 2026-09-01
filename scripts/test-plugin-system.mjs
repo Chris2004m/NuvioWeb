@@ -42,7 +42,16 @@ import { PluginCodeStore } from "../js/data/local/pluginCodeStore.js";
 import { PluginRuntime } from "../js/core/player/pluginRuntime.js";
 import { PluginServiceClient } from "../js/platform/pluginServiceClient.js";
 import { Platform } from "../js/platform/index.js";
-import { buildPluginPushRows, mapRemotePluginRows } from "../js/core/profile/pluginSyncService.js";
+import { AuthManager } from "../js/core/auth/authManager.js";
+import { TizenPluginService } from "../js/platform/tizen/tizenPluginService.js";
+import { TizenEngineFsService } from "../js/platform/tizen/tizenEngineFsService.js";
+import { resetTizenCapabilitiesCache } from "../js/platform/tizen/tizenCapabilities.js";
+import { SupabaseApi } from "../js/data/remote/supabase/supabaseApi.js";
+import {
+  buildPluginPushRows,
+  mapRemotePluginRows,
+  PluginSyncService
+} from "../js/core/profile/pluginSyncService.js";
 
 const root = new URL("..", import.meta.url);
 
@@ -384,6 +393,348 @@ async function testRuntimeArtifactsAndContracts() {
   assert.equal(resultToStream({ url: { url: "[object Object]" } }, scraper).url, "[object Object]");
 }
 
+async function testTizenPluginServiceLifecycle() {
+  const source = await readFile(new URL("services/tizen/plugin-service.js", root), "utf8");
+  const events = [];
+  const servers = [];
+  const requiredModules = [];
+  let forcePrimaryPortCollision = false;
+  const builtinModules = {
+    http: { createServer() {} }
+  };
+
+  const pluginHttp = {
+    createPluginHttpServer({ port }) {
+      const listeners = {};
+      const server = {
+        on(event, callback) {
+          listeners[event] = callback;
+          return server;
+        },
+        listen(listenPort) {
+          events.push({
+            type: "listen",
+            port: listenPort,
+            host: "runtime-default",
+            argumentCount: arguments.length
+          });
+          if (forcePrimaryPortCollision && listenPort === 2711) {
+            server.emit("error", { code: "EADDRINUSE" });
+            return;
+          }
+          server.listening = true;
+          server.emit("listening");
+        },
+        close() {
+          server.listening = false;
+          events.push({ type: "close", port });
+        },
+        emit(event, value) {
+          listeners[event]?.(value);
+        },
+        listening: false
+      };
+      servers.push(server);
+      events.push({ type: "create", port });
+      return server;
+    }
+  };
+  const moduleObject = { exports: {} };
+  const sandbox = {
+    module: moduleObject,
+    exports: moduleObject.exports,
+    process: { env: { NUVIO_PLUGIN_SERVICE_PORT: "2711" } },
+    require(moduleName) {
+      requiredModules.push(moduleName);
+      if (moduleName === "../plugin-http.cjs") return pluginHttp;
+      if (Object.prototype.hasOwnProperty.call(builtinModules, moduleName)) {
+        return builtinModules[moduleName];
+      }
+      throw new Error(`Unexpected test require: ${moduleName}`);
+    },
+    console: { log() {}, warn() {}, error() {} },
+    Number,
+    String,
+    Array,
+    Object,
+    Error
+  };
+
+  vm.runInNewContext(source, sandbox, { filename: "services/tizen/plugin-service.js" });
+  assert.equal(typeof moduleObject.exports.onStart, "function");
+  assert.equal(typeof moduleObject.exports.onExit, "function");
+  assert.equal(typeof moduleObject.exports.onStop, "function");
+  assert.deepEqual(events, []);
+
+  moduleObject.exports.onStart();
+  assert.deepEqual(requiredModules, ["http", "../plugin-http.cjs"]);
+  assert.deepEqual(events, [
+    { type: "create", port: 2711 },
+    { type: "listen", port: 2711, host: "runtime-default", argumentCount: 1 }
+  ]);
+  assert.equal(servers.length, 1);
+
+  moduleObject.exports.onStart();
+  assert.equal(servers.length, 1);
+  moduleObject.exports.onExit();
+  moduleObject.exports.onStop();
+  assert.deepEqual(events.at(-1), { type: "close", port: 2711 });
+
+  events.length = 0;
+  requiredModules.length = 0;
+  forcePrimaryPortCollision = true;
+  moduleObject.exports.onStart();
+  assert.deepEqual(events, [
+    { type: "create", port: 2711 },
+    { type: "listen", port: 2711, host: "runtime-default", argumentCount: 1 },
+    { type: "close", port: 2711 },
+    { type: "create", port: 11471 },
+    { type: "listen", port: 11471, host: "runtime-default", argumentCount: 1 }
+  ]);
+  moduleObject.exports.onExit();
+
+  // The Tizen Web Service contract guarantees CommonJS module exports, but a
+  // lightweight runtime may not expose Node's process global. The service
+  // must still load and enter its lifecycle without a top-level ReferenceError.
+  events.length = 0;
+  requiredModules.length = 0;
+  forcePrimaryPortCollision = false;
+  const noProcessModuleObject = { exports: {} };
+  const noProcessSandbox = { ...sandbox, module: noProcessModuleObject };
+  delete noProcessSandbox.process;
+  vm.runInNewContext(source, noProcessSandbox, {
+    filename: "services/tizen/plugin-service-no-process.js"
+  });
+  assert.equal(typeof noProcessModuleObject.exports.onStart, "function");
+  noProcessModuleObject.exports.onStart();
+  assert.deepEqual(requiredModules, ["http", "../plugin-http.cjs"]);
+  assert.deepEqual(events, [
+    { type: "create", port: 2711 },
+    { type: "listen", port: 2711, host: "runtime-default", argumentCount: 1 }
+  ]);
+  noProcessModuleObject.exports.onExit();
+}
+
+async function testTizenPluginServiceStartOrder() {
+  const previousPlatform = Platform.current;
+  const previousPlatformOverride = globalThis.__NUVIO_PLATFORM__;
+  const previousServiceEnabled = globalThis.__NUVIO_TIZEN_PLUGIN_SERVICE_ENABLED__;
+  const previousServiceId = globalThis.__NUVIO_TIZEN_PLUGIN_SERVICE_ID__;
+  const previousWrtBridge = globalThis.__NUVIO_TIZEN_WRT_SERVICE__;
+  const previousTizen = globalThis.tizen;
+  const previousWrt = globalThis.wrt;
+  const previousFetch = globalThis.fetch;
+  let serviceStarted = false;
+  const startMethods = [];
+
+  try {
+    globalThis.__NUVIO_PLATFORM__ = "tizen";
+    globalThis.__NUVIO_TIZEN_PLUGIN_SERVICE_ENABLED__ = true;
+    globalThis.__NUVIO_TIZEN_PLUGIN_SERVICE_ID__ = "DemoPkg.PluginService";
+    globalThis.tizen = {
+      ApplicationControl: function ApplicationControl(operation) {
+        this.operation = operation;
+      },
+      systeminfo: {
+        getCapability(name) {
+          if (name.includes("platform.version")) return "9.0";
+          if (name.includes("web.service")) return true;
+          return false;
+        }
+      },
+      application: {
+        getCurrentApplication() {
+          return { appInfo: { packageId: "DemoPkg" } };
+        },
+        launchAppControl(control, serviceId, onSuccess) {
+          assert.equal(control.operation, "http://tizen.org/appcontrol/operation/default");
+          assert.equal(serviceId, "DemoPkg.PluginService");
+          startMethods.push("tizen-application-control-default");
+          serviceStarted = true;
+          onSuccess();
+        }
+      }
+    };
+    // The injected bridge is an ES module namespace on real Tizen builds;
+    // startService is exposed below `default` rather than at the root.
+    globalThis.__NUVIO_TIZEN_WRT_SERVICE__ = {
+      default: {
+        startService(serviceId) {
+          assert.equal(serviceId, "DemoPkg.PluginService");
+          startMethods.push("wrt-service-startService");
+          serviceStarted = true;
+          return Promise.resolve();
+        }
+      }
+    };
+    globalThis.fetch = async () => {
+      if (!serviceStarted) throw new TypeError("Failed to fetch");
+      return {
+        ok: true,
+        json: async () => ({
+          returnValue: true,
+          service: "nuvio-plugin-network",
+          protocolVersion: 1
+        })
+      };
+    };
+    Platform.current = null;
+    resetTizenCapabilitiesCache();
+
+    const result = await TizenPluginService.health();
+    assert.equal(result.returnValue, true);
+    assert.equal(result.startMethod, "tizen-application-control-default");
+    assert.equal(result.serviceId, "DemoPkg.PluginService");
+    assert.deepEqual(startMethods, ["tizen-application-control-default"]);
+
+    serviceStarted = false;
+    startMethods.length = 0;
+    globalThis.tizen.application.launchAppControl = function launchAppControl(
+      control,
+      serviceId,
+      _onSuccess,
+      onFailure
+    ) {
+      assert.equal(control.operation, "http://tizen.org/appcontrol/operation/default");
+      assert.equal(serviceId, "DemoPkg.PluginService");
+      startMethods.push("tizen-application-control-default");
+      onFailure(new Error("service not matched"));
+    };
+    globalThis.tizen.application.launch = function launch(serviceId, onSuccess) {
+      assert.equal(serviceId, "DemoPkg.PluginService");
+      startMethods.push("tizen-application-launch");
+      onSuccess();
+    };
+    const fallbackResult = await TizenPluginService.health();
+    assert.equal(fallbackResult.returnValue, true);
+    assert.equal(fallbackResult.startMethod, "wrt-service-startService");
+    assert.deepEqual(startMethods, [
+      "tizen-application-control-default",
+      "tizen-application-launch",
+      "wrt-service-startService"
+    ]);
+
+    // A TV that reports web.service=false follows the legacy-compatible path
+    // used by EngineFS: try the available WRT bridge first, then application
+    // launch. Application-control is intentionally not called on this path.
+    serviceStarted = false;
+    startMethods.length = 0;
+    globalThis.tizen.systeminfo.getCapability = function getCapability(name) {
+      if (name.includes("platform.version")) return "9.0";
+      if (name.includes("web.service")) return false;
+      return false;
+    };
+    resetTizenCapabilitiesCache();
+    const legacyResult = await TizenPluginService.health();
+    assert.equal(legacyResult.returnValue, true);
+    assert.equal(legacyResult.startMethod, "wrt-service-startService");
+    assert.deepEqual(startMethods, ["wrt-service-startService"]);
+  } finally {
+    Platform.current = previousPlatform;
+    if (previousPlatformOverride === undefined) delete globalThis.__NUVIO_PLATFORM__;
+    else globalThis.__NUVIO_PLATFORM__ = previousPlatformOverride;
+    if (previousServiceEnabled === undefined)
+      delete globalThis.__NUVIO_TIZEN_PLUGIN_SERVICE_ENABLED__;
+    else globalThis.__NUVIO_TIZEN_PLUGIN_SERVICE_ENABLED__ = previousServiceEnabled;
+    if (previousServiceId === undefined) delete globalThis.__NUVIO_TIZEN_PLUGIN_SERVICE_ID__;
+    else globalThis.__NUVIO_TIZEN_PLUGIN_SERVICE_ID__ = previousServiceId;
+    if (previousWrtBridge === undefined) delete globalThis.__NUVIO_TIZEN_WRT_SERVICE__;
+    else globalThis.__NUVIO_TIZEN_WRT_SERVICE__ = previousWrtBridge;
+    if (previousTizen === undefined) delete globalThis.tizen;
+    else globalThis.tizen = previousTizen;
+    if (previousWrt === undefined) delete globalThis.wrt;
+    else globalThis.wrt = previousWrt;
+    globalThis.fetch = previousFetch;
+    resetTizenCapabilitiesCache();
+  }
+}
+
+async function testTizenEngineFsGenericProxyGate() {
+  const previousPlatform = Platform.current;
+  const previousPlatformOverride = globalThis.__NUVIO_PLATFORM__;
+  const previousServiceEnabled = globalThis.__NUVIO_TIZEN_ENGINEFS_SERVICE_ENABLED__;
+  const previousServiceId = globalThis.__NUVIO_TIZEN_ENGINEFS_SERVICE_ID__;
+  const previousWrtBridge = globalThis.__NUVIO_TIZEN_WRT_SERVICE__;
+  const previousTizen = globalThis.tizen;
+  const previousFetch = globalThis.fetch;
+  const fetches = [];
+  let serviceStarted = false;
+
+  try {
+    globalThis.__NUVIO_PLATFORM__ = "tizen";
+    globalThis.__NUVIO_TIZEN_ENGINEFS_SERVICE_ENABLED__ = true;
+    globalThis.__NUVIO_TIZEN_ENGINEFS_SERVICE_ID__ = "DemoPkg.EngineFsService";
+    globalThis.tizen = {
+      systeminfo: {
+        getCapability(name) {
+          if (name.includes("platform.version")) return "9.0";
+          if (name.includes("web.service")) return false;
+          return false;
+        }
+      },
+      application: {
+        getCurrentApplication() {
+          return { appInfo: { packageId: "DemoPkg" } };
+        },
+        launch(serviceId, onSuccess) {
+          assert.equal(serviceId, "DemoPkg.EngineFsService");
+          serviceStarted = true;
+          onSuccess();
+        }
+      }
+    };
+    // The bridge may expose an ES module namespace or a default export. The
+    // coordinator must accept the same module shape for generic playback as
+    // it does for P2P startup.
+    globalThis.__NUVIO_TIZEN_WRT_SERVICE__ = {
+      default: {
+        startService(serviceId) {
+          assert.equal(serviceId, "DemoPkg.EngineFsService");
+          serviceStarted = true;
+          return Promise.resolve();
+        }
+      }
+    };
+    globalThis.fetch = async (url) => {
+      fetches.push(String(url));
+      if (!serviceStarted) throw new TypeError("Failed to fetch");
+      return {
+        ok: true,
+        clone() {
+          return { json: async () => ({ service: "enginefs" }) };
+        }
+      };
+    };
+    Platform.current = null;
+    resetTizenCapabilitiesCache();
+
+    const result = await TizenEngineFsService.ensureStarted();
+    assert.equal(result.status, "success");
+    assert.equal(result.started, true);
+    assert.equal(result.baseUrl, "http://127.0.0.1:2710");
+    assert.equal(result.startMethod, "wrt-service-legacy");
+    assert.equal(
+      fetches.some((url) => url.endsWith("/settings")),
+      true
+    );
+  } finally {
+    Platform.current = previousPlatform;
+    if (previousPlatformOverride === undefined) delete globalThis.__NUVIO_PLATFORM__;
+    else globalThis.__NUVIO_PLATFORM__ = previousPlatformOverride;
+    if (previousServiceEnabled === undefined)
+      delete globalThis.__NUVIO_TIZEN_ENGINEFS_SERVICE_ENABLED__;
+    else globalThis.__NUVIO_TIZEN_ENGINEFS_SERVICE_ENABLED__ = previousServiceEnabled;
+    if (previousServiceId === undefined) delete globalThis.__NUVIO_TIZEN_ENGINEFS_SERVICE_ID__;
+    else globalThis.__NUVIO_TIZEN_ENGINEFS_SERVICE_ID__ = previousServiceId;
+    if (previousWrtBridge === undefined) delete globalThis.__NUVIO_TIZEN_WRT_SERVICE__;
+    else globalThis.__NUVIO_TIZEN_WRT_SERVICE__ = previousWrtBridge;
+    if (previousTizen === undefined) delete globalThis.tizen;
+    else globalThis.tizen = previousTizen;
+    globalThis.fetch = previousFetch;
+    resetTizenCapabilitiesCache();
+  }
+}
+
 async function testRawScraperTestContract() {
   const previousState = PluginStore.get();
   const previousWorker = globalThis.Worker;
@@ -500,6 +851,8 @@ async function testPluginUiContract() {
     source.includes("toggleIndicator({ checked: model.groupStreamsByRepository })"),
     true
   );
+  assert.equal(source.includes("PluginSyncService.pull()"), true);
+  assert.equal(source.includes("hasActiveTextInput"), true);
   // These were Web-only rendered surfaces and must not return while the
   // Android-shaped screen remains the source of truth.
   for (const removedClass of [
@@ -630,9 +983,16 @@ async function testDexReconciliationSafety() {
   });
   try {
     PluginStore.replace(dexState);
-    assert.equal(PluginManager.removeRepository("dex-reconciliation"), false);
-    assert.equal(PluginManager.setRepositoryEnabled("dex-reconciliation", false), false);
-    assert.equal(PluginStore.get().repositories[0].enabled, true);
+    // Android allows a user-initiated DEX removal even though Web TV cannot
+    // execute DEX code. The cloud row must therefore be removable here too.
+    assert.equal(PluginManager.removeRepository("dex-reconciliation"), true);
+    assert.equal(
+      PluginStore.get().repositories.some((entry) => entry.id === "dex-reconciliation"),
+      false
+    );
+    PluginStore.replace(dexState);
+    assert.equal(PluginManager.setRepositoryEnabled("dex-reconciliation", false), true);
+    assert.equal(PluginStore.get().repositories[0].enabled, false);
     // A partial/legacy cloud response contains another opaque row but omits
     // the DEX. Web must retain the DEX repository, its flag and its metadata.
     const reconciled = await PluginManager.reconcileWithRemoteRepoUrls(
@@ -641,7 +1001,7 @@ async function testDexReconciliationSafety() {
     );
     const dex = reconciled.repositories.find((entry) => entry.id === "dex-reconciliation");
     assert.ok(dex);
-    assert.equal(dex.enabled, true);
+    assert.equal(dex.enabled, false);
     assert.deepEqual(dex.metadata, { source: "android" });
     assert.ok(
       reconciled.scrapers.some(
@@ -649,6 +1009,174 @@ async function testDexReconciliationSafety() {
       )
     );
   } finally {
+    PluginStore.replace({ ...previousState, syncDirty: false });
+  }
+}
+
+async function testPluginSyncLifecycle() {
+  const previousState = PluginStore.get();
+  const previousAuthState = AuthManager.state;
+  const previousGetEffectiveUserId = AuthManager.getEffectiveUserId;
+  const previousSelect = SupabaseApi.select;
+  const previousRpc = SupabaseApi.rpc;
+  const repository = {
+    id: "sync-js-repository",
+    url: "https://sync.example/repository/manifest.json",
+    name: "Sync JS repository",
+    type: PLUGIN_REPOSITORY_TYPES.NUVIO_JS,
+    enabled: true
+  };
+  const dex = {
+    id: "sync-dex-repository",
+    url: "https://sync.example/repository.cs3",
+    name: "Sync DEX repository",
+    type: PLUGIN_REPOSITORY_TYPES.EXTERNAL_DEX,
+    enabled: true
+  };
+  const localState = normalizePluginState({
+    repositories: [repository, dex],
+    scrapers: [],
+    syncDirty: false
+  });
+  try {
+    AuthManager.state = "authenticated";
+    AuthManager.getEffectiveUserId = async () => "sync-owner";
+    let pushCalls = 0;
+    SupabaseApi.rpc = async () => {
+      pushCalls += 1;
+      return [];
+    };
+    // A pull must publish a pending local change before reading the remote
+    // snapshot, otherwise a stale snapshot could undo a just-added repository.
+    PluginStore.replace({ ...localState, syncDirty: true });
+
+    let selectCalls = 0;
+    SupabaseApi.select = async () => {
+      selectCalls += 1;
+      return [
+        {
+          url: repository.url,
+          name: repository.name,
+          enabled: true,
+          sort_order: 0,
+          repo_type: PLUGIN_REPOSITORY_TYPES.NUVIO_JS
+        }
+      ];
+    };
+    const [firstPull, coalescedPull] = await Promise.all([
+      PluginSyncService.pull(),
+      PluginSyncService.pull()
+    ]);
+    assert.equal(selectCalls, 1);
+    assert.equal(pushCalls, 1);
+    assert.equal(
+      firstPull.repositories.some((entry) => entry.id === repository.id),
+      true
+    );
+    assert.equal(
+      firstPull.repositories.some((entry) => entry.id === dex.id),
+      false
+    );
+    assert.equal(coalescedPull.repositories.length, firstPull.repositories.length);
+    assert.equal(PluginSyncService.getLastPullStatus(), "ok");
+
+    // A local mutation while the remote request is in flight must win over the
+    // older snapshot and remain dirty for the deferred push.
+    const lateRepository = {
+      id: "sync-late-repository",
+      url: "https://sync.example/late/manifest.json",
+      name: "Late local repository",
+      type: PLUGIN_REPOSITORY_TYPES.NUVIO_JS,
+      enabled: true
+    };
+    PluginStore.replace(localState);
+    let selectStarted;
+    let releaseSelect;
+    const selectStartedPromise = new Promise((resolve) => {
+      selectStarted = resolve;
+    });
+    const delayedSelect = new Promise((resolve) => {
+      releaseSelect = resolve;
+    });
+    SupabaseApi.select = async () => {
+      selectStarted();
+      return delayedSelect;
+    };
+    const racedPullPromise = PluginSyncService.pull();
+    await selectStartedPromise;
+    PluginStore.replace({
+      ...localState,
+      repositories: [...localState.repositories, lateRepository],
+      syncDirty: true
+    });
+    releaseSelect([
+      {
+        url: repository.url,
+        name: repository.name,
+        enabled: true,
+        sort_order: 0,
+        repo_type: PLUGIN_REPOSITORY_TYPES.NUVIO_JS
+      }
+    ]);
+    const racedPull = await racedPullPromise;
+    const racedRepositories = Array.isArray(racedPull) ? racedPull : racedPull.repositories;
+    assert.equal(
+      racedRepositories.some((entry) => entry.id === lateRepository.id),
+      true
+    );
+    assert.equal(PluginSyncService.getLastPullStatus(), "local-pending");
+    assert.equal(PluginStore.get().syncDirty, true);
+    PluginStore.clearDirty();
+
+    // A valid empty snapshot is still protected exactly as on Android: it must
+    // not erase a populated local cache.
+    PluginStore.replace(localState);
+    SupabaseApi.select = async () => [];
+    const emptyPull = await PluginSyncService.pull();
+    assert.equal(emptyPull.repositories.length, 2);
+    assert.equal(
+      emptyPull.repositories.some((entry) => entry.id === dex.id),
+      true
+    );
+
+    // Android keeps settings, provider toggles and legacy URL-template sources
+    // local. They must not create a repository push or block a later one.
+    const pushCallsBeforeLocalOnlyChanges = pushCalls;
+    assert.equal(PluginManager.setPluginsEnabled(false), true);
+    assert.equal(PluginManager.setGroupStreamsByRepository(true), true);
+    assert.equal(
+      PluginRuntime.addSource({ id: "legacy-local", urlTemplate: "https://legacy.example/{id}" }),
+      true
+    );
+    assert.equal(PluginStore.get().syncDirty, false);
+    await new Promise((resolve) => setTimeout(resolve, 650));
+    assert.equal(pushCalls, pushCallsBeforeLocalOnlyChanges);
+
+    // A local write during an RPC must keep syncDirty set for the next push.
+    let mutatedDuringPush = false;
+    PluginStore.replace({ ...localState, syncDirty: true });
+    SupabaseApi.rpc = async () => {
+      if (!mutatedDuringPush) {
+        mutatedDuringPush = true;
+        const stateDuringPush = PluginStore.get();
+        PluginStore.replace({
+          ...stateDuringPush,
+          repositories: stateDuringPush.repositories.map((entry) =>
+            entry.id === repository.id ? { ...entry, enabled: false } : entry
+          ),
+          syncDirty: true
+        });
+      }
+      return [];
+    };
+    assert.equal(await PluginSyncService.push(), true);
+    assert.equal(PluginStore.get().syncDirty, true);
+    PluginStore.clearDirty();
+  } finally {
+    AuthManager.state = previousAuthState;
+    AuthManager.getEffectiveUserId = previousGetEffectiveUserId;
+    SupabaseApi.select = previousSelect;
+    SupabaseApi.rpc = previousRpc;
     PluginStore.replace({ ...previousState, syncDirty: false });
   }
 }
@@ -862,6 +1390,7 @@ async function testNetworkService() {
     assert.equal(health.status, 200);
     const healthPayload = await health.json();
     assert.equal(healthPayload.returnValue, true);
+    assert.equal(healthPayload.service, "nuvio-plugin-network");
     assert.equal(healthPayload.protocolVersion, 1);
     assert.equal(healthPayload.networkBoundary, true);
 
@@ -1431,11 +1960,15 @@ async function testWorkerRuntime() {
 async function main() {
   testModelsAndSecurity();
   await testRuntimeArtifactsAndContracts();
+  await testTizenPluginServiceLifecycle();
+  await testTizenPluginServiceStartOrder();
+  await testTizenEngineFsGenericProxyGate();
   await testRawScraperTestContract();
   await testAndroidFetchResponseContract();
   await testPluginUiContract();
   testDexSyncRoundTripContract();
   await testDexReconciliationSafety();
+  await testPluginSyncLifecycle();
   testPluginStreamBoundary();
   await testPluginExecutionFlight();
   await testRealManifestSnapshots();
