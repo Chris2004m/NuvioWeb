@@ -30,7 +30,7 @@ function normalizeProfileId(profileId = null) {
  * kept in this same round-trip contract even though Web never executes them.
  */
 export function mapRemotePluginRows(rows = []) {
-  return rows
+  return (Array.isArray(rows) ? rows : [])
     .map((row) => {
       const url = canonicalizePluginUrl(row?.url || row?.url_template || row?.urlTemplate);
       if (!url) return null;
@@ -70,7 +70,7 @@ export function mapRemotePluginRows(rows = []) {
  * an EXTERNAL_DEX row could be interpreted as a deletion by the cloud sync.
  */
 export function buildPluginPushRows(state) {
-  return state.repositories
+  return (Array.isArray(state?.repositories) ? state.repositories : [])
     .map((repository) => ({
       repository,
       repoType: isExternalDexRepository(repository)
@@ -81,8 +81,11 @@ export function buildPluginPushRows(state) {
       [PLUGIN_REPOSITORY_TYPES.NUVIO_JS, PLUGIN_REPOSITORY_TYPES.EXTERNAL_DEX].includes(repoType)
     )
     .map(({ repository, repoType }, index) => ({
-      url: repository.url,
-      name: repository.name,
+      url:
+        repoType === PLUGIN_REPOSITORY_TYPES.NUVIO_JS
+          ? canonicalizePluginUrl(repository.url, { manifest: true })
+          : canonicalizePluginUrl(repository.url),
+      name: String(repository.name || ""),
       enabled: repository.enabled !== false,
       sort_order: index,
       repo_type: repoType
@@ -228,9 +231,12 @@ export const PluginSyncService = {
       // remote snapshot has been reconciled, matching Android's
       // isSyncingFromRemote/pendingPushAfterSync flow.
       PluginStore.beginRemoteSync(targetProfileId);
-      const pullRevision = PluginStore.getRevision(targetProfileId);
+      let pullRevision = PluginStore.getRevision(targetProfileId);
       try {
-        const ownerId = await AuthManager.getEffectiveUserId();
+        const ownerId = String((await AuthManager.getEffectiveUserId()) || "").trim();
+        if (!ownerId) {
+          throw new Error("Unable to resolve sync owner for plugin sync");
+        }
         if (!isCurrentProfile(requestedId, targetProfileId)) {
           lastPullStatus = "stale";
           return PluginManager.listRepositories();
@@ -244,16 +250,26 @@ export const PluginSyncService = {
           lastPullStatus = "stale";
           return PluginManager.listRepositories();
         }
-        if (PluginStore.getRevision(targetProfileId) !== pullRevision) {
+        const currentRevision = PluginStore.getRevision(targetProfileId);
+        if (currentRevision !== pullRevision && PluginStore.get(targetProfileId).syncDirty) {
           lastPullStatus = "local-pending";
           return PluginManager.listRepositories();
         }
+        // Local-only provider/settings changes are not part of the remote
+        // repository snapshot. Continue from the latest revision so they do
+        // not cause an otherwise valid pull to be skipped.
+        pullRevision = currentRevision;
         const remotePlugins = mapRemotePluginRows(rows);
         const reconciled = await PluginManager.reconcileWithRemoteRepoUrls(remotePlugins, {
           removeMissingLocal: true,
           authoritativeSnapshot: true,
-          expectedRevision: pullRevision
+          expectedRevision: pullRevision,
+          profileId: targetProfileId
         });
+        if (!isCurrentProfile(requestedId, targetProfileId)) {
+          lastPullStatus = "stale";
+          return reconciled;
+        }
         if (PluginStore.get(targetProfileId).syncDirty) {
           lastPullStatus = "local-pending";
           return reconciled;

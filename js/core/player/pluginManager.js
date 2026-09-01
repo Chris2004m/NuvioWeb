@@ -51,12 +51,49 @@ function withReconcileLock(task) {
   return current;
 }
 
-function currentState() {
-  return normalizePluginState(PluginStore.get());
+function currentState(profileId = null) {
+  return normalizePluginState(profileId == null ? PluginStore.get() : PluginStore.get(profileId));
 }
 
-function canEdit() {
-  return PluginStore.canEdit();
+function canEdit(profileId = null) {
+  return PluginStore.canEdit(profileId == null ? undefined : profileId);
+}
+
+function cloudRepositoryFingerprint(state) {
+  return JSON.stringify({
+    repositories: (state.repositories || []).map((repository) => ({
+      url: isExternalDexRepository(repository)
+        ? canonicalizePluginUrl(repository.url)
+        : canonicalizePluginUrl(repository.url, { manifest: true }),
+      enabled: repository.enabled !== false,
+      type: isExternalDexRepository(repository)
+        ? PLUGIN_REPOSITORY_TYPES.EXTERNAL_DEX
+        : normalizePluginRepositoryType(repository.type)
+    })),
+    unknownRemoteRows: state.unknownRemoteRows || []
+  });
+}
+
+function mergeLocalOnlyChanges(initialState, reconciledState, currentStateValue) {
+  const initialScrapers = new Map((initialState.scrapers || []).map((entry) => [entry.id, entry]));
+  const currentScrapers = new Map(
+    (currentStateValue.scrapers || []).map((entry) => [entry.id, entry])
+  );
+  const scrapers = (reconciledState.scrapers || []).map((entry) => {
+    const initial = initialScrapers.get(entry.id);
+    const current = currentScrapers.get(entry.id);
+    return initial && current && current.enabled !== initial.enabled
+      ? { ...entry, enabled: current.enabled }
+      : entry;
+  });
+  return {
+    ...reconciledState,
+    settings: currentStateValue.settings,
+    legacySources: currentStateValue.legacySources,
+    runtime: currentStateValue.runtime,
+    scrapers,
+    syncDirty: currentStateValue.syncDirty
+  };
 }
 
 function platformId() {
@@ -220,7 +257,7 @@ export function resultToStream(result = {}, scraper = {}) {
   };
 }
 
-function mergeRepositoryScrapers(state, repository, manifest) {
+function mergeRepositoryScrapers(state, repository, manifest, profileId = null) {
   const previous = state.scrapers.filter((entry) => entry.repositoryId === repository.id);
   const previousByKey = new Map(
     previous.map((entry) => [`${entry.manifestId || entry.filename}`, entry])
@@ -241,7 +278,7 @@ function mergeRepositoryScrapers(state, repository, manifest) {
           ? old.enabled
           : entry.enabled !== false && !isVideoEasyScraper(entry.id, entry.name, entry.filename),
       manifestEnabled: entry.enabled !== false,
-      codeAvailable: Boolean(PluginCodeStore.get(id)),
+      codeAvailable: Boolean(PluginCodeStore.get(id, profileId)),
       codeUrl: resolvePluginUrl(entry.codeUrl || entry.filename, repository.url),
       supportedPlatforms: entry.supportedPlatforms || [],
       disabledPlatforms: entry.disabledPlatforms || []
@@ -523,8 +560,8 @@ async function classifyRemoteRepository(remote, quota) {
   return { type: PLUGIN_REPOSITORY_TYPES.UNKNOWN, url };
 }
 
-async function downloadCode(scraper, repository, quota) {
-  const existing = PluginCodeStore.get(scraper.id);
+async function downloadCode(scraper, repository, quota, profileId = null) {
+  const existing = PluginCodeStore.get(scraper.id, profileId);
   try {
     const response = await PluginServiceClient.fetch({
       url: scraper.codeUrl,
@@ -543,7 +580,7 @@ async function downloadCode(scraper, repository, quota) {
         scraper.id,
         response.body,
         { url: scraper.codeUrl, version: scraper.version },
-        { maxBytes: quota.maxCacheBytes }
+        { maxBytes: quota.maxCacheBytes, profile: profileId }
       )
     ) {
       throw new Error("Plugin code cache quota exceeded");
@@ -555,19 +592,26 @@ async function downloadCode(scraper, repository, quota) {
   }
 }
 
-async function hydrateJsRepository(state, repository, manifest, { markDirty = false } = {}) {
+async function hydrateJsRepository(
+  state,
+  repository,
+  manifest,
+  { markDirty = false, profileId = null } = {}
+) {
   const quota = quotaFor();
   const previousIds = state.scrapers
     .filter((entry) => entry.repositoryId === repository.id)
     .map((entry) => entry.id);
-  let next = mergeRepositoryScrapers(state, repository, manifest);
+  let next = mergeRepositoryScrapers(state, repository, manifest, profileId);
   const nextIds = new Set(
     next.scrapers.filter((entry) => entry.repositoryId === repository.id).map((entry) => entry.id)
   );
-  previousIds.filter((id) => !nextIds.has(id)).forEach((id) => PluginCodeStore.remove(id));
+  previousIds
+    .filter((id) => !nextIds.has(id))
+    .forEach((id) => PluginCodeStore.remove(id, profileId));
   const hydrated = [];
   for (const scraper of next.scrapers.filter((entry) => entry.repositoryId === repository.id)) {
-    const codeAvailable = await downloadCode(scraper, repository, quota);
+    const codeAvailable = await downloadCode(scraper, repository, quota, profileId);
     hydrated.push({ ...scraper, codeAvailable });
   }
   next = {
@@ -621,19 +665,26 @@ function externalScrapers(repository, metadata) {
   });
 }
 
-function clearRepositoryExecution(state, repositoryId) {
+function clearRepositoryExecution(state, repositoryId, profileId = null) {
   state.scrapers
     .filter((entry) => entry.repositoryId === repositoryId)
     .map((entry) => entry.id)
-    .forEach((id) => PluginCodeStore.remove(id));
+    .forEach((id) => PluginCodeStore.remove(id, profileId));
   return {
     ...state,
     scrapers: state.scrapers.filter((entry) => entry.repositoryId !== repositoryId)
   };
 }
 
-function replaceRepositoryAsNonExecutable(state, existing, remote, detected, metadata = null) {
-  const cleaned = clearRepositoryExecution(state, existing.id);
+function replaceRepositoryAsNonExecutable(
+  state,
+  existing,
+  remote,
+  detected,
+  metadata = null,
+  profileId = null
+) {
+  const cleaned = clearRepositoryExecution(state, existing.id, profileId);
   const type =
     detected.type === PLUGIN_REPOSITORY_TYPES.EXTERNAL_DEX
       ? PLUGIN_REPOSITORY_TYPES.EXTERNAL_DEX
@@ -665,13 +716,13 @@ function replaceRepositoryAsNonExecutable(state, existing, remote, detected, met
   };
 }
 
-async function hydrateDetectedJsRepository(state, existing, remote, detected) {
+async function hydrateDetectedJsRepository(state, existing, remote, detected, profileId = null) {
   const quota = quotaFor();
   const manifestUrl = canonicalizePluginUrl(detected.url || remote.url, { manifest: true });
   const manifest =
     detected.manifest || normalizePluginManifest(await fetchJson(manifestUrl, quota), manifestUrl);
   if (!manifest) throw new Error("JS repository manifest is invalid");
-  const cleaned = clearRepositoryExecution(state, existing.id);
+  const cleaned = clearRepositoryExecution(state, existing.id, profileId);
   return hydrateJsRepository(
     cleaned,
     {
@@ -681,7 +732,8 @@ async function hydrateDetectedJsRepository(state, existing, remote, detected) {
       description: manifest.description,
       type: PLUGIN_REPOSITORY_TYPES.NUVIO_JS
     },
-    manifest
+    manifest,
+    { profileId }
   );
 }
 
@@ -706,7 +758,10 @@ function createRemoteStub(remote = {}) {
     ),
     url,
     description: String(remote.description || ""),
-    enabled: remote.enabled !== false,
+    // Android creates a newly discovered repository enabled regardless of the
+    // cloud row's historical enabled flag; that field is sent on push but is
+    // not applied by its pull/reconcile path.
+    enabled: true,
     type,
     lastUpdated: 0,
     scraperCount: 0,
@@ -1163,9 +1218,17 @@ export const PluginManager = {
 
   async reconcileWithRemoteRepoUrls(
     remotePlugins = [],
-    { removeMissingLocal = true, authoritativeSnapshot = false, expectedRevision = null } = {}
+    {
+      removeMissingLocal = true,
+      authoritativeSnapshot = false,
+      expectedRevision = null,
+      profileId = null
+    } = {}
   ) {
     return withReconcileLock(async () => {
+      const targetProfileId = getEffectivePluginProfileId(
+        profileId == null ? undefined : profileId
+      );
       const incoming = (Array.isArray(remotePlugins) ? remotePlugins : [])
         .map((entry) => (typeof entry === "string" ? { url: entry } : entry || {}))
         .map((entry) => ({
@@ -1179,8 +1242,23 @@ export const PluginManager = {
               (candidate) => repositoryIdentity(candidate.url) === repositoryIdentity(entry.url)
             ) === index
         );
-      const state = currentState();
-      const reconciliationRevision = PluginStore.getRevision();
+      const state = currentState(targetProfileId);
+      let reconciliationRevision = PluginStore.getRevision(targetProfileId);
+      const reconcileRevisionChanges = () => {
+        const current = currentState(targetProfileId);
+        const currentRevision = PluginStore.getRevision(targetProfileId);
+        if (currentRevision === reconciliationRevision) return true;
+        if (
+          current.syncDirty ||
+          cloudRepositoryFingerprint(current) !== cloudRepositoryFingerprint(state)
+        ) {
+          next = current;
+          return false;
+        }
+        next = mergeLocalOnlyChanges(state, next, current);
+        reconciliationRevision = currentRevision;
+        return true;
+      };
       if (expectedRevision != null && reconciliationRevision !== Number(expectedRevision)) {
         return state;
       }
@@ -1239,7 +1317,14 @@ export const PluginManager = {
                 : null;
             // A typed remote transition is authoritative for execution policy:
             // remove any cached JS code before retaining the row as metadata-only.
-            next = replaceRepositoryAsNonExecutable(next, existing, remote, detected, external);
+            next = replaceRepositoryAsNonExecutable(
+              next,
+              existing,
+              remote,
+              detected,
+              external,
+              targetProfileId
+            );
             continue;
           }
           if (
@@ -1247,7 +1332,13 @@ export const PluginManager = {
             existing.type !== PLUGIN_REPOSITORY_TYPES.NUVIO_JS
           ) {
             try {
-              next = await hydrateDetectedJsRepository(next, existing, remote, detected);
+              next = await hydrateDetectedJsRepository(
+                next,
+                existing,
+                remote,
+                detected,
+                targetProfileId
+              );
             } catch (error) {
               console.warn("Plugin sync JS repository rehydration failed:", error);
             }
@@ -1275,7 +1366,8 @@ export const PluginManager = {
                   url: manifestUrl,
                   name: manifest.name
                 },
-                manifest
+                manifest,
+                { profileId: targetProfileId }
               );
           } catch (error) {
             console.warn("Plugin sync JS repository hydration failed:", error);
@@ -1303,9 +1395,7 @@ export const PluginManager = {
       // A local add/remove/toggle may have happened while a remote manifest was
       // being hydrated. Never commit the stale working copy over that newer
       // local state; the caller will flush its pending dirty snapshot instead.
-      if (PluginStore.getRevision() !== reconciliationRevision) {
-        return PluginStore.get();
-      }
+      if (!reconcileRevisionChanges()) return next;
       if (removeMissingLocal && incoming.length) {
         const remoteIdentities = new Set(incoming.map((entry) => repositoryIdentity(entry.url)));
         const removed = next.repositories.filter(
@@ -1318,7 +1408,7 @@ export const PluginManager = {
               .filter((scraper) => scraper.repositoryId === entry.id)
               .map((scraper) => scraper.id)
           )
-          .forEach((id) => PluginCodeStore.remove(id));
+          .forEach((id) => PluginCodeStore.remove(id, targetProfileId));
         // A successful typed snapshot is authoritative, just like Android's
         // complete remote list. Callers that consume an older/partial source
         // can omit authoritativeSnapshot and retain opaque local entries.
@@ -1347,29 +1437,30 @@ export const PluginManager = {
         (repo) =>
           !incoming.some((entry) => repositoryIdentity(entry.url) === repositoryIdentity(repo.url))
       );
-      if (PluginStore.getRevision() !== reconciliationRevision) {
-        return PluginStore.get();
-      }
+      if (!reconcileRevisionChanges()) return next;
       const preservedUnknownRows = authoritativeSnapshot
         ? unknownRemoteRows
         : [...state.unknownRemoteRows, ...unknownRemoteRows];
-      PluginStore.replace({
-        ...next,
-        repositories: ordered.concat(extras),
-        // A complete remote snapshot also makes previously preserved opaque
-        // rows stale; partial callers keep the old safety behavior.
-        unknownRemoteRows: preservedUnknownRows
-          .filter((entry, index, values) => {
-            const key = JSON.stringify(entry || {});
-            return (
-              values.findIndex((candidate) => JSON.stringify(candidate || {}) === key) === index
-            );
-          })
-          .slice(0, 256),
-        rawRemoteRows: incoming.map((entry) => entry.raw || entry),
-        syncDirty: state.syncDirty
-      });
-      return PluginStore.get();
+      PluginStore.replace(
+        {
+          ...next,
+          repositories: ordered.concat(extras),
+          // A complete remote snapshot also makes previously preserved opaque
+          // rows stale; partial callers keep the old safety behavior.
+          unknownRemoteRows: preservedUnknownRows
+            .filter((entry, index, values) => {
+              const key = JSON.stringify(entry || {});
+              return (
+                values.findIndex((candidate) => JSON.stringify(candidate || {}) === key) === index
+              );
+            })
+            .slice(0, 256),
+          rawRemoteRows: incoming.map((entry) => entry.raw || entry),
+          syncDirty: state.syncDirty
+        },
+        targetProfileId
+      );
+      return PluginStore.get(targetProfileId);
     });
   },
 

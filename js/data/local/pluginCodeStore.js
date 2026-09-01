@@ -36,8 +36,12 @@ function legacyCacheKey(scraperId) {
   return safePluginId(scraperId, "plugin");
 }
 
-function profileId(profileId) {
-  return getEffectivePluginProfileId(profileId);
+function profileId(profile) {
+  // Null is used by a few callers as "the active profile". Passing it
+  // through to getEffectivePluginProfileId would instead coerce it to profile
+  // 1, causing code downloaded for a secondary profile to be stored in the
+  // primary profile's cache and then missed during execution.
+  return getEffectivePluginProfileId(profile == null ? undefined : profile);
 }
 
 function totalBytes(entries) {

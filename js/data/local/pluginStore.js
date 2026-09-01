@@ -24,7 +24,9 @@ function readProfiles() {
 }
 
 export function getEffectivePluginProfileId(profileId = ProfileManager.getActiveProfileId()) {
-  const normalized = String(profileId || "1");
+  const normalized = String(
+    profileId == null ? ProfileManager.getActiveProfileId() : profileId || "1"
+  );
   const profile = readProfiles().find(
     (entry) => String(entry?.id || entry?.profileIndex || "") === normalized
   );

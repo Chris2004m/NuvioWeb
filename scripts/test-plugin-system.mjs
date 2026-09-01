@@ -43,6 +43,7 @@ import { PluginRuntime } from "../js/core/player/pluginRuntime.js";
 import { PluginServiceClient } from "../js/platform/pluginServiceClient.js";
 import { Platform } from "../js/platform/index.js";
 import { AuthManager } from "../js/core/auth/authManager.js";
+import { ProfileManager } from "../js/core/profile/profileManager.js";
 import { TizenPluginService } from "../js/platform/tizen/tizenPluginService.js";
 import { TizenEngineFsService } from "../js/platform/tizen/tizenEngineFsService.js";
 import { resetTizenCapabilitiesCache } from "../js/platform/tizen/tizenCapabilities.js";
@@ -1128,6 +1129,38 @@ async function testPluginSyncLifecycle() {
     assert.equal(PluginStore.get().syncDirty, true);
     PluginStore.clearDirty();
 
+    // A local-only settings change during the select must not suppress the
+    // remote repository reconciliation.
+    PluginStore.replace(localState);
+    let localOnlySelectStarted;
+    let releaseLocalOnlySelect;
+    const localOnlySelectStartedPromise = new Promise((resolve) => {
+      localOnlySelectStarted = resolve;
+    });
+    const delayedLocalOnlySelect = new Promise((resolve) => {
+      releaseLocalOnlySelect = resolve;
+    });
+    SupabaseApi.select = async () => {
+      localOnlySelectStarted();
+      return delayedLocalOnlySelect;
+    };
+    const localOnlyPullPromise = PluginSyncService.pull();
+    await localOnlySelectStartedPromise;
+    assert.equal(PluginManager.setPluginsEnabled(false), true);
+    releaseLocalOnlySelect([
+      {
+        url: repository.url,
+        name: repository.name,
+        enabled: true,
+        sort_order: 0,
+        repo_type: PLUGIN_REPOSITORY_TYPES.NUVIO_JS
+      }
+    ]);
+    const localOnlyPull = await localOnlyPullPromise;
+    assert.equal(PluginSyncService.getLastPullStatus(), "ok");
+    assert.equal(PluginStore.get().settings.pluginsEnabled, false);
+    assert.equal(localOnlyPull.repositories.length, 1);
+
     // A valid empty snapshot is still protected exactly as on Android: it must
     // not erase a populated local cache.
     PluginStore.replace(localState);
@@ -1178,6 +1211,23 @@ async function testPluginSyncLifecycle() {
     SupabaseApi.select = previousSelect;
     SupabaseApi.rpc = previousRpc;
     PluginStore.replace({ ...previousState, syncDirty: false });
+  }
+}
+
+async function testPluginCodeProfileIsolation() {
+  const previousProfileId = ProfileManager.getActiveProfileId();
+  const scraperId = "profile-isolated-scraper";
+  try {
+    await ProfileManager.setActiveProfile("2");
+    PluginCodeStore.remove(scraperId);
+    PluginCodeStore.remove(scraperId, "1");
+    assert.equal(PluginCodeStore.save(scraperId, "secondary-code", {}, { maxBytes: 1024 }), true);
+    assert.equal(PluginCodeStore.get(scraperId)?.code, "secondary-code");
+    assert.equal(PluginCodeStore.get(scraperId, "1"), null);
+  } finally {
+    PluginCodeStore.remove(scraperId, "2");
+    PluginCodeStore.remove(scraperId, "1");
+    await ProfileManager.setActiveProfile(previousProfileId);
   }
 }
 
@@ -1969,6 +2019,7 @@ async function main() {
   testDexSyncRoundTripContract();
   await testDexReconciliationSafety();
   await testPluginSyncLifecycle();
+  await testPluginCodeProfileIsolation();
   testPluginStreamBoundary();
   await testPluginExecutionFlight();
   await testRealManifestSnapshots();
