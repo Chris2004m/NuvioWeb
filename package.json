@@ -5,6 +5,8 @@
   "version": "1.0.1",
   "scripts": {
     "build": "node ./scripts/build.mjs",
+    "test": "npm run test:plugins",
+    "test:plugins": "npm run build && node ./scripts/test-plugin-system.mjs && node ./scripts/test-plugin-localization.mjs",
     "prepare": "husky || true",
     "build:on-release": "node ./scripts/release-build-poller.mjs",
     "install:webos": "node ./scripts/ares-install-webos.mjs",
@@ -44,9 +46,12 @@
   },
   "dependencies": {
     "assjs": "0.1.10",
+    "cheerio": "^1.0.0",
+    "crypto-js": "^4.2.0",
     "dashjs": "4.7.4",
     "hls.js": "1.5.20",
     "jszip": "^3.10.1",
-    "libbitsub": "^1.10.1"
+    "libbitsub": "^1.10.1",
+    "quickjs-emscripten": "^0.32.0"
   }
 }

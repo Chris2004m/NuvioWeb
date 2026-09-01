@@ -137,7 +137,13 @@ export const CatalogSeeAllScreen = {
     if (!addonBaseUrl || !catalogId) {
       return null;
     }
-    return `catalogSeeAll:${addonBaseUrl}:${catalogId}:${type}`;
+    const normalizedArgs = Object.entries(
+      params?.extraArgs && typeof params.extraArgs === "object" ? params.extraArgs : {}
+    )
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`)
+      .join("&");
+    return `catalogSeeAll:${addonBaseUrl}:${catalogId}:${type}${normalizedArgs ? `:${normalizedArgs}` : ""}`;
   },
 
   captureRouteState() {
@@ -168,7 +174,7 @@ export const CatalogSeeAllScreen = {
       ? filterReleasedItems(snapshotItems)
       : [...snapshotItems];
     this.nextSkip = Number(snapshot.nextSkip || 0);
-    this.hasMore = Boolean(snapshot.hasMore);
+    this.hasMore = params?.supportsSkip !== false && Boolean(snapshot.hasMore);
     this.lastFocusedKey = snapshot.lastFocusedKey ? String(snapshot.lastFocusedKey) : null;
     this.savedScrollTop = Number(snapshot.savedScrollTop || 0);
     this.pendingRestoreFocus = true;
@@ -187,18 +193,24 @@ export const CatalogSeeAllScreen = {
     this.params = params || {};
     this.layoutPrefs = LayoutPreferences.get();
     const initialItems = Array.isArray(params?.initialItems) ? params.initialItems : [];
+    const supportsSkip = params?.supportsSkip !== false;
+    const rawSkipStep = Number(params?.skipStep);
+    const skipStep =
+      Number.isFinite(rawSkipStep) && rawSkipStep > 0 ? Math.trunc(rawSkipStep) : 100;
+    const hasExplicitInitialHasMore = typeof params?.initialHasMore === "boolean";
+    const initialHasMore = hasExplicitInitialHasMore ? params.initialHasMore : true;
     this.items = this.layoutPrefs?.hideUnreleasedContent
       ? filterReleasedItems(initialItems)
       : [...initialItems];
     const initialNextSkip = Number(params?.initialNextSkip);
     this.nextSkip =
-      Number.isFinite(initialNextSkip) && initialNextSkip > 0
+      supportsSkip && initialHasMore && Number.isFinite(initialNextSkip) && initialNextSkip > 0
         ? Math.trunc(initialNextSkip)
-        : this.items.length
-          ? 100
+        : supportsSkip && initialHasMore && this.items.length
+          ? skipStep
           : 0;
     this.loading = false;
-    this.hasMore = true;
+    this.hasMore = supportsSkip && initialHasMore;
     this.lastFocusedKey = this.items[0]?.id ? `item:${this.items[0].id}` : null;
     this.pendingRestoreFocus = false;
     this.preserveViewportOnNextRender = false;
@@ -252,7 +264,12 @@ export const CatalogSeeAllScreen = {
       catalogName: descriptor.catalogName,
       type: descriptor.type,
       skip,
-      supportsSkip: true
+      skipStep: descriptor.skipStep,
+      extraArgs:
+        descriptor.extraArgs && typeof descriptor.extraArgs === "object"
+          ? descriptor.extraArgs
+          : {},
+      supportsSkip: descriptor.supportsSkip !== false
     });
     if (token !== this.loadToken) {
       return;

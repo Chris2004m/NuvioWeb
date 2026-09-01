@@ -9,6 +9,7 @@ import { HomeCatalogStore } from "../../../data/local/homeCatalogStore.js";
 import { accentColorForTheme, ThemeStore } from "../../../data/local/themeStore.js";
 import { MemberAccessRepository } from "../../../data/remote/supabase/memberAccessRepository.js";
 import { ThemeManager } from "../../theme/themeManager.js";
+import { ThemeColors } from "../../theme/themeColors.js";
 import { availableThemeIds, resolveThemeName } from "../../theme/themeAccess.js";
 import { renderMemberBrandWordmark } from "../../components/memberBrandWordmark.js";
 import { PlayerSettingsStore } from "../../../data/local/playerSettingsStore.js";
@@ -2316,6 +2317,7 @@ export const SettingsScreen = {
     ]);
     const activeProfileId = ProfileManager.getActiveProfileId();
     const pluginSources = PluginManager.listPluginSources();
+    const pluginSummary = PluginManager.getSummary();
     const storedTheme = ThemeStore.get();
     const resolvedThemeName = resolveThemeName(storedTheme.themeName, memberAccess);
     ThemeManager.apply({ enforceAccess: true, access: memberAccess });
@@ -2326,6 +2328,7 @@ export const SettingsScreen = {
       activeProfileId,
       accountEmail: getSessionEmail(),
       pluginSources,
+      pluginSummary,
       pluginsEnabled: PluginManager.pluginsEnabled,
       theme: {
         ...storedTheme,
@@ -2417,7 +2420,6 @@ export const SettingsScreen = {
           ${renderSectionNavIcon(item.id)}
           <span class="settings-nav-label-wrap">
             <span class="settings-nav-label">${escapeHtml(translateSectionCopy(item).label)}</span>
-            ${item.id === "plugins" ? `<span class="settings-nav-badge">${escapeHtml(t("common.soon", {}, "Soon"))}</span>` : ""}
           </span>
         </span>
         ${iconSvg(ROW_ICONS.chevron, "settings-nav-chevron")}
@@ -2509,12 +2511,13 @@ export const SettingsScreen = {
   renderThemeCard(theme, selected, focusKey) {
     const selectedClass = selected ? " is-selected" : "";
     const swatchClass = theme.id === "WHITE" ? " settings-theme-swatch-light" : "";
+    const swatchBackground = ThemeColors.getPalette(theme.id)["--accent-gradient"] || theme.color;
     return `
       <button class="settings-theme-card settings-content-focusable focusable${selectedClass}"
               data-zone="content"
               ${this.registerAction(focusKey, this.actionMap.get(focusKey))}>
         <span class="settings-theme-swatch-wrap">
-          <span class="settings-theme-swatch${swatchClass}" style="background:${escapeHtml(theme.color)};">
+          <span class="settings-theme-swatch${swatchClass}" style="background:${escapeHtml(swatchBackground)};">
             ${selected ? `<span class="settings-theme-check-wrap" style="color:${escapeHtml(theme.onColor || "#fff")};">${iconSvg(ROW_ICONS.check, "settings-theme-check")}</span>` : ""}
           </span>
         </span>
@@ -4355,12 +4358,37 @@ export const SettingsScreen = {
     `;
   },
 
-  renderPluginsSection() {
+  renderPluginsSection(model = {}) {
+    const summary = model.pluginSummary || PluginManager.getSummary();
+    const runtime = summary.runtime || {};
+    this.actionMap.set("plugins:open", async () => {
+      await Router.navigate("plugins");
+    });
     return `
       ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "plugins"))}
-      <div class="settings-group-card settings-group-card-fill">
-        <div class="settings-empty-state settings-empty-state-plugins">
-          <p class="settings-plugin-soon-text">Plugin support is coming soon.</p>
+      <div class="settings-group-card">
+        <div class="settings-stack">
+          ${this.renderActionRow({
+            focusKey: "plugins:open",
+            title: t("plugin_title", {}, "Plugins"),
+            subtitle: t(
+              "settings.plugins.openSubtitle",
+              {},
+              "Manage executable Nuvio JS providers and preserved external metadata"
+            ),
+            value: `${Number(summary.repositories?.length || 0)} · ${Number(summary.scrapers?.length || 0)}`,
+            icon: "chevron"
+          })}
+          <div class="settings-subsection-card">
+            <div class="settings-group-heading">
+              <div>
+                <div class="settings-group-title">${escapeHtml(t("plugin_runtime_heading", {}, "TV plugin runtime"))}</div>
+                <div class="settings-group-subtitle">${escapeHtml(runtime.executable ? t("plugin_runtime_ready", {}, "Runtime ready") : runtime.reason || t("plugin_runtime_unsupported", {}, "Execution unavailable on this TV runtime"))}</div>
+              </div>
+              <span class="settings-row-value">${escapeHtml(t("plugin_providers_count", { count: Number(summary.scrapers?.length || 0) }, `${Number(summary.scrapers?.length || 0)} providers`))}</span>
+            </div>
+          </div>
+          <p class="settings-row-subtitle">${escapeHtml(t("plugin_runtime_tv_only", {}, "Only Nuvio JS repositories execute. CloudStream DEX and legacy URL-template sources are retained for display but never executed or converted."))}</p>
         </div>
       </div>
     `;
@@ -5894,10 +5922,12 @@ export const SettingsScreen = {
       });
     });
     this.actionMap.set("playback:autoStreamPlugins", () => {
-      const options = PluginManager.listPluginSources()
-        .filter((source) => source?.enabled !== false)
-        .map((source) => String(source?.name || "").trim())
+      const options = (PluginManager.pluginsEnabled ? PluginManager.listScrapers() : [])
+        .filter((scraper) => scraper?.type === "NUVIO_JS" && scraper?.enabled !== false)
+        .map((scraper) => String(scraper?.name || "").trim())
         .filter(Boolean)
+        .filter((name, index, names) => names.indexOf(name) === index)
+        .sort((left, right) => left.localeCompare(right))
         .map((name) => ({ id: name, label: name }));
       this.openMultiChoiceDialog({
         title: t("autoplay_allowed_plugins", {}, "Allowed Plugins"),
@@ -7270,7 +7300,7 @@ export const SettingsScreen = {
     if (section.id === "appearance") return this.renderAppearanceSection(model);
     if (section.id === "layout") return this.renderLayoutSection(model);
     if (section.id === "contentDiscovery") return this.renderContentDiscoverySection();
-    if (section.id === "plugins") return this.renderPluginsSection();
+    if (section.id === "plugins") return this.renderPluginsSection(model);
     if (section.id === "integration") return this.renderIntegrationSection(model);
     if (section.id === "streams") return this.renderStreamsSection(model);
     if (section.id === "playback") return this.renderPlaybackSection(model);
