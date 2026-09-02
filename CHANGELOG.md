@@ -1,3 +1,13 @@
+## 1.0.4
+
+### Improvements & Fixes
+
+- Hardened Continue Watching, library loading, and remote progress state so profile changes and delayed synchronization do not replace valid TV content with a temporary empty view (@WhiteGiso)
+- Aligned plugin execution with Android behavior by preserving eligible provider work in a cancellable queue and isolating legacy plugin data and migrations per profile (@WhiteGiso)
+- Improved Home hero metadata and artwork transitions, Tizen live HLS fallback, and Library/Plugins focus restoration for Samsung TV navigation (@WhiteGiso)
+- Added a controlled Tizen PluginService fallback through the working EngineFS service, resilient service-ID resolution, runtime diagnostics, and duplicate-port handling while keeping both local APIs separate (@WhiteGiso)
+- Strengthened Tizen WGT packaging and Samsung installer validation so the PluginService files, bridge, manifest declarations, and EngineFS compatibility host are checked before installation (@WhiteGiso)
+
 ## 1.0.3
 
 ### Improvements & Fixes
