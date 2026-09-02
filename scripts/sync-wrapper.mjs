@@ -266,6 +266,8 @@ function buildTizenMainJs({ engineFsServiceId = "", pluginServiceId = "" } = {})
   window.__NUVIO_TIZEN_ENGINEFS_SERVICE_ID__ = ${JSON.stringify(engineFsServiceId)};
   window.__NUVIO_TIZEN_PLUGIN_SERVICE_ENABLED__ = ${Boolean(pluginServiceId)};
   window.__NUVIO_TIZEN_PLUGIN_SERVICE_ID__ = ${JSON.stringify(pluginServiceId)};
+  window.__NUVIO_TIZEN_SERVICE_DIAGNOSTICS__ = true;
+  window.__NUVIO_PLUGIN_SYNC_DIAGNOSTICS__ = true;
 
   function registerRemoteKeys() {
     var tvInput = window.tizen && window.tizen.tvinputdevice;
@@ -485,8 +487,8 @@ function upsertTizenPrivilege(xml, privilegeName) {
   return insertIntoWidget(xml, `<tizen:privilege name="${privilegeName}"/>`);
 }
 
-function readTizenPackageId(xml) {
-  const match = String(xml || "").match(/<tizen:application\b[^>]*\bpackage="([^"]+)"/);
+function readTizenApplicationId(xml) {
+  const match = String(xml || "").match(/<tizen:application\b[^>]*\bid="([^"]+)"/);
   return match ? match[1] : "";
 }
 
@@ -505,7 +507,11 @@ function removeTizenPluginService(xml) {
 }
 
 function upsertTizenEngineFsService(xml, serviceId) {
-  const serviceSnippet = `<tizen:service id="${serviceId}" type="ui" auto-restart="false" on-boot="false">
+  // Keep the Apps2Samsung/wrapper manifest in the exact shape used by the
+  // working 1.0.1 P2P package. The service id is derived from the Tizen
+  // application id (not the package id), and the legacy service declaration
+  // intentionally has no type/category attributes.
+  const serviceSnippet = `<tizen:service id="${serviceId}" auto-restart="false" on-boot="false">
     <tizen:content src="${tizenEngineFsServiceRelativePath}"/>
     <tizen:name>Nuvio EngineFS Service</tizen:name>
     <tizen:description>Local torrent streaming service for Nuvio Tizen playback</tizen:description>
@@ -518,11 +524,12 @@ function upsertTizenEngineFsService(xml, serviceId) {
 }
 
 function upsertTizenPluginService(xml, serviceId) {
-  const serviceSnippet = `<tizen:service id="${serviceId}" type="ui" auto-restart="false" on-boot="false">
+  // Use the same wrapper service declaration and identifier derivation as
+  // EngineFS. PluginService remains a separate service and port.
+  const serviceSnippet = `<tizen:service id="${serviceId}" auto-restart="false" on-boot="false">
     <tizen:content src="${tizenPluginServiceRelativePath}"/>
     <tizen:name>Nuvio Plugin Network Service</tizen:name>
     <tizen:description>Bounded network service for Nuvio JavaScript plugins</tizen:description>
-    <tizen:category name="http://tizen.org/category/service"/>
   </tizen:service>`;
   const withoutOldService = removeTizenPluginService(xml);
   if (/<tizen:profile\b/.test(withoutOldService)) {
@@ -575,9 +582,9 @@ async function updateTizenMetadata(targetDir) {
   configXml = upsertTizenRequiredVersion(configXml, compatibilityPolicy.tizenRequiredVersion);
   configXml = upsertTizenFeature(configXml, "http://tizen.org/feature/web.service");
   configXml = upsertTizenPrivilege(configXml, "http://tizen.org/privilege/application.launch");
-  const tizenPackageId = readTizenPackageId(configXml);
-  const engineFsServiceId = tizenPackageId ? `${tizenPackageId}.EngineFsService` : "";
-  const pluginServiceId = tizenPackageId ? `${tizenPackageId}.PluginService` : "";
+  const tizenAppId = readTizenApplicationId(configXml);
+  const engineFsServiceId = tizenAppId ? `${tizenAppId}.EngineFsService` : "";
+  const pluginServiceId = tizenAppId ? `${tizenAppId}.PluginService` : "";
   if (engineFsServiceId) {
     configXml = upsertTizenEngineFsService(configXml, engineFsServiceId);
   }

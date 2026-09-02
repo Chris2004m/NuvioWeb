@@ -27,6 +27,20 @@ var activePort = 0;
 var startRequested = false;
 var lifecycleToken = 0;
 
+function diagnosticError(error) {
+  var details = {
+    name: error && error.name ? String(error.name) : "Error",
+    message: error && error.message ? String(error.message) : String(error || "Unknown error")
+  };
+  if (error && error.code) details.code = String(error.code);
+  if (error && error.stack) details.stack = String(error.stack).slice(0, 1600);
+  return details;
+}
+
+function diagnostic() {
+  // Diagnostic console output is intentionally disabled in normal builds.
+}
+
 function normalizePort(value, fallback) {
   var parsed = Number(value);
   return Number.isInteger(parsed) && parsed >= 1024 && parsed <= 65535 ? parsed : fallback;
@@ -46,24 +60,20 @@ function closeServer(target) {
 }
 
 function probeNodeRuntime() {
-  var requiredModules = ["http", "url", "net", "dns", "https", "zlib", "buffer"];
-  var missing = [];
-  var http = null;
-  requiredModules.forEach(function (moduleName) {
-    try {
-      var moduleValue = require(moduleName);
-      if (moduleName === "http") http = moduleValue;
-    } catch (error) {
-      missing.push(moduleName + ": " + errorText(error));
+  // The lightweight Tizen Web Service runtime only needs http to expose the
+  // health endpoint. plugin-http.cjs loads url/net/dns/https/zlib lazily for
+  // individual requests, so an unavailable optional module must not prevent
+  // the service from binding and being discoverable by the app.
+  diagnostic("runtime probe begin", { requiredModules: ["http"] });
+  try {
+    var http = require("http");
+    if (typeof http.createServer !== "function") {
+      throw new Error("http.createServer is unavailable");
     }
-  });
-  if (missing.length) {
-    throw new Error("Missing Node-compatible modules: " + missing.join("; "));
-  }
-
-  if (!http) http = require("http");
-  if (typeof http.createServer !== "function") {
-    throw new Error("http.createServer is unavailable");
+    diagnostic("runtime probe success", { httpCreateServer: true });
+  } catch (error) {
+    diagnostic("runtime probe failed", { error: diagnosticError(error) });
+    throw error;
   }
 }
 
@@ -85,6 +95,10 @@ function probeExistingPluginService(port, callback) {
   function finish(isPluginService) {
     if (settled) return;
     settled = true;
+    diagnostic("existing service probe result", {
+      port: port,
+      compatible: isPluginService === true
+    });
     callback(isPluginService === true);
   }
 
@@ -148,6 +162,7 @@ function failStart(token, error) {
     closeServer(server);
     server = null;
   }
+  diagnostic("startup failed", { error: diagnosticError(error) });
   console.error(SERVICE_TAG + " failed to listen", errorText(error));
 }
 
@@ -160,12 +175,19 @@ function bindCandidate(token, pluginHttp) {
 
   var candidate = candidates[candidateIndex];
   var localServer;
+  diagnostic("bind attempt", {
+    port: candidate,
+    candidateIndex: candidateIndex,
+    candidates: candidates.slice()
+  });
   try {
     localServer = pluginHttp.createPluginHttpServer({ port: candidate });
     if (!localServer || typeof localServer.listen !== "function") {
       throw new Error("Plugin HTTP server is unavailable");
     }
+    diagnostic("server factory success", { port: candidate });
   } catch (error) {
+    diagnostic("server factory failed", { port: candidate, error: diagnosticError(error) });
     failStart(token, error);
     return;
   }
@@ -180,6 +202,7 @@ function bindCandidate(token, pluginHttp) {
     }
     listening = true;
     activePort = candidate;
+    diagnostic("server listening", { port: candidate, loopback: "127.0.0.1" });
   }
   function handleBindError(error) {
     if (token !== lifecycleToken) {
@@ -192,6 +215,11 @@ function bindCandidate(token, pluginHttp) {
     }
     if (handled) return;
     handled = true;
+    diagnostic("server bind error", {
+      port: candidate,
+      error: diagnosticError(error),
+      hasFallback: candidateIndex < candidates.length - 1
+    });
     closeServer(localServer);
     server = null;
     if (error && error.code === "EADDRINUSE") {
@@ -199,6 +227,7 @@ function bindCandidate(token, pluginHttp) {
         if (token !== lifecycleToken) return;
         if (isExistingPluginService) {
           activePort = candidate;
+          diagnostic("compatible existing service reused", { port: candidate });
           console.warn(
             SERVICE_TAG +
               " port " +
@@ -209,6 +238,10 @@ function bindCandidate(token, pluginHttp) {
         }
         if (candidateIndex < candidates.length - 1) {
           candidateIndex += 1;
+          diagnostic("fallback port selected", {
+            previousPort: candidate,
+            nextPort: candidates[candidateIndex]
+          });
           console.warn(
             SERVICE_TAG +
               " port " +
@@ -233,6 +266,7 @@ function bindCandidate(token, pluginHttp) {
     // runtime. Some Tizen lightweight runtimes acknowledge the host/callback
     // overload without creating a reachable loopback listener.
     localServer.listen(candidate);
+    diagnostic("listen called", { port: candidate, argumentCount: 1 });
   } catch (error) {
     handleBindError(error);
   }
@@ -240,6 +274,7 @@ function bindCandidate(token, pluginHttp) {
 
 function start() {
   if (startRequested) {
+    diagnostic("onStart ignored", { reason: "start already requested", activePort: activePort });
     return;
   }
 
@@ -247,19 +282,30 @@ function start() {
   candidateIndex = 0;
   activePort = 0;
   var token = ++lifecycleToken;
+  var currentProcess = runtimeProcess();
+  diagnostic("onStart", {
+    candidates: candidates.slice(),
+    configuredPort: configuredPort,
+    nodeVersion:
+      currentProcess && currentProcess.version ? String(currentProcess.version) : "unknown"
+  });
   try {
     probeNodeRuntime();
+    diagnostic("plugin-http load begin", { module: "../plugin-http.cjs" });
     var pluginHttp = require("../plugin-http.cjs");
     if (!pluginHttp || typeof pluginHttp.createPluginHttpServer !== "function") {
       throw new Error("Plugin HTTP implementation is unavailable");
     }
+    diagnostic("plugin-http load success", { createPluginHttpServer: true });
     bindCandidate(token, pluginHttp);
   } catch (error) {
+    diagnostic("onStart failed before bind", { error: diagnosticError(error) });
     failStart(token, error);
   }
 }
 
 function stop() {
+  var previousPort = activePort;
   lifecycleToken += 1;
   startRequested = false;
   candidateIndex = 0;
@@ -267,6 +313,7 @@ function stop() {
   var current = server;
   server = null;
   closeServer(current);
+  diagnostic("onExit", { closed: Boolean(current), previousPort: previousPort });
 }
 
 // Tizen Web Service applications are entered through onStart. Keeping the

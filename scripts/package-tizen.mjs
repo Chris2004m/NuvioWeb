@@ -195,6 +195,11 @@ window.__NUVIO_TIZEN_ENGINEFS_SERVICE_ENABLED__ = ${includeEngineFsService};
 window.__NUVIO_TIZEN_ENGINEFS_SERVICE_ID__ = ${JSON.stringify(configuredServiceId)};
 window.__NUVIO_TIZEN_PLUGIN_SERVICE_ENABLED__ = ${includePluginService};
 window.__NUVIO_TIZEN_PLUGIN_SERVICE_ID__ = ${JSON.stringify(configuredPluginServiceId)};
+// Keep the next device run richly observable while the Tizen service boundary
+// is being diagnosed. The application-side diagnostics are gated by these
+// flags; the packaged service files keep their own startup logs.
+window.__NUVIO_TIZEN_SERVICE_DIAGNOSTICS__ = true;
+window.__NUVIO_PLUGIN_SYNC_DIAGNOSTICS__ = true;
 
 var tvInput = window.tizen && window.tizen.tvinputdevice;
 if (tvInput && typeof tvInput.registerKey === "function") {
@@ -677,12 +682,10 @@ async function assertTizenServicePackage(
     }
 
     const engineFsEntry = zip.file(tizenEngineFsServiceRelativePath);
-    if (engineFsEntry) {
+    if (engineFsEntry && requireEngineFsService) {
       const engineFsSource = await engineFsEntry.async("string");
-      if (!/require\(["']\.\/plugin-service\.js["']\)/.test(engineFsSource)) {
-        throw new Error(
-          "Tizen WGT EngineFS service does not include the PluginService compatibility host."
-        );
+      if (/require\(["']\.\/plugin-service\.js["']\)/.test(engineFsSource)) {
+        throw new Error("Tizen WGT EngineFS and PluginService must remain independent.");
       }
     }
   }

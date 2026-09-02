@@ -1,6 +1,5 @@
 import { Platform } from "../index.js";
 import { TizenCapabilities } from "./tizenCapabilities.js";
-import { getTizenServiceIdCandidates } from "./tizenServiceIds.js";
 
 const LOCAL_BASE_URLS = [
   "http://127.0.0.1:2710",
@@ -16,10 +15,18 @@ const TIZEN_DEFAULT_OPERATION = "http://tizen.org/appcontrol/operation/default";
 
 let startPromise = null;
 
-function logTizenP2pDebug(...args) {
-  if (globalThis.__NUVIO_DEBUG_ENGINEFS__ || globalThis.__NUVIO_DEBUG_TIZEN_P2P__) {
-    console.info(...args);
-  }
+function diagnosticError(error) {
+  const details = {
+    name: String(error?.name || "Error"),
+    message: String(error?.message || error || "Unknown error")
+  };
+  if (error?.code) details.code = String(error.code);
+  if (error?.stack) details.stack = String(error.stack).slice(0, 1600);
+  return details;
+}
+
+function diagnostic() {
+  // Diagnostic console output is intentionally disabled in normal builds.
 }
 
 function withTimeout(promise, timeoutMs, message) {
@@ -34,10 +41,24 @@ function withTimeout(promise, timeoutMs, message) {
   });
 }
 
-function getServiceIds() {
-  return getTizenServiceIdCandidates("EngineFsService", {
-    configuredId: globalThis.__NUVIO_TIZEN_ENGINEFS_SERVICE_ID__
-  });
+function getServiceId() {
+  const configured = String(globalThis.__NUVIO_TIZEN_ENGINEFS_SERVICE_ID__ || "").trim();
+  if (configured) {
+    return configured;
+  }
+  try {
+    const appInfo = globalThis.tizen?.application?.getCurrentApplication?.()?.appInfo;
+    const packageId = String(appInfo?.packageId || "").trim();
+
+    if (packageId) {
+      return `${packageId}.EngineFsService`;
+    }
+
+    const appId = String(appInfo?.id || "").trim();
+    return appId ? `${appId}.EngineFsService` : "";
+  } catch (_) {
+    return "";
+  }
 }
 
 function invokeCallbackApi(fn, args = []) {
@@ -66,48 +87,40 @@ async function startViaApplicationControl(serviceId, operation = TIZEN_DEFAULT_O
   const application = globalThis.tizen?.application;
   const ApplicationControl = globalThis.tizen?.ApplicationControl;
   if (!application || typeof application.launchAppControl !== "function") {
+    diagnostic("application-control API unavailable", {
+      serviceId,
+      launchAppControl: typeof application?.launchAppControl,
+      applicationControl: typeof ApplicationControl
+    });
     throw new Error("tizen.application.launchAppControl unavailable");
   }
   if (typeof ApplicationControl !== "function") {
+    diagnostic("application-control constructor unavailable", { serviceId });
     throw new Error("tizen.ApplicationControl unavailable");
   }
 
+  diagnostic("application-control start call", { serviceId, operation });
   const appControl = new ApplicationControl(operation);
   return invokeCallbackApi(application.launchAppControl.bind(application), [appControl, serviceId]);
 }
 
-function normalizeWrtServiceModule(moduleValue) {
-  const candidates = [
-    moduleValue,
-    moduleValue?.default,
-    moduleValue?.service,
-    moduleValue?.default?.service
-  ];
-  for (const candidate of candidates) {
-    if (
-      candidate &&
-      (typeof candidate.startService === "function" || typeof candidate.start === "function")
-    ) {
-      return candidate;
-    }
-  }
-  return null;
-}
-
 async function startViaWrtService(serviceId) {
-  const wrtService = normalizeWrtServiceModule(
-    globalThis.__NUVIO_TIZEN_WRT_SERVICE__ ||
-      globalThis.wrt?.service ||
-      globalThis.webapis?.wrt?.service ||
-      globalThis.webapis?.service
-  );
+  const wrtService =
+    globalThis.wrt?.service || globalThis.webapis?.wrt?.service || globalThis.webapis?.service;
   if (!wrtService) {
+    diagnostic("wrt service API unavailable", { serviceId });
     throw new Error("wrt service API unavailable");
   }
   if (typeof wrtService.startService === "function") {
     try {
+      diagnostic("wrt startService call", { serviceId, argumentType: "string" });
       return await invokeCallbackApi(wrtService.startService.bind(wrtService), [serviceId]);
     } catch (firstError) {
+      diagnostic("wrt startService string variant failed", {
+        serviceId,
+        error: diagnosticError(firstError),
+        retryArgumentType: "object"
+      });
       return invokeCallbackApi(wrtService.startService.bind(wrtService), [{ id: serviceId }]).catch(
         () => {
           throw firstError;
@@ -116,20 +129,27 @@ async function startViaWrtService(serviceId) {
     }
   }
   if (typeof wrtService.start === "function") {
+    diagnostic("wrt start alias call", { serviceId });
     return invokeCallbackApi(wrtService.start.bind(wrtService), [serviceId]);
   }
+  diagnostic("wrt service start API unavailable", { serviceId });
   throw new Error("wrt service start API unavailable");
 }
 
 async function startViaTizenApplication(serviceId) {
   const application = globalThis.tizen?.application;
   if (!application || typeof application.launch !== "function") {
+    diagnostic("application launch API unavailable", {
+      serviceId,
+      launch: typeof application?.launch
+    });
     throw new Error("tizen.application.launch unavailable");
   }
+  diagnostic("application launch call", { serviceId });
   return invokeCallbackApi(application.launch.bind(application), [serviceId]);
 }
 
-async function requestServiceStartForId(serviceId) {
+async function requestServiceStart(serviceId) {
   const errors = [];
   const legacyServiceFirst = TizenCapabilities.get().webServiceSupported === false;
   const officialAttempts = [
@@ -153,35 +173,37 @@ async function requestServiceStartForId(serviceId) {
   const attempts = legacyServiceFirst
     ? officialAttempts.slice(2).concat(officialAttempts.slice(1, 2))
     : officialAttempts;
+  diagnostic("launcher attempts selected", {
+    serviceId,
+    webServiceSupported: TizenCapabilities.get().webServiceSupported,
+    methods: attempts.map((attempt) => attempt.method)
+  });
 
   for (const attempt of attempts) {
+    diagnostic("launcher attempt begin", { serviceId, method: attempt.method });
     try {
-      await withTimeout(
+      const startResult = await withTimeout(
         attempt.start(),
         SERVICE_START_CALL_TIMEOUT_MS,
         `${attempt.method} service start call timed out`
       );
+      diagnostic("launcher acknowledged", {
+        serviceId,
+        method: attempt.method,
+        resultType: startResult === undefined ? "undefined" : typeof startResult
+      });
       return { method: attempt.method };
     } catch (error) {
+      diagnostic("launcher attempt failed", {
+        serviceId,
+        method: attempt.method,
+        error: diagnosticError(error)
+      });
       errors.push(`${attempt.method}: ${error?.message || error}`);
     }
   }
+  diagnostic("launcher sequence failed", { serviceId, errors });
   throw new Error(errors.join("; "));
-}
-
-async function requestServiceStart(serviceIds) {
-  const candidates = Array.isArray(serviceIds)
-    ? serviceIds.filter(Boolean)
-    : [serviceIds].filter(Boolean);
-  const errors = [];
-  for (const serviceId of candidates) {
-    try {
-      return { ...(await requestServiceStartForId(serviceId)), serviceId };
-    } catch (error) {
-      errors.push(`${serviceId}: ${error?.message || error}`);
-    }
-  }
-  throw new Error(errors.join("; ") || "Tizen EngineFS service id is unavailable");
 }
 
 async function probeBaseUrl(baseUrl, timeoutMs = PROBE_TIMEOUT_MS) {
@@ -207,27 +229,47 @@ async function probeBaseUrl(baseUrl, timeoutMs = PROBE_TIMEOUT_MS) {
 
 async function findReachableLocalBaseUrl(timeoutMs = PROBE_TIMEOUT_MS) {
   let lastError = null;
+  const probes = [];
   for (const baseUrl of LOCAL_BASE_URLS) {
     try {
-      return await probeBaseUrl(baseUrl, timeoutMs);
+      const result = await probeBaseUrl(baseUrl, timeoutMs);
+      probes.push({ baseUrl, status: "reachable" });
+      diagnostic("settings probe round", { timeoutMs, probes });
+      return result;
     } catch (error) {
       lastError = error;
+      probes.push({
+        baseUrl,
+        status: "failed",
+        error: String(error?.message || error)
+      });
     }
   }
+  diagnostic("settings probe round", { timeoutMs, probes });
   throw lastError || new Error("No local Tizen EngineFS base URL responded");
 }
 
 async function waitForLocalBaseUrl(timeoutMs = START_TIMEOUT_MS) {
   const startedAt = Date.now();
   let lastError = null;
+  diagnostic("settings wait begin", { timeoutMs });
   while (Date.now() - startedAt < timeoutMs) {
     try {
-      return await findReachableLocalBaseUrl(1200);
+      const reachable = await findReachableLocalBaseUrl(1200);
+      diagnostic("settings wait success", {
+        elapsedMs: Date.now() - startedAt,
+        baseUrl: reachable.baseUrl
+      });
+      return reachable;
     } catch (error) {
       lastError = error;
       await new Promise((resolve) => setTimeout(resolve, 450));
     }
   }
+  diagnostic("settings wait failed", {
+    elapsedMs: Date.now() - startedAt,
+    error: diagnosticError(lastError || new Error("settings wait timeout"))
+  });
   throw lastError || new Error("Timed out waiting for local Tizen EngineFS service");
 }
 
@@ -246,21 +288,36 @@ export const TizenEngineFsService = {
 
   async ensureStarted({ purpose = "generic" } = {}) {
     if (!Platform.isTizen()) {
+      diagnostic("ensure skipped", { reason: "not running on Tizen", purpose });
       return { status: "unsupported", detail: "Not running on Tizen" };
     }
     const capabilities = TizenCapabilities.get();
-    // `http://tizen.org/feature/web.service` is a capability hint, not proof
-    // that an already-packaged service cannot be started. Some Samsung TV
-    // firmware reports web.service=false while the declared EngineFS service
-    // is still launchable (P2P is the working real-device example). The
-    // loopback health/settings probe below is the authoritative check.
-    if (!capabilities.engineFsServicePackaged) {
+    diagnostic("ensure begin", {
+      purpose,
+      serviceId: getServiceId(),
+      localBaseUrls: LOCAL_BASE_URLS,
+      capabilities: {
+        isTizen: capabilities.isTizen,
+        tizenVersion: capabilities.tizenVersion || "",
+        tizenMajorVersion: capabilities.tizenMajorVersion || 0,
+        chromiumMajorVersion: capabilities.chromiumMajorVersion || 0,
+        webServiceSupported: capabilities.webServiceSupported,
+        engineFsServicePackaged: capabilities.engineFsServicePackaged,
+        supportsP2p: capabilities.supportsP2p
+      }
+    });
+    if (purpose !== "p2p" && !capabilities.supportsWebService) {
+      diagnostic("ensure skipped", {
+        reason: "Tizen web service support is unavailable on this TV",
+        purpose
+      });
       return {
         status: "unsupported",
-        detail: "Tizen EngineFS service is not packaged"
+        detail: "Tizen web service support is unavailable on this TV"
       };
     }
     if (purpose === "p2p" && !capabilities.supportsP2p) {
+      diagnostic("ensure skipped", { reason: "P2P unsupported", purpose });
       return {
         status: "unsupported",
         detail: "Tizen P2P streaming is not supported on this TV"
@@ -268,26 +325,43 @@ export const TizenEngineFsService = {
     }
     try {
       const existing = await findReachableLocalBaseUrl();
+      diagnostic("ensure found existing service", {
+        purpose,
+        baseUrl: existing.baseUrl,
+        started: false
+      });
       return { status: "success", ...existing, started: false };
-    } catch (_) {
+    } catch (error) {
       // Continue with explicit service startup.
+      diagnostic("ensure existing service unavailable", {
+        purpose,
+        error: diagnosticError(error)
+      });
     }
 
     if (!startPromise) {
       startPromise = (async () => {
-        const serviceIds = getServiceIds();
-        if (!serviceIds.length) {
+        const serviceId = getServiceId();
+        if (!serviceId) {
           throw new Error("Tizen EngineFS service id is unavailable");
         }
-        const startResult = await requestServiceStart(serviceIds);
-        logTizenP2pDebug("Tizen EngineFS service start requested", {
-          serviceId: startResult.serviceId,
+        diagnostic("service start requested", { serviceId });
+        const startResult = await requestServiceStart(serviceId);
+        diagnostic("explicit startup acknowledged", {
+          purpose,
+          serviceId,
           method: startResult.method
         });
         const reachable = await waitForLocalBaseUrl();
+        diagnostic("explicit startup health success", {
+          purpose,
+          serviceId,
+          method: startResult.method,
+          baseUrl: reachable.baseUrl
+        });
         return {
           ...reachable,
-          serviceId: startResult.serviceId,
+          serviceId,
           startMethod: startResult.method
         };
       })().finally(() => {
@@ -297,8 +371,16 @@ export const TizenEngineFsService = {
 
     try {
       const result = await startPromise;
+      diagnostic("ensure success", {
+        purpose,
+        serviceId: result.serviceId,
+        method: result.startMethod,
+        baseUrl: result.baseUrl,
+        started: true
+      });
       return { status: "success", ...result, started: true };
     } catch (error) {
+      diagnostic("ensure failed", { purpose, error: diagnosticError(error) });
       return {
         status: "error",
         detail: error?.message || String(error || "Tizen EngineFS service startup failed")
