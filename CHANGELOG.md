@@ -1,3 +1,12 @@
+## 1.0.5
+
+### Improvements & Fixes
+
+- Aligned Smart TV plugin execution and stream searching with Android TV, including exception containment, provider scheduling, shared sessions, profile synchronization, and pause/resume lifecycle (@WhiteGiso)
+- Kept Tizen EngineFS and PluginService independent, on-demand, and separately packaged for direct installation and Apps2Samsung while preserving their distinct ports and identifiers (@WhiteGiso)
+- Added runtime notices and translations for TVs where plugin execution is unsupported or limited, without adding messages on fully supported runtimes (@WhiteGiso)
+- Hardened TV input/navigation and Tizen/WebOS service handling while retaining warnings and errors for real failures only (@WhiteGiso)
+
 ## 1.0.4
 
 ### Improvements & Fixes
@@ -5,8 +14,9 @@
 - Hardened Continue Watching, library loading, and remote progress state so profile changes and delayed synchronization do not replace valid TV content with a temporary empty view (@WhiteGiso)
 - Aligned plugin execution with Android behavior by preserving eligible provider work in a cancellable queue and isolating legacy plugin data and migrations per profile (@WhiteGiso)
 - Improved Home hero metadata and artwork transitions, Tizen live HLS fallback, and Library/Plugins focus restoration for Samsung TV navigation (@WhiteGiso)
-- Added a controlled Tizen PluginService fallback through the working EngineFS service, resilient service-ID resolution, runtime diagnostics, and duplicate-port handling while keeping both local APIs separate (@WhiteGiso)
-- Strengthened Tizen WGT packaging and Samsung installer validation so the PluginService files, bridge, manifest declarations, and EngineFS compatibility host are checked before installation (@WhiteGiso)
+- Aligned plugin synchronization with Android by pulling the remote snapshot before any pending push, so opaque legacy rows cannot block classification and provider hydration (@WhiteGiso)
+- Added independent Tizen EngineFS and PluginService lifecycles and ports, preserving lazy P2P startup and starting PluginService on demand during plugin synchronization or the first plugin request, with runtime diagnostics and duplicate-port handling (@WhiteGiso)
+- Strengthened Tizen WGT packaging and Samsung installer validation so both service files, bridge, and manifest declarations are checked before installation (@WhiteGiso)
 
 ## 1.0.3
 
