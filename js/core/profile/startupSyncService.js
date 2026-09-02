@@ -142,6 +142,14 @@ export const StartupSyncService = {
     );
   },
 
+  isCurrentProfilePullPending() {
+    return Boolean(
+      this.started &&
+      this.profileScopedSyncEnabled &&
+      !(this.lastPullCompleted && this.lastPulledKey === currentSyncKey())
+    );
+  },
+
   scheduleBackoffRetry({ notifyPullCompleted = false } = {}) {
     if (!this.started || !AuthManager.isAuthenticated) {
       return;

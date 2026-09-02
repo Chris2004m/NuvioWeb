@@ -456,8 +456,13 @@ export const PluginsScreen = {
     ).length;
     const providerCount = Math.max(Number(repository.scraperCount) || 0, providers.length);
     const updated = dateLabel(repository.lastUpdated);
+    // Opaque/read-only rows have no actionable descendant. Keep the row in the
+    // D-pad focus graph so the scroll container can reveal it without enabling
+    // an unsafe repository mutation.
+    const focusProxy = model.readOnly || repository.type === PLUGIN_REPOSITORY_TYPES.UNKNOWN;
     return `
-      <article class="plugins-repository-card${executable ? (runtimeUnavailable ? " is-runtime-unavailable" : "") : " is-metadata-only"}">
+      <article class="plugins-repository-card${executable ? (runtimeUnavailable ? " is-runtime-unavailable" : "") : " is-metadata-only"}${focusProxy ? " plugins-repository-focus-proxy plugins-focusable focusable" : ""}"
+               ${focusProxy ? `data-focus-key="${escapeHtml(`repository:${repository.id}`)}" tabindex="0"` : ""}>
         <div class="plugins-repository-header">
           <div class="plugins-repository-copy">
             <h2>${escapeHtml(repository.name)}</h2>

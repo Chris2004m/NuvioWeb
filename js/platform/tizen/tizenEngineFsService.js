@@ -1,5 +1,6 @@
 import { Platform } from "../index.js";
 import { TizenCapabilities } from "./tizenCapabilities.js";
+import { getTizenServiceIdCandidates } from "./tizenServiceIds.js";
 
 const LOCAL_BASE_URLS = [
   "http://127.0.0.1:2710",
@@ -33,24 +34,10 @@ function withTimeout(promise, timeoutMs, message) {
   });
 }
 
-function getServiceId() {
-  const configured = String(globalThis.__NUVIO_TIZEN_ENGINEFS_SERVICE_ID__ || "").trim();
-  if (configured) {
-    return configured;
-  }
-  try {
-    const appInfo = globalThis.tizen?.application?.getCurrentApplication?.()?.appInfo;
-    const packageId = String(appInfo?.packageId || "").trim();
-
-    if (packageId) {
-      return `${packageId}.EngineFsService`;
-    }
-
-    const appId = String(appInfo?.id || "").trim();
-    return appId ? `${appId}.EngineFsService` : "";
-  } catch (_) {
-    return "";
-  }
+function getServiceIds() {
+  return getTizenServiceIdCandidates("EngineFsService", {
+    configuredId: globalThis.__NUVIO_TIZEN_ENGINEFS_SERVICE_ID__
+  });
 }
 
 function invokeCallbackApi(fn, args = []) {
@@ -142,7 +129,7 @@ async function startViaTizenApplication(serviceId) {
   return invokeCallbackApi(application.launch.bind(application), [serviceId]);
 }
 
-async function requestServiceStart(serviceId) {
+async function requestServiceStartForId(serviceId) {
   const errors = [];
   const legacyServiceFirst = TizenCapabilities.get().webServiceSupported === false;
   const officialAttempts = [
@@ -180,6 +167,21 @@ async function requestServiceStart(serviceId) {
     }
   }
   throw new Error(errors.join("; "));
+}
+
+async function requestServiceStart(serviceIds) {
+  const candidates = Array.isArray(serviceIds)
+    ? serviceIds.filter(Boolean)
+    : [serviceIds].filter(Boolean);
+  const errors = [];
+  for (const serviceId of candidates) {
+    try {
+      return { ...(await requestServiceStartForId(serviceId)), serviceId };
+    } catch (error) {
+      errors.push(`${serviceId}: ${error?.message || error}`);
+    }
+  }
+  throw new Error(errors.join("; ") || "Tizen EngineFS service id is unavailable");
 }
 
 async function probeBaseUrl(baseUrl, timeoutMs = PROBE_TIMEOUT_MS) {
@@ -273,17 +275,21 @@ export const TizenEngineFsService = {
 
     if (!startPromise) {
       startPromise = (async () => {
-        const serviceId = getServiceId();
-        if (!serviceId) {
+        const serviceIds = getServiceIds();
+        if (!serviceIds.length) {
           throw new Error("Tizen EngineFS service id is unavailable");
         }
-        const startResult = await requestServiceStart(serviceId);
+        const startResult = await requestServiceStart(serviceIds);
         logTizenP2pDebug("Tizen EngineFS service start requested", {
-          serviceId,
+          serviceId: startResult.serviceId,
           method: startResult.method
         });
         const reachable = await waitForLocalBaseUrl();
-        return { ...reachable, serviceId, startMethod: startResult.method };
+        return {
+          ...reachable,
+          serviceId: startResult.serviceId,
+          startMethod: startResult.method
+        };
       })().finally(() => {
         startPromise = null;
       });

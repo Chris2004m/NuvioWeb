@@ -3,6 +3,7 @@
 
 var SERVICE_TAG = "[Nuvio Tizen EngineFS]";
 var started = false;
+var pluginCompatibilityService = null;
 
 function log() {
   var args = Array.prototype.slice.call(arguments);
@@ -96,6 +97,23 @@ function startEngineFsRuntime() {
     expectedBaseUrl: "http://127.0.0.1:" + process.env.PORT
   });
   require("./runtime/media-http.cjs");
+  // Keep EngineFS and PluginService as separate HTTP APIs and ports. On TVs
+  // where the second Tizen service component cannot be launched by a
+  // third-party installer, this already-running service can host the existing
+  // PluginService bootstrap as a compatibility fallback for the app.
+  try {
+    pluginCompatibilityService = require("./plugin-service.js");
+    if (pluginCompatibilityService && typeof pluginCompatibilityService.onStart === "function") {
+      pluginCompatibilityService.onStart();
+      log("requested plugin compatibility host beside EngineFS");
+    }
+  } catch (error) {
+    pluginCompatibilityService = null;
+    warn(
+      "optional plugin compatibility host failed; EngineFS remains available",
+      error && error.stack ? error.stack : error
+    );
+  }
   // AVPlay can expose text tracks without rendering them. Keep the fallback
   // extractors beside the existing runtime so Tizen 4+ devices with the
   // packaged web service can render supported timed text through the app HTML
@@ -128,6 +146,14 @@ module.exports.onStart = function () {
 
 function stopEngineFsRuntime() {
   log("stopping local EngineFS runtime");
+  if (pluginCompatibilityService && typeof pluginCompatibilityService.onExit === "function") {
+    try {
+      pluginCompatibilityService.onExit();
+    } catch (error) {
+      warn("plugin compatibility host shutdown failed", error && error.stack ? error.stack : error);
+    }
+  }
+  pluginCompatibilityService = null;
   try {
     require("./runtime/tx3g-subtitle-service.cjs").stop();
   } catch (_) {}

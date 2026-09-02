@@ -46,9 +46,97 @@ function closeServer(target) {
 }
 
 function probeNodeRuntime() {
-  var http = require("http");
+  var requiredModules = ["http", "url", "net", "dns", "https", "zlib", "buffer"];
+  var missing = [];
+  var http = null;
+  requiredModules.forEach(function (moduleName) {
+    try {
+      var moduleValue = require(moduleName);
+      if (moduleName === "http") http = moduleValue;
+    } catch (error) {
+      missing.push(moduleName + ": " + errorText(error));
+    }
+  });
+  if (missing.length) {
+    throw new Error("Missing Node-compatible modules: " + missing.join("; "));
+  }
+
+  if (!http) http = require("http");
   if (typeof http.createServer !== "function") {
     throw new Error("http.createServer is unavailable");
+  }
+}
+
+function probeExistingPluginService(port, callback) {
+  var http;
+  try {
+    http = require("http");
+  } catch (_) {
+    callback(false);
+    return;
+  }
+  if (!http || typeof http.request !== "function") {
+    callback(false);
+    return;
+  }
+
+  var settled = false;
+  var request = null;
+  function finish(isPluginService) {
+    if (settled) return;
+    settled = true;
+    callback(isPluginService === true);
+  }
+
+  try {
+    request = http.request(
+      {
+        host: "127.0.0.1",
+        port: port,
+        path: "/health",
+        method: "GET"
+      },
+      function (response) {
+        var body = "";
+        response.on("data", function (chunk) {
+          if (body.length < 8192) body += String(chunk);
+        });
+        response.on("end", function () {
+          if (response.statusCode !== 200) {
+            finish(false);
+            return;
+          }
+          try {
+            var payload = JSON.parse(body || "{}");
+            finish(
+              payload &&
+                payload.returnValue === true &&
+                payload.service === "nuvio-plugin-network" &&
+                Number(payload.protocolVersion || 0) === 1
+            );
+          } catch (_) {
+            finish(false);
+          }
+        });
+        response.on("error", function () {
+          finish(false);
+        });
+      }
+    );
+    request.on("error", function () {
+      finish(false);
+    });
+    if (typeof request.setTimeout === "function") {
+      request.setTimeout(700, function () {
+        try {
+          request.destroy();
+        } catch (_) {}
+        finish(false);
+      });
+    }
+    request.end();
+  } catch (_) {
+    finish(false);
   }
 }
 
@@ -93,8 +181,7 @@ function bindCandidate(token, pluginHttp) {
     listening = true;
     activePort = candidate;
   }
-  localServer.on("listening", markListening);
-  localServer.on("error", function (error) {
+  function handleBindError(error) {
     if (token !== lifecycleToken) {
       closeServer(localServer);
       return;
@@ -106,22 +193,40 @@ function bindCandidate(token, pluginHttp) {
     if (handled) return;
     handled = true;
     closeServer(localServer);
-    if (error && error.code === "EADDRINUSE" && candidateIndex < candidates.length - 1) {
-      server = null;
-      candidateIndex += 1;
-      console.warn(
-        SERVICE_TAG +
-          " port " +
-          candidate +
-          " is already in use; trying 127.0.0.1:" +
-          candidates[candidateIndex]
-      );
-      bindCandidate(token, pluginHttp);
+    server = null;
+    if (error && error.code === "EADDRINUSE") {
+      probeExistingPluginService(candidate, function (isExistingPluginService) {
+        if (token !== lifecycleToken) return;
+        if (isExistingPluginService) {
+          activePort = candidate;
+          console.warn(
+            SERVICE_TAG +
+              " port " +
+              candidate +
+              " is already served by a compatible PluginService; reusing it"
+          );
+          return;
+        }
+        if (candidateIndex < candidates.length - 1) {
+          candidateIndex += 1;
+          console.warn(
+            SERVICE_TAG +
+              " port " +
+              candidate +
+              " is already in use; trying 127.0.0.1:" +
+              candidates[candidateIndex]
+          );
+          bindCandidate(token, pluginHttp);
+          return;
+        }
+        failStart(token, error);
+      });
       return;
     }
-    server = null;
     failStart(token, error);
-  });
+  }
+  localServer.on("listening", markListening);
+  localServer.on("error", handleBindError);
 
   try {
     // Keep the exact one-argument overload used by the working EngineFS
@@ -129,12 +234,7 @@ function bindCandidate(token, pluginHttp) {
     // overload without creating a reachable loopback listener.
     localServer.listen(candidate);
   } catch (error) {
-    if (!handled) {
-      handled = true;
-      closeServer(localServer);
-      server = null;
-      failStart(token, error);
-    }
+    handleBindError(error);
   }
 }
 

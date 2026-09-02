@@ -1,5 +1,7 @@
 import { Platform } from "../index.js";
 import { TizenCapabilities } from "./tizenCapabilities.js";
+import { TizenEngineFsService } from "./tizenEngineFsService.js";
+import { getTizenServiceIdCandidates } from "./tizenServiceIds.js";
 
 const LOCAL_BASE_URLS = [
   "http://127.0.0.1:2711",
@@ -30,18 +32,10 @@ function withTimeout(promise, timeoutMs, message) {
   });
 }
 
-function serviceId() {
-  const configured = String(globalThis.__NUVIO_TIZEN_PLUGIN_SERVICE_ID__ || "").trim();
-  if (configured) return configured;
-  try {
-    const appInfo = globalThis.tizen?.application?.getCurrentApplication?.()?.appInfo;
-    const packageId = String(appInfo?.packageId || "").trim();
-    if (packageId) return `${packageId}.PluginService`;
-    const appId = String(appInfo?.id || "").trim();
-    return appId ? `${appId}.PluginService` : "";
-  } catch (_) {
-    return "";
-  }
+function serviceIds() {
+  return getTizenServiceIdCandidates("PluginService", {
+    configuredId: globalThis.__NUVIO_TIZEN_PLUGIN_SERVICE_ID__
+  });
 }
 
 function callbackCall(fn, args = []) {
@@ -170,40 +164,45 @@ function getStartAttempts(id, webServiceSupported) {
   return attempts;
 }
 
-async function requestStartAndWaitForHealth(id, { webServiceSupported = null } = {}) {
-  const attempts = getStartAttempts(id, webServiceSupported);
+async function requestStartAndWaitForHealth(serviceIdsToTry, { webServiceSupported = null } = {}) {
+  const ids = Array.isArray(serviceIdsToTry)
+    ? serviceIdsToTry.filter(Boolean)
+    : [serviceIdsToTry].filter(Boolean);
   const errors = [];
   const deadline = Date.now() + START_TIMEOUT_MS;
 
-  for (const attempt of attempts) {
-    const remainingBeforeStart = deadline - Date.now();
-    if (remainingBeforeStart <= 250) break;
+  for (const id of ids) {
+    const attempts = getStartAttempts(id, webServiceSupported);
+    for (const attempt of attempts) {
+      const remainingBeforeStart = deadline - Date.now();
+      if (remainingBeforeStart <= 250) break;
 
-    let acknowledged = false;
-    try {
-      await withTimeout(
-        attempt.start(),
-        Math.min(SERVICE_START_CALL_TIMEOUT_MS, remainingBeforeStart),
-        `${attempt.method} service start call timed out`
-      );
-      acknowledged = true;
+      let acknowledged = false;
+      try {
+        await withTimeout(
+          attempt.start(),
+          Math.min(SERVICE_START_CALL_TIMEOUT_MS, remainingBeforeStart),
+          `${attempt.method} service start call timed out`
+        );
+        acknowledged = true;
 
-      const remainingBeforeHealth = deadline - Date.now();
-      if (remainingBeforeHealth <= 250) {
-        throw new Error("startup deadline reached before the health check");
+        const remainingBeforeHealth = deadline - Date.now();
+        if (remainingBeforeHealth <= 250) {
+          throw new Error("startup deadline reached before the health check");
+        }
+
+        const reachable = await waitForBaseUrl(
+          Math.min(START_ATTEMPT_HEALTH_TIMEOUT_MS, remainingBeforeHealth)
+        );
+        return { ...reachable, method: attempt.method, serviceId: id };
+      } catch (error) {
+        const detail = String(error?.message || error);
+        const message = acknowledged
+          ? `${id} ${attempt.method} acknowledged but /health was not reachable: ${detail}`
+          : `${id} ${attempt.method} start failed: ${detail}`;
+        errors.push(message);
+        console.warn(`[Nuvio PluginService] ${message}`);
       }
-
-      const reachable = await waitForBaseUrl(
-        Math.min(START_ATTEMPT_HEALTH_TIMEOUT_MS, remainingBeforeHealth)
-      );
-      return { ...reachable, method: attempt.method };
-    } catch (error) {
-      const detail = String(error?.message || error);
-      const message = acknowledged
-        ? `${attempt.method} acknowledged but /health was not reachable: ${detail}`
-        : `${attempt.method} start failed: ${detail}`;
-      errors.push(message);
-      console.warn(`[Nuvio PluginService] ${message}`);
     }
   }
 
@@ -282,6 +281,29 @@ async function waitForBaseUrl(timeoutMs = START_TIMEOUT_MS) {
   throw lastError || new Error("Timed out waiting for the Tizen plugin service");
 }
 
+async function startWithEngineFsCompatibilityFallback(directError) {
+  const engineFs = await TizenEngineFsService.ensureStarted({ purpose: "generic" });
+  if (engineFs.status !== "success") {
+    throw new Error(
+      `EngineFS compatibility host unavailable: ${
+        engineFs.detail || "local EngineFS service did not start"
+      }`
+    );
+  }
+
+  // EngineFS keeps its media API on 2710. Its Tizen service also starts the
+  // existing plugin-service bootstrap as a compatibility host, which keeps
+  // the plugin protocol on 2711/11471 and avoids coupling the two APIs.
+  const reachable = await waitForBaseUrl();
+  return {
+    ...reachable,
+    serviceId: engineFs.serviceId || "",
+    startMethod: "enginefs-plugin-compatibility",
+    compatibilityFallback: true,
+    directStartError: String(directError?.message || directError || "unknown")
+  };
+}
+
 export const TizenPluginService = {
   getLocalBaseUrls() {
     return [...LOCAL_BASE_URLS];
@@ -304,16 +326,23 @@ export const TizenPluginService = {
     }
     if (!startPromise) {
       startPromise = (async () => {
-        const id = serviceId();
-        if (!id) throw new Error("Tizen plugin service id is unavailable");
+        const ids = serviceIds();
+        let directError = null;
         try {
-          const startResult = await requestStartAndWaitForHealth(id, {
+          if (!ids.length) {
+            throw new Error("Tizen plugin service id is unavailable");
+          }
+          const startResult = await requestStartAndWaitForHealth(ids, {
             webServiceSupported: capabilities.webServiceSupported
           });
-          return { ...startResult, serviceId: id, startMethod: startResult.method };
+          return { ...startResult, startMethod: startResult.method };
         } catch (error) {
-          throw new Error(`${id}: ${String(error?.message || error)}`);
+          directError = error;
+          console.warn(
+            `[Nuvio PluginService] direct startup failed; trying EngineFS compatibility host: ${String(error?.message || error)}`
+          );
         }
+        return startWithEngineFsCompatibilityFallback(directError);
       })().finally(() => {
         startPromise = null;
       });

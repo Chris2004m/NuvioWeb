@@ -3152,6 +3152,12 @@ export const PlayerController = {
       if (preferTvNative && canUseAvPlay) {
         pushCandidate(candidates, avplayEngine);
       }
+      if (isTizenRuntime && isLivePlayback) {
+        // On affected Samsung TVs, native HLS can report support but remain
+        // stuck before the first frame. Prefer the MSE-backed HLS pipeline
+        // after AVPlay for live playback; keep native-hls as a later fallback.
+        pushCandidate(candidates, "hls.js");
+      }
       if (!isTizenRuntime) {
         // Android opens HLS through HlsMediaSource, which reports manifest
         // failures directly. Prefer the equivalent hls.js pipeline here; if

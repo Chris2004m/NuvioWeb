@@ -775,9 +775,27 @@ function createRemoteStub(remote = {}) {
 async function runWithPool(task, quota, signal) {
   if (signal?.aborted) return [];
   if (runningExecutions >= quota.maxConcurrent) {
-    if (queuedExecutions.length >= quota.maxQueued) return [];
+    // Match Android's semaphore behavior: limit active workers without dropping
+    // eligible providers when a source request starts a large scraper batch.
     return new Promise((resolve) => {
-      queuedExecutions.push({ task, resolve, signal });
+      const queued = {
+        task,
+        quota,
+        resolve,
+        signal,
+        onAbort: null
+      };
+      const cancel = () => {
+        const index = queuedExecutions.indexOf(queued);
+        if (index < 0) return;
+        queuedExecutions.splice(index, 1);
+        signal?.removeEventListener?.("abort", queued.onAbort);
+        resolve([]);
+      };
+      queued.onAbort = cancel;
+      queuedExecutions.push(queued);
+      signal?.addEventListener?.("abort", cancel, { once: true });
+      if (signal?.aborted) cancel();
     });
   }
   runningExecutions += 1;
@@ -787,9 +805,14 @@ async function runWithPool(task, quota, signal) {
     runningExecutions = Math.max(0, runningExecutions - 1);
     const next = queuedExecutions.shift();
     if (next) {
-      runWithPool(next.task, quota, next.signal)
-        .then(next.resolve)
-        .catch(() => next.resolve([]));
+      next.signal?.removeEventListener?.("abort", next.onAbort);
+      if (next.signal?.aborted) {
+        next.resolve([]);
+      } else {
+        runWithPool(next.task, next.quota, next.signal)
+          .then(next.resolve)
+          .catch(() => next.resolve([]));
+      }
     }
   }
 }

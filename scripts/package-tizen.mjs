@@ -616,7 +616,7 @@ async function assertTizenServicePackage(
   }
   const configXml = await configEntry.async("string");
   assertTizenStoragePrivilege(configXml);
-  assertTizenServiceManifest(configXml, {
+  const packageId = assertTizenServiceManifest(configXml, {
     requireEngineFsService,
     requirePluginService
   });
@@ -627,6 +627,39 @@ async function assertTizenServicePackage(
   }).find((fileName) => !zip.file(fileName));
   if (missingServiceEntry) {
     throw new Error(`Tizen WGT is missing the packaged service file ${missingServiceEntry}.`);
+  }
+
+  if (requireEngineFsService || requirePluginService) {
+    const mainEntry = zip.file("main.js");
+    if (!mainEntry) {
+      throw new Error("Tizen WGT is missing main.js for the packaged service identifiers.");
+    }
+    const mainJs = await mainEntry.async("string");
+    if (
+      requireEngineFsService &&
+      !/__NUVIO_TIZEN_ENGINEFS_SERVICE_ENABLED__\s*=\s*true\b/.test(mainJs)
+    ) {
+      throw new Error("Tizen WGT main.js does not enable the EngineFS service.");
+    }
+    if (
+      requirePluginService &&
+      !/__NUVIO_TIZEN_PLUGIN_SERVICE_ENABLED__\s*=\s*true\b/.test(mainJs)
+    ) {
+      throw new Error("Tizen WGT main.js does not enable the PluginService.");
+    }
+    if (
+      requireEngineFsService &&
+      !mainJs.includes(JSON.stringify(`${packageId}.EngineFsService`))
+    ) {
+      throw new Error(
+        `Tizen WGT main.js does not reference the declared EngineFS service id ${packageId}.EngineFsService.`
+      );
+    }
+    if (requirePluginService && !mainJs.includes(JSON.stringify(`${packageId}.PluginService`))) {
+      throw new Error(
+        `Tizen WGT main.js does not reference the declared PluginService id ${packageId}.PluginService.`
+      );
+    }
   }
 
   if (requirePluginService) {
@@ -641,6 +674,16 @@ async function assertTizenServicePackage(
       )
     ) {
       throw new Error("Tizen WGT is missing the wrt:service module bridge.");
+    }
+
+    const engineFsEntry = zip.file(tizenEngineFsServiceRelativePath);
+    if (engineFsEntry) {
+      const engineFsSource = await engineFsEntry.async("string");
+      if (!/require\(["']\.\/plugin-service\.js["']\)/.test(engineFsSource)) {
+        throw new Error(
+          "Tizen WGT EngineFS service does not include the PluginService compatibility host."
+        );
+      }
     }
   }
 }

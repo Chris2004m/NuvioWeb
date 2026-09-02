@@ -221,7 +221,7 @@ Quote applicate per esecuzione:
 | Quota                 |  Modern | Limited |
 | --------------------- | ------: | ------: |
 | provider concorrenti  |       2 |       1 |
-| coda                  |       1 |       1 |
+| coda                  |   tutti |   tutti |
 | manifest              | 256 KiB | 128 KiB |
 | codice provider       |   2 MiB |   1 MiB |
 | cache                 |  16 MiB |   8 MiB |
@@ -236,6 +236,9 @@ Quote applicate per esecuzione:
 
 Le quote limited non dichiarano una compatibilità completa: sono il profilo prudente per TV
 vecchi o runtime con meno margine.
+
+La coda è sospensiva: tutti gli scraper eleggibili attendono il proprio turno; viene limitato
+soltanto il numero di esecuzioni contemporanee.
 
 ## Gate di piattaforma
 

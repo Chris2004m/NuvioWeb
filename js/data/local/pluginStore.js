@@ -50,7 +50,15 @@ function cancelPluginCloudSync(profileId) {
 
 const scopedStore = createProfileScopedStore({
   key: PLUGIN_STATE_KEY,
-  normalize: normalizePluginState
+  normalize: normalizePluginState,
+  // Android keeps an independent profile's plugin DataStore empty until that
+  // profile receives its own remote repositories. Sharing is enabled only by
+  // the explicit usesPrimaryPlugins profile flag.
+  seedFromPrimary: false,
+  // pluginState and pluginSources were global before profile scoping was
+  // introduced. Migrate that legacy state to the primary profile only; an
+  // independent secondary profile must not inherit it implicitly.
+  legacyProfileIds: ["1"]
 });
 
 function migrateLegacyIfNeeded(profileId) {
@@ -58,6 +66,11 @@ function migrateLegacyIfNeeded(profileId) {
   const existing = scopedStore.getForProfile(effectiveProfileId);
   const hasState =
     existing.repositories.length || existing.scrapers.length || existing.legacySources.length;
+  // The legacy plugin keys were global. They belong to the primary profile
+  // when migrating, never to an independent secondary profile.
+  if (String(effectiveProfileId) !== "1") {
+    return existing;
+  }
   if (hasState || LocalStore.get(`${PLUGIN_STATE_KEY}:migrationComplete`, false)) {
     return existing;
   }
