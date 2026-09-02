@@ -132,9 +132,7 @@ function start(port) {
   service.on("error", function (error) {
     console.warn("[Nuvio TX3G] local subtitle server unavailable", error && error.message ? error.message : error);
   });
-  service.listen(Number(port || process.env.TX3G_PORT || DEFAULT_PORT), "127.0.0.1", function () {
-    console.log("[Nuvio TX3G] local subtitle server started on http://127.0.0.1:" + (service.address().port));
-  });
+  service.listen(Number(port || process.env.TX3G_PORT || DEFAULT_PORT), "127.0.0.1");
   return service;
 }
 
