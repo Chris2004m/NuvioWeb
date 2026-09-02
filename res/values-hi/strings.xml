@@ -1324,6 +1324,7 @@
     <string name="plugin_runtime_error">रनटाइम जाँच विफल</string>
     <string name="plugin_runtime_checking">TV प्लगइन रनटाइम की जाँच हो रही है…</string>
     <string name="plugin_runtime_unsupported">इस TV रनटाइम पर निष्पादन उपलब्ध नहीं है</string>
+    <string name="plugin_runtime_limited">इस टीवी पर प्लगइन समर्थन सीमित है। कुछ प्रदाता धीमे हो सकते हैं या उपलब्ध नहीं हो सकते।</string>
     <string name="plugin_runtime_tv_only">केवल Nuvio JS रिपॉज़िटरी चल सकती हैं; बाहरी DEX और पुराने स्रोत केवल मेटाडेटा के रूप में सुरक्षित रहते हैं।</string>
     <string name="plugin_runtime_heading">TV प्लगइन रनटाइम</string>
     <string name="plugin_settings_heading">प्लगइन सेटिंग</string>

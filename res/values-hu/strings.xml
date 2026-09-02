@@ -1289,6 +1289,7 @@
     <string name="plugin_runtime_error">A futtatókörnyezet ellenőrzése sikertelen</string>
     <string name="plugin_runtime_checking">A TV-bővítmények futtatókörnyezetének ellenőrzése…</string>
     <string name="plugin_runtime_unsupported">A végrehajtás nem érhető el ezen a TV-s futtatókörnyezeten</string>
+    <string name="plugin_runtime_limited">Ezen a tévén korlátozott a pluginok támogatása. Egyes szolgáltatók lassabbak lehetnek, vagy nem érhetők el.</string>
     <string name="plugin_runtime_tv_only">Csak a Nuvio JS-tárolók futtathatók; a külső DEX- és régi források csak metaadatként maradnak meg.</string>
     <string name="plugin_runtime_heading">TV-s bővítmények futtatókörnyezete</string>
     <string name="plugin_settings_heading">Bővítménybeállítások</string>

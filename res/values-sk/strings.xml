@@ -2706,6 +2706,7 @@
     <string name="plugin_runtime_error">Kontrola runtime zlyhala</string>
     <string name="plugin_runtime_checking">Kontrola runtime pluginov v TV…</string>
     <string name="plugin_runtime_unsupported">Spúšťanie nie je v tomto TV runtime dostupné</string>
+    <string name="plugin_runtime_limited">Podpora pluginov je na tomto televízore obmedzená. Niektorí poskytovatelia môžu byť pomalší alebo nedostupní.</string>
     <string name="plugin_runtime_tv_only">Spúšťať možno iba repozitáre Nuvio JS; externé DEX a staršie zdroje zostávajú iba metadátami.</string>
     <string name="plugin_runtime_heading">Runtime pluginov TV</string>
     <string name="plugin_settings_heading">Nastavenia pluginov</string>

@@ -2742,6 +2742,7 @@
     <string name="plugin_runtime_error">Sprawdzanie środowiska uruchomieniowego nie powiodło się</string>
     <string name="plugin_runtime_checking">Sprawdzanie środowiska pluginów TV…</string>
     <string name="plugin_runtime_unsupported">Wykonywanie jest niedostępne w tym środowisku TV</string>
+    <string name="plugin_runtime_limited">Obsługa wtyczek jest ograniczona na tym telewizorze. Niektórzy dostawcy mogą działać wolniej lub być niedostępni.</string>
     <string name="plugin_runtime_tv_only">Wykonywać można tylko repozytoria Nuvio JS; zewnętrzne źródła DEX i starsze pozostają wyłącznie metadanymi.</string>
     <string name="plugin_runtime_heading">Środowisko pluginów TV</string>
     <string name="plugin_settings_heading">Ustawienia pluginów</string>

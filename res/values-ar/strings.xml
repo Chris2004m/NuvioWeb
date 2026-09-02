@@ -2193,6 +2193,7 @@
     <string name="plugin_runtime_error">فشل فحص وقت التشغيل</string>
     <string name="plugin_runtime_checking">جارٍ فحص وقت تشغيل الإضافات على التلفاز…</string>
     <string name="plugin_runtime_unsupported">التنفيذ غير متاح على وقت تشغيل هذا التلفاز</string>
+    <string name="plugin_runtime_limited">دعم الإضافات محدود على هذا التلفاز. قد تكون بعض المصادر أبطأ أو غير متاحة.</string>
     <string name="plugin_runtime_tv_only">يمكن تنفيذ مستودعات Nuvio JS فقط؛ تظل مصادر DEX الخارجية والقديمة للبيانات الوصفية فقط.</string>
     <string name="plugin_runtime_heading">وقت تشغيل إضافات التلفاز</string>
     <string name="plugin_settings_heading">إعدادات الإضافات</string>

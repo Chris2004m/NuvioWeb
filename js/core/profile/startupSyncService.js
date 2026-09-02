@@ -409,18 +409,34 @@ export const StartupSyncService = {
       return true;
     }
     if (!force && !allowWarmRepeat && canUsePersistedWarmSync(key, includeProfileSettings, now)) {
-      // Android's warm cycle still refreshes the complete plugin surface. A
-      // Smart TV that returned early here could keep an Android-added or
-      // removed repository stale for the six-hour warm TTL.
-      const pluginResult = await runSurface("warm plugins", () =>
-        PluginSyncService.pull(profileId)
-      );
-      const pluginSucceeded = pluginResult.ok && PluginSyncService.getLastPullStatus?.() === "ok";
-      this.lastPullCompleted = pluginSucceeded;
-      if (!pluginSucceeded && isSyncBackoffActive()) {
+      // Android's warm cycle runs the same broad remote pull as a cold
+      // startup, including the plugin surface. Keep the service lazy while
+      // preserving that timing and ordering instead of pulling plugins only.
+      const warmPullSucceeded = await this.syncPull({
+        includeProfileScoped: this.profileScopedSyncEnabled,
+        includeProfileSettings,
+        generation,
+        profileId,
+        key
+      });
+      if (warmPullSucceeded && this.isCurrentRun(generation) && !isSyncBackoffActive()) {
+        this.markFullPullSucceeded(key, includeProfileSettings);
+        this.lastPullCompleted = true;
+        resetSyncBackoff();
+        if (notifyPullCompleted) {
+          notifySyncPullCompleted({
+            profileId: normalizeProfileId(profileId),
+            includeProfileScoped: Boolean(this.profileScopedSyncEnabled),
+            completedAt: Date.now()
+          });
+        }
+        return true;
+      }
+      this.lastPullCompleted = false;
+      if (isSyncBackoffActive()) {
         this.scheduleBackoffRetry({ notifyPullCompleted });
       }
-      return pluginSucceeded;
+      return false;
     }
 
     let requestPromise = null;

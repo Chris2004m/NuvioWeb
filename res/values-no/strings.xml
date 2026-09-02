@@ -1315,6 +1315,7 @@
     <string name="plugin_runtime_error">Kjøretidssjekk mislyktes</string>
     <string name="plugin_runtime_checking">Sjekker TV-plugin-kjøretid…</string>
     <string name="plugin_runtime_unsupported">Kjøring er ikke tilgjengelig på denne TV-kjøretiden</string>
+    <string name="plugin_runtime_limited">Pluginstøtten er begrenset på denne TV-en. Noen leverandører kan være tregere eller utilgjengelige.</string>
     <string name="plugin_runtime_tv_only">Bare Nuvio JS-repositorier kan kjøres; eksterne DEX- og eldre kilder beholdes kun som metadata.</string>
     <string name="plugin_runtime_heading">TV-plugin-kjøretid</string>
     <string name="plugin_settings_heading">Plugin-innstillinger</string>

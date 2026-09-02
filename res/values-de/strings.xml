@@ -2355,6 +2355,7 @@
     <string name="plugin_runtime_error">Runtime-Prüfung fehlgeschlagen</string>
     <string name="plugin_runtime_checking">TV-Plugin-Runtime wird geprüft…</string>
     <string name="plugin_runtime_unsupported">Ausführung in dieser TV-Runtime nicht verfügbar</string>
+    <string name="plugin_runtime_limited">Die Plugin-Unterstützung ist auf diesem TV eingeschränkt. Einige Anbieter können langsamer oder nicht verfügbar sein.</string>
     <string name="plugin_runtime_tv_only">Nur Nuvio-JS-Repositorys können ausgeführt werden; externe DEX- und Legacy-Quellen bleiben reine Metadaten.</string>
     <string name="plugin_runtime_heading">TV-Plugin-Runtime</string>
     <string name="plugin_settings_heading">Plugin-Einstellungen</string>

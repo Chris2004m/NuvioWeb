@@ -20,6 +20,11 @@ Il browser desktop non è un runtime di produzione per i plugin. Add-on, playbac
 profili e sincronizzazione restano indipendenti dal gate dei plugin. Un `.cs3` viene classificato
 come `EXTERNAL_DEX` anche se una vecchia riga locale o remota dichiara erroneamente `NUVIO_JS`.
 
+La sezione Plugin mostra un avviso solo quando il runtime è `unsupported` oppure quando è eseguibile
+con la policy `limited`; con la policy moderna non viene mostrato alcun messaggio aggiuntivo. Lo
+stato `unknown`/in verifica non viene presentato come incompatibilità, per evitare un falso avviso
+durante l'handshake iniziale.
+
 ## Contratto Android adottato
 
 Sono stati allineati i punti che influenzano il risultato visibile:
@@ -54,9 +59,14 @@ StreamRepository <----- gruppi progressivi / stream normalizzati
 ```
 
 Il bundle `dist/assets/runtime/plugin-worker.js` contiene il loader del Worker e il bundle
-`quickjs-emscripten`; il servizio TV non esegue JavaScript del provider. Il Worker esegue ogni
-provider in un contesto QuickJS distinto, con interrupt deadline, limite memoria/stack e
-terminazione del Worker su errore o cancellazione. Il loader fidato usa internamente l'API di
+`quickjs-emscripten`; il servizio TV non esegue JavaScript del provider. Il Worker usa il modulo
+QuickJS normale e restituisce al VM Promise deferred per le richieste HTTP; il loop del Worker
+esegue esplicitamente i Promise job, come nel contratto Android, senza usare Asyncify per il bridge
+di rete. Questo evita re-entrancy del modulo asyncified e mantiene l'esecuzione isolata. Il Worker
+esegue ogni provider in un contesto QuickJS distinto, con interrupt deadline, limite memoria
+e terminazione del Worker su errore o cancellazione. Il limite stack QuickJS esplicito introdotto
+solo su Tizen è stato rimosso: resta la configurazione predefinita del modulo, come nel runtime
+Android. Il loader fidato usa internamente l'API di
 caricamento QuickJS; questa API non è esposta al codice del plugin.
 
 Il servizio locale separato media il networking. Espone health/capabilities, `fetch`, `cancel`,
@@ -67,26 +77,43 @@ diagnostics e pulizia cache. Le porte attuali sono:
 
 ### Lifecycle del servizio Tizen
 
-Il `PluginService` Tizen è un Web Service applicativo separato, avviato solo quando il coordinatore
-deve eseguire una chiamata di rete. Il file del servizio espone `module.exports.onStart` come punto
+Il `PluginService` Tizen è un Web Service applicativo separato da EngineFS, con contesto di servizio,
+lifecycle ed endpoint propri (`2711`/`11471` contro `2710`/`11470`). EngineFS non viene più
+pre-avviato dal bootstrap: conserva il flusso lazy della versione 1.0.1 e viene avviato dal
+resolver P2P solo quando serve il primo stream torrent. Anche il PluginService resta lazy: non viene
+avviato da Home, dal bootstrap o da un preload dedicato; viene richiesto dal primo pull/sync che
+deve ottenere un manifest, metadati o codice plugin, oppure dalla prima esecuzione che ne ha bisogno,
+attraverso `PluginServiceClient`. I due servizi restano indipendenti: nessuno avvia, arresta o
+ospita l'altro. Il processo/thread concreto resta gestito da Tizen secondo il modello Web Service;
+il contratto Nuvio mantiene comunque separati manifest, lifecycle, listener e health-check. Il file
+del servizio espone `module.exports.onStart` come punto
 di ingresso, crea il server HTTP una sola volta per lifecycle e chiude il server in `onExit` (con
 `onStop` come alias per firmware meno recenti), seguendo lo stesso contratto del servizio EngineFS.
 Il WGT carica inoltre `services/tizen/wrt-service-bridge.js` come modulo Tizen dedicato. Il
-coordinatore usa la stessa catena di avvio compatibile di EngineFS: `launchAppControl`,
+coordinatore usa la stessa catena di API compatibili usata da EngineFS: `launchAppControl`,
 `tizen.application.launch` e infine `wrt:service.startService`; quando `web.service` risulta non
 disponibile, salta `launchAppControl` e prova prima il servizio WRT, poi il fallback applicativo.
 Il bridge normalizza sia il modulo WRT diretto sia il namespace ES con `default`, perché i firmware
 non espongono sempre la stessa forma JavaScript. `web.service=false` resta quindi un segnale di
 compatibilità e non una prova che il servizio dichiarato non sia avviabile: la prova operativa è la
 risposta del servizio locale.
-Ogni metodo è considerato riuscito solo dopo che il servizio ha risposto al health-check: una
-chiamata Tizen accettata senza un bind locale non blocca i tentativi successivi. Il coordinatore
-mantiene inoltre un budget complessivo di startup e registra metodo, ID, runtime Tizen e capability
-`web.service` quando tutti i tentativi falliscono.
-Il manifest WGT e il wrapper `sync:tizen` usano un ID nella forma `${packageId}.PluginService`,
+La chiamata Tizen viene considerata un acknowledgement di accodamento: il coordinatore esegue
+subito dopo il health-check locale e considera riuscito l'avvio solo quando il servizio ha fatto
+bind. Se il bind non arriva, `ensureStarted()` restituisce errore; una chiamata successiva può
+ritentare, senza passare all'altro servizio. Il coordinatore mantiene inoltre un budget complessivo
+di startup e registra metodo, ID, runtime Tizen e capability `web.service` quando tutti i tentativi
+falliscono.
+Il WGT generato direttamente usa `${packageId}.PluginService`; il wrapper `sync:tizen`, come il
+percorso Apps2Samsung della 1.0.1, usa l'application ID (`${appId}.PluginService`). Entrambi hanno
 `auto-restart="false"` e `on-boot="false"`. Il coordinatore prova prima le porte locali, poi avvia
-esplicitamente il servizio e accetta un endpoint solo se `GET /health` conferma nome e versione del
-protocollo prima di inviare manifest o richieste provider.
+esplicitamente soltanto il PluginService dedicato e accetta un endpoint solo se `GET /health`
+conferma nome e versione del protocollo prima di inviare manifest o richieste provider. Un errore
+del PluginService viene restituito al relativo coordinatore e non attiva EngineFS; EngineFS resta
+gestito esclusivamente dal proprio coordinatore.
+`auto-restart="true"` non è una soluzione al bind o all'avvio iniziale: può rilanciare un servizio
+terminato, ma non corregge un'applicazione non trovata, un WGT privo del servizio o un runtime che
+crasha subito. Inoltre il Seller Office Samsung non consente quel valore per la pubblicazione Store;
+restano quindi `false` sia `auto-restart` sia `on-boot`, con retry e health-check gestiti dall'app.
 
 Il bind prova la porta `2711` e usa `11471` solo se la prima è occupata, usando l'overload
 `server.listen(port)` già impiegato dal runtime EngineFS funzionante; l'app verifica poi il listener
@@ -114,11 +141,19 @@ cache del codice, scelta dei provider, deduplicazione e normalizzazione degli st
 coordinatore app/Worker. In questo modo il servizio non diventa un interprete remoto del formato
 plugin.
 
-Durante la ricerca stream, esecuzioni identiche usano un single-flight condiviso come su Android.
-La cancellazione di una schermata interrompe soltanto l'attesa di quella schermata; il lavoro
-sottostante continua per gli altri chiamanti e viene abortito solo quando non ne resta alcuno.
-La deadline globale resta quella della quota Web prudente, quindi non prolunga il lavoro fino ai
-120 secondi Android senza una validazione hardware dedicata.
+Durante la ricerca stream, `StreamSearchSessionCache` mantiene una sessione condivisa per la stessa
+chiave Android: profilo attivo, tipo, video, stagione/episodio e configurazione delle sorgenti.
+La sessione viene avviata dal primo chiamante, continua indipendentemente dalla schermata e può
+essere riutilizzata da player, pannello sorgenti e route stream. Sono mantenuti solo risultati
+successful non vuoti, con TTL di 15 minuti e massimo 12 sessioni; un cambio profilo o di
+configurazione invalida la sessione precedente. La cancellazione di un chiamante interrompe subito
+solo la sua attesa e la consegna dei callback, senza interrompere il producer condiviso.
+
+Il flag `localPluginSearchPaused` replica il `transformLatest` Android: mette in pausa e annulla
+solo il tentativo plugin locale attivo quando la UI entra nel playback o chiude il pannello, mentre
+le richieste add-on restano indipendenti; all'apertura della route/pannello o durante l'auto-next la
+ricerca plugin riprende. Il budget globale moderno è ora 120 secondi, mentre la quota di rete e le
+altre difese del runtime restano applicate per singolo provider.
 
 È una difesa a strati (Worker + servizio di rete + quote), non una sandbox OS completa contro un
 pacchetto applicativo già malevolo. Per questo il runtime richiede anche il protocol handshake e
@@ -171,18 +206,31 @@ esecuzione crea un contesto nuovo.
 - Un repository `EXTERNAL_DEX` / `.cs3` resta metadata-only e non viene eseguito sul Web TV; la
   rimozione della repository è invece disponibile come su Android e viene propagata al cloud.
 
+Le nuove repository create da Smart ricevono un UUID v4 casuale, come `UUID.randomUUID()` Android.
+Per una repository JS Nuvio, ogni nuovo scraper usa l'identità esatta `${repositoryId}:${manifestId}`;
+l'URL resta soltanto la chiave di riconciliazione tra pull successivi. Gli ID già persistiti non
+vengono riscritti automaticamente: conservarli mantiene indirizzabili la cache del codice e le
+impostazioni locali dell'installazione esistente, evitando una migrazione distruttiva. Un nuovo
+provider apparso in un manifest riceve comunque il formato Android.
+
 Le modifiche al set delle repository (aggiunta, rimozione e `repository.enabled`) vengono marcate
 `syncDirty` e accodate con debounce per il profilo effettivo; modifiche ravvicinate producono una sola
 RPC. Toggle globali, toggle dei provider, impostazioni dei provider e refresh del manifest restano
 locali come su Android e non generano un push del catalogo `plugins`. Il push attende un eventuale
 push già in corso, rispetta il backoff globale e usa l'ID del profilo come destinazione. Un profilo
-secondario che eredita il principale non può generare un push del set principale. Un pull che trova
-una modifica locale pendente la pubblica prima di leggere il remoto e non applica uno snapshot se una
-modifica locale arriva durante il pull.
+secondario che eredita il principale non può generare un push del set principale. Il pull legge il
+remoto prima di scaricare il push pendente, come Android, e non applica uno snapshot se una modifica
+locale arriva durante il pull.
 
 Il pull dei plugin viene eseguito nel ciclo startup completo, nel warm cycle e quando si entra nella
 pagina Plugin; le richieste concorrenti per lo stesso profilo vengono accorpate e le riconciliazioni
-sono serializzate.
+sono serializzate. Questo è un pull dei dati secondo il flusso Android, non un preload del servizio:
+se lo snapshot non richiede alcun documento remoto, `PluginService` non viene avviato.
+
+Se lo stato locale contiene repository `UNKNOWN` o righe remote opache, il pull non tenta un push che
+potrebbe perdere metadati: procede invece con la lettura e la riclassificazione remota. Le righe che
+diventano JS/DEX possono così essere idratate; il push eventuale viene differito e i tipi futuri o
+esplicitamente sconosciuti restano protetti finché il client non li supporta.
 
 Il pull legge `plugins` con `repo_type` quando presente. Il push usa esclusivamente la RPC
 tipizzata `sync_push_plugins` e non usa più una sequenza distruttiva DELETE/UPSERT. Se lo schema
@@ -199,7 +247,7 @@ presente una migration remota da inventare.
 
 Il codice del plugin può usare i costrutti dinamici JavaScript supportati dal runtime Android,
 inclusi `eval` e `Function`; l'isolamento è fornito dal contesto QuickJS separato, dai limiti di
-tempo/memoria/stack e dall'assenza di Node, storage TV, API native e `require` arbitrario. Il
+tempo/memoria e dall'assenza di Node, storage TV, API native e `require` arbitrario. Il
 servizio di rete:
 
 - accetta URL HTTP/HTTPS validi come Android, inclusi loopback, reti private/link-local,
@@ -212,30 +260,36 @@ servizio di rete:
 - conta anche risposte senza `Content-Length` e interrompe il body oltre la quota.
 
 La validazione HTTP(S), la normalizzazione dei metodi (`POST`/`PUT`/`DELETE`, altrimenti `GET`),
-gli header e gli schemi accettati sono allineati ad Android. Restano volutamente le quote operative
-Web indicate sotto (concorrenza, timeout, memoria e dimensione delle risposte), in attesa di test
-su modelli TV reali; non sono filtri funzionali del contratto plugin.
+gli header e gli schemi accettati sono allineati ad Android. Il profilo moderno adotta ora i limiti
+funzionali Android verificabili nel codice sorgente; memoria, cache, numero di elementi DOM e cap
+del manifest restano difese finite del trasporto/runtime Web e non vengono presentati come una
+garanzia di equivalenza hardware.
 
 Quote applicate per esecuzione:
 
-| Quota                 |  Modern | Limited |
-| --------------------- | ------: | ------: |
-| provider concorrenti  |       2 |       1 |
-| coda                  |   tutti |   tutti |
-| manifest              | 256 KiB | 128 KiB |
-| codice provider       |   2 MiB |   1 MiB |
-| cache                 |  16 MiB |   8 MiB |
-| fetch                 |   1 MiB | 512 KiB |
-| risultati/provider    |      50 |      25 |
-| risultati totali      |     150 |      75 |
-| timeout provider      |    30 s |    25 s |
-| timeout globale       |    60 s |    45 s |
-| memoria QuickJS       |  64 MiB |  32 MiB |
-| documenti/provider    |       4 |       2 |
-| elementi DOM/provider |  10.000 |   6.000 |
+| Quota                 | Modern | Limited |
+| --------------------- | -----: | ------: |
+| provider concorrenti  |     10 |       1 |
+| coda                  |  tutti |   tutti |
+| manifest              |  5 MiB | 128 KiB |
+| codice provider       |  5 MiB |   1 MiB |
+| cache                 | 16 MiB |   8 MiB |
+| fetch                 |  1 MiB | 512 KiB |
+| risultati/provider    |    150 |      25 |
+| risultati totali      |    150 |      75 |
+| timeout provider      |   60 s |    25 s |
+| timeout globale       |  120 s |    45 s |
+| memoria QuickJS       | 64 MiB |  32 MiB |
+| documenti/provider    |      8 |       2 |
+| elementi DOM/provider | 10.000 |   6.000 |
 
-Le quote limited non dichiarano una compatibilità completa: sono il profilo prudente per TV
-vecchi o runtime con meno margine.
+Il limite Android di 5 MiB è il limite esplicito per il download del codice scraper; Smart lo usa
+anche come envelope finito del manifest perché il trasporto Web deve comunque avere un limite.
+Il risultato effettivo resta limitato a 150 elementi complessivi. Le quote `limited` restano il
+profilo prudente per runtime precedenti o privi dei prerequisiti moderni.
+Il servizio HTTP Tizen espone lo stesso envelope moderno di 5 MiB e ammette fino a 10 richieste
+attive; le richieste `fetch` del provider restano limitate a 1 MiB e il timeout di ogni singola
+richiesta di rete resta 30 s, come i timeout di trasporto OkHttp Android.
 
 La coda è sospensiva: tutti gli scraper eleggibili attendono il proprio turno; viene limitato
 soltanto il numero di esecuzioni contemporanee.
@@ -271,6 +325,12 @@ Fonti ufficiali consultate il 2026-08-31:
   [JS service usage](https://webostv.developer.lge.com/develop/guides/js-service-usage);
 - [quickjs-emscripten](https://github.com/justjake/quickjs-emscripten/blob/main/README.md)
   per l'API QuickJS-WASM usata dal Worker.
+- [Kotlin `limitedParallelism`](https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines/-coroutine-dispatcher/limited-parallelism.html)
+  per il modello Android di orchestrazione concorrente; Android usa inoltre un `Semaphore` per
+  il limite effettivo degli scraper.
+- [Cheerio selecting](https://cheerio.js.org/docs/basics/selecting) e
+  [Cheerio loading](https://cheerio.js.org/docs/basics/loading) per il contratto CSS/parser del
+  bridge Web; Jsoup resta il parser nativo Android e non può essere reso byte-identico a Cheerio.
 
 ## UI, localizzazioni e packaging
 

@@ -1202,6 +1202,7 @@
     <string name="plugin_type_legacy">Template URL legacy · solo conservato</string>
     <string name="plugin_type_unknown">Tipo sconosciuto · disabilitato</string>
     <string name="plugin_runtime_unsupported">Esecuzione non disponibile su questa TV</string>
+    <string name="plugin_runtime_limited">Il supporto dei plugin è limitato su questa TV. Alcuni provider potrebbero essere più lenti o non disponibili.</string>
     <string name="plugin_tv_model_unsupported">I plugin non sono disponibili su questo modello di TV. Add-on, riproduzione, libreria e sincronizzazione restano disponibili.</string>
     <string name="plugin_dex_unsupported">I plugin CloudStream/DEX non sono supportati sulla Web TV.</string>
     <string name="plugin_unknown_preserved">Il tipo della repository è sconosciuto: viene conservata e disabilitata finché non può essere identificata in modo sicuro.</string>

@@ -1700,6 +1700,7 @@
     <string name="plugin_runtime_error">Kontroll av körmiljön misslyckades</string>
     <string name="plugin_runtime_checking">Kontrollerar TV-pluginens körmiljö…</string>
     <string name="plugin_runtime_unsupported">Körning är inte tillgänglig i denna TV-körmiljö</string>
+    <string name="plugin_runtime_limited">Pluginstödet är begränsat på den här TV:n. Vissa leverantörer kan vara långsammare eller otillgängliga.</string>
     <string name="plugin_runtime_tv_only">Endast Nuvio JS-förråd kan köras; externa DEX- och äldre källor sparas endast som metadata.</string>
     <string name="plugin_runtime_heading">TV-pluginens körmiljö</string>
     <string name="plugin_settings_heading">Plugininställningar</string>

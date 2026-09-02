@@ -2358,6 +2358,7 @@
     <string name="plugin_runtime_error">Runtime சரிபார்ப்பு தோல்வியடைந்தது</string>
     <string name="plugin_runtime_checking">TV plugin runtime சரிபார்க்கப்படுகிறது…</string>
     <string name="plugin_runtime_unsupported">இந்த TV runtime-ல் இயக்கம் கிடைக்கவில்லை</string>
+    <string name="plugin_runtime_limited">இந்த டிவியில் பிளகின் ஆதரவு வரம்பிடப்பட்டுள்ளது. சில வழங்குநர்கள் மெதுவாக இருக்கலாம் அல்லது கிடைக்காமல் இருக்கலாம்.</string>
     <string name="plugin_runtime_tv_only">Nuvio JS repositoryகள் மட்டுமே இயக்கப்படும்; வெளிப்புற DEX மற்றும் பழைய மூலங்கள் மெட்டாடேட்டாவாக மட்டும் வைக்கப்படும்.</string>
     <string name="plugin_runtime_heading">டிவி செருகுநிரல் இயக்கநேரம்</string>
     <string name="plugin_settings_heading">Plugin அமைப்புகள்</string>

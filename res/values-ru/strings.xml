@@ -2409,6 +2409,7 @@
     <string name="plugin_runtime_error">Проверка среды выполнения не удалась</string>
     <string name="plugin_runtime_checking">Проверка среды выполнения плагинов на ТВ…</string>
     <string name="plugin_runtime_unsupported">Выполнение недоступно в этой среде ТВ</string>
+    <string name="plugin_runtime_limited">Поддержка плагинов на этом телевизоре ограничена. Некоторые провайдеры могут работать медленнее или быть недоступны.</string>
     <string name="plugin_runtime_tv_only">Выполняются только репозитории Nuvio JS; внешние DEX и устаревшие источники сохраняются только как метаданные.</string>
     <string name="plugin_runtime_heading">Среда выполнения плагинов ТВ</string>
     <string name="plugin_settings_heading">Настройки плагинов</string>

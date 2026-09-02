@@ -2584,6 +2584,7 @@
     <string name="plugin_runtime_error">Ο έλεγχος runtime απέτυχε</string>
     <string name="plugin_runtime_checking">Έλεγχος του runtime plugin της TV…</string>
     <string name="plugin_runtime_unsupported">Η εκτέλεση δεν είναι διαθέσιμη σε αυτό το runtime της TV</string>
+    <string name="plugin_runtime_limited">Η υποστήριξη plugin είναι περιορισμένη σε αυτήν την τηλεόραση. Ορισμένοι πάροχοι μπορεί να είναι πιο αργοί ή μη διαθέσιμοι.</string>
     <string name="plugin_runtime_tv_only">Μπορούν να εκτελεστούν μόνο αποθετήρια Nuvio JS· οι εξωτερικές πηγές DEX και οι παλιές πηγές παραμένουν μόνο μεταδεδομένα.</string>
     <string name="plugin_runtime_heading">Runtime plugin TV</string>
     <string name="plugin_settings_heading">Ρυθμίσεις plugin</string>

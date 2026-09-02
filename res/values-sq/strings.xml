@@ -2938,6 +2938,7 @@
     <string name="plugin_runtime_error">Kontrolli i runtime-it dështoi</string>
     <string name="plugin_runtime_checking">Po kontrollohet runtime-i i pluginëve të TV-së…</string>
     <string name="plugin_runtime_unsupported">Ekzekutimi nuk është i disponueshëm në këtë runtime TV-je</string>
+    <string name="plugin_runtime_limited">Mbështetja e pluginëve është e kufizuar në këtë televizor. Disa ofrues mund të jenë më të ngadaltë ose të padisponueshëm.</string>
     <string name="plugin_runtime_tv_only">Mund të ekzekutohen vetëm repository-t Nuvio JS; burimet e jashtme DEX dhe ato të vjetra mbeten vetëm metadata.</string>
     <string name="plugin_runtime_heading">Runtime i pluginëve të TV-së</string>
     <string name="plugin_settings_heading">Cilësimet e pluginëve</string>

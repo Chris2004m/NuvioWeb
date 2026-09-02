@@ -2283,6 +2283,7 @@
     <string name="plugin_runtime_error">Kontrola runtime selhala</string>
     <string name="plugin_runtime_checking">Kontroluje se runtime TV pluginů…</string>
     <string name="plugin_runtime_unsupported">Spouštění není v tomto TV runtime dostupné</string>
+    <string name="plugin_runtime_limited">Podpora pluginů je na tomto televizoru omezená. Někteří poskytovatelé mohou být pomalejší nebo nedostupní.</string>
     <string name="plugin_runtime_tv_only">Spouštět lze pouze repozitáře Nuvio JS; externí DEX a starší zdroje zůstávají pouze metadaty.</string>
     <string name="plugin_runtime_heading">Runtime TV pluginů</string>
     <string name="plugin_settings_heading">Nastavení pluginů</string>

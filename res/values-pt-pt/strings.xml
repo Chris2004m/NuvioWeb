@@ -2669,6 +2669,7 @@
     <string name="plugin_runtime_error">Falha na verificação do runtime</string>
     <string name="plugin_runtime_checking">Verificando o runtime de plugins da TV…</string>
     <string name="plugin_runtime_unsupported">A execução não está disponível neste runtime da TV</string>
+    <string name="plugin_runtime_limited">O suporte de plugins é limitado nesta TV. Alguns fornecedores podem ser mais lentos ou estar indisponíveis.</string>
     <string name="plugin_runtime_tv_only">Somente repositórios Nuvio JS podem ser executados; fontes DEX externas e legadas permanecem apenas como metadados.</string>
     <string name="plugin_runtime_heading">Runtime de plugins da TV</string>
     <string name="plugin_settings_heading">Configurações de plugins</string>

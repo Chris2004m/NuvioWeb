@@ -1044,6 +1044,7 @@
     <string name="plugin_runtime_error">Verificarea runtime-ului a eșuat</string>
     <string name="plugin_runtime_checking">Se verifică runtime-ul pluginurilor TV…</string>
     <string name="plugin_runtime_unsupported">Execuția nu este disponibilă pe acest runtime TV</string>
+    <string name="plugin_runtime_limited">Compatibilitatea pluginurilor este limitată pe acest televizor. Unii furnizori pot fi mai lenți sau indisponibili.</string>
     <string name="plugin_runtime_tv_only">Se pot executa doar depozitele Nuvio JS; sursele DEX externe și vechi rămân doar metadate.</string>
     <string name="plugin_runtime_heading">Runtime pluginuri TV</string>
     <string name="plugin_settings_heading">Setări pluginuri</string>

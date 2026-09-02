@@ -1589,6 +1589,7 @@
     <string name="plugin_runtime_error">בדיקת סביבת ההרצה נכשלה</string>
     <string name="plugin_runtime_checking">בודק את סביבת תוספי הטלוויזיה…</string>
     <string name="plugin_runtime_unsupported">ההרצה אינה זמינה בסביבת הטלוויזיה הזו</string>
+    <string name="plugin_runtime_limited">התמיכה בתוספים מוגבלת בטלוויזיה הזו. חלק מהספקים עשויים להיות איטיים יותר או לא זמינים.</string>
     <string name="plugin_runtime_tv_only">רק מאגרי Nuvio JS ניתנים להרצה; מקורות DEX חיצוניים ומקורות ישנים נשמרים כמטא-נתונים בלבד.</string>
     <string name="plugin_runtime_heading">סביבת תוספי הטלוויזיה</string>
     <string name="plugin_settings_heading">הגדרות תוספים</string>

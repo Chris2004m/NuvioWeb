@@ -7,13 +7,109 @@ import { mapPluginStreamGroup } from "../../core/player/pluginStreamMapping.js";
 import {
   cleanLocalPluginVideoId,
   isLocalPluginVideoId,
-  resolvePluginSeasonEpisode
+  resolvePluginSeasonEpisode,
+  stablePluginHash
 } from "../../core/player/pluginModels.js";
+import { ProfileManager } from "../../core/profile/profileManager.js";
 import { TmdbService } from "../../core/tmdb/tmdbService.js";
 import { LocalDebridAvailabilityService } from "../../core/debrid/localDebridAvailabilityService.js";
 import { DebridStreamPresentation } from "../../core/debrid/directDebridStreamPresentation.js";
+import { PluginStore, getEffectivePluginProfileId } from "../local/pluginStore.js";
+import { DebridSettingsStore } from "../local/debridSettingsStore.js";
+import { StreamSearchSessionCache } from "./streamSearchSessionCache.js";
 
 const STREAM_SOURCE_REQUEST_TIMEOUT_MS = 60_000;
+const PLUGIN_STREAM_REQUEST_TIMEOUT_MS = 120_000;
+
+function pluginSearchTimeoutMs() {
+  const configured = Number(PluginManager.getCapabilitySnapshot?.().quota?.globalTimeoutMs || 0);
+  return configured > 0 ? configured : PLUGIN_STREAM_REQUEST_TIMEOUT_MS;
+}
+
+function sourceConfigurationValue(value, key = "") {
+  if (/(api.?key|token|secret|password|authorization|cookie)/i.test(key)) {
+    return value ? `credential:${stablePluginHash(String(value))}` : "";
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => sourceConfigurationValue(entry, key));
+  }
+  if (value && typeof value === "object") {
+    return Object.keys(value)
+      .sort()
+      .reduce((result, childKey) => {
+        result[childKey] = sourceConfigurationValue(value[childKey], childKey);
+        return result;
+      }, {});
+  }
+  return value ?? null;
+}
+
+function buildStreamSourceConfiguration(installedAddons) {
+  const activeProfileId = String(ProfileManager.getActiveProfileId() || "1");
+  const summary = PluginManager.getSummary?.() || {};
+  const effectiveProfileId = String(
+    summary.effectiveProfileId || getEffectivePluginProfileId(activeProfileId) || activeProfileId
+  );
+  const pluginsEnabled = summary.pluginsEnabled !== false;
+  const groupStreamsByRepository = pluginsEnabled && summary.groupStreamsByRepository === true;
+  const pluginState = PluginStore.get(effectiveProfileId);
+  return JSON.stringify(
+    sourceConfigurationValue({
+      activeProfileId,
+      effectiveProfileId,
+      addons: installedAddons.map((addon, index) => ({
+        index,
+        id: addon?.id,
+        baseUrl: addon?.baseUrl,
+        displayName: addon?.displayName,
+        logo: addon?.logo,
+        types: addon?.types,
+        resources: addon?.resources
+      })),
+      plugins: {
+        enabled: pluginsEnabled,
+        groupStreamsByRepository,
+        // Android includes repository values in the request key only when
+        // repository grouping can affect the visible result groups.
+        repositories:
+          groupStreamsByRepository && Array.isArray(summary.repositories)
+            ? summary.repositories.map((repository) => ({
+                id: repository?.id,
+                url: repository?.url,
+                name: repository?.name,
+                type: repository?.type,
+                enabled: repository?.enabled,
+                lastUpdated: repository?.lastUpdated,
+                scraperCount: repository?.scraperCount
+              }))
+            : [],
+        // Match Android's enabledScrapers flow: disabled providers do not
+        // participate in the source configuration or execution request.
+        scrapers:
+          pluginsEnabled && Array.isArray(summary.scrapers)
+            ? summary.scrapers
+                .filter((scraper) => scraper?.enabled !== false)
+                .map((scraper) => ({
+                  id: scraper?.id,
+                  repositoryId: scraper?.repositoryId,
+                  type: scraper?.type,
+                  enabled: scraper?.enabled,
+                  manifestEnabled: scraper?.manifestEnabled,
+                  codeAvailable: scraper?.codeAvailable,
+                  version: scraper?.version,
+                  filename: scraper?.filename,
+                  codeUrl: scraper?.codeUrl,
+                  supportedTypes: scraper?.supportedTypes,
+                  supportedPlatforms: scraper?.supportedPlatforms,
+                  disabledPlatforms: scraper?.disabledPlatforms
+                }))
+            : [],
+        scraperSettings: pluginState?.settings?.scraperSettings || {}
+      },
+      debrid: DebridSettingsStore.get()
+    })
+  );
+}
 
 function normalizeTmdbPluginType(type) {
   const normalized = String(type || "").toLowerCase();
@@ -21,10 +117,55 @@ function normalizeTmdbPluginType(type) {
 }
 
 class StreamRepository {
-  async getStreamsFromAddon(baseUrl, type, videoId) {
+  constructor() {
+    this.streamSearchSessions = new StreamSearchSessionCache();
+    this.localPluginSearchPaused = false;
+    this.pluginPauseWaiters = new Set();
+    this.activePluginAttemptControllers = new Set();
+  }
+
+  setLocalPluginSearchPaused(paused) {
+    const next = Boolean(paused);
+    this.localPluginSearchPaused = next;
+    if (next) {
+      this.activePluginAttemptControllers.forEach((controller) => {
+        try {
+          controller.abort();
+        } catch (_) {
+          // Abort is best effort; the session remains reusable after resume.
+        }
+      });
+      return;
+    }
+    const waiters = [...this.pluginPauseWaiters];
+    this.pluginPauseWaiters.clear();
+    waiters.forEach((wake) => wake());
+  }
+
+  waitForLocalPluginSearch(signal) {
+    if (!this.localPluginSearchPaused) return Promise.resolve(!signal?.aborted);
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (ready) => {
+        if (settled) return;
+        settled = true;
+        this.pluginPauseWaiters.delete(wake);
+        signal?.removeEventListener?.("abort", abort);
+        resolve(ready && !signal?.aborted);
+      };
+      const wake = () => finish(true);
+      const abort = () => finish(false);
+      this.pluginPauseWaiters.add(wake);
+      signal?.addEventListener?.("abort", abort, { once: true });
+      if (!this.localPluginSearchPaused) finish(true);
+      if (signal?.aborted) finish(false);
+    });
+  }
+
+  async getStreamsFromAddon(baseUrl, type, videoId, { signal = null } = {}) {
     const url = this.buildStreamUrl(baseUrl, type, videoId);
     const result = await safeApiCall(() =>
-      StreamApi.getStreams(url, { timeoutMs: STREAM_SOURCE_REQUEST_TIMEOUT_MS })
+      StreamApi.getStreams(url, { timeoutMs: STREAM_SOURCE_REQUEST_TIMEOUT_MS, signal })
     );
     if (result.status !== "success") {
       return result;
@@ -39,9 +180,47 @@ class StreamRepository {
       ...addon,
       orderIndex: index
     }));
+    const activeProfileId = String(ProfileManager.getActiveProfileId() || "1");
+    const requestKey = {
+      profileId: activeProfileId,
+      type: String(type || "").toLowerCase(),
+      videoId: String(videoId || ""),
+      season: options?.season ?? null,
+      episode: options?.episode ?? null,
+      sourceConfiguration: buildStreamSourceConfiguration(installedAddons)
+    };
+    return this.streamSearchSessions.observe(requestKey, {
+      forceRefresh: options?.forceRefresh === true,
+      signal: options?.signal || null,
+      onAddon: options?.onAddon,
+      onChunk: options?.onChunk,
+      producer: ({ signal, emitAddon, emitChunk, emitResult }) =>
+        this.fetchStreamsFromAllSources(
+          type,
+          videoId,
+          {
+            ...options,
+            signal,
+            onAddon: emitAddon,
+            onChunk: emitChunk,
+            onResult: emitResult
+          },
+          installedAddons
+        )
+    });
+  }
+
+  async fetchStreamsFromAllSources(type, videoId, options = {}, sourceAddons = null) {
+    const installedAddons = Array.isArray(sourceAddons)
+      ? sourceAddons
+      : (await addonRepository.getInstalledAddons()).map((addon, index) => ({
+          ...addon,
+          orderIndex: index
+        }));
     const onAddon = typeof options?.onAddon === "function" ? options.onAddon : null;
 
     const onChunk = typeof options?.onChunk === "function" ? options.onChunk : null;
+    const onResult = typeof options?.onResult === "function" ? options.onResult : null;
 
     // Android's stream flow is completion-ordered. Keep the first completion
     // position for each logical provider and replace only its later merged
@@ -74,6 +253,13 @@ class StreamRepository {
     const notifyChunk = (group) => {
       if (!group?.streams?.length) return;
       recordEmittedGroup(group);
+      if (onResult) {
+        try {
+          onResult({ status: "success", data: [...emittedGroups] });
+        } catch (error) {
+          console.warn("Stream result callback failed", error);
+        }
+      }
       if (!onChunk) return;
       try {
         onChunk({
@@ -144,6 +330,9 @@ class StreamRepository {
         if (!canStream && !canTryMetaOnlyStreams) {
           return null;
         }
+        if (options.signal?.aborted) {
+          return null;
+        }
         const orderIndex = Number(addon.orderIndex ?? Number.MAX_SAFE_INTEGER);
         notifyAddon(addon, orderIndex);
         let addonStreams = [];
@@ -152,7 +341,8 @@ class StreamRepository {
           const streamsResult = await this.getStreamsFromAddon(
             addon.baseUrl,
             streamRequestType,
-            videoId
+            videoId,
+            { signal: options.signal }
           );
           if (streamsResult.status === "success") {
             streamRequestSucceeded = true;
@@ -160,6 +350,9 @@ class StreamRepository {
               addonStreams = streamsResult.data;
             }
           }
+        }
+        if (options.signal?.aborted) {
+          return null;
         }
         // Match Android: when a declared stream endpoint succeeds with no
         // results, try the matching meta video's inline streams even if the
@@ -172,7 +365,8 @@ class StreamRepository {
           addonStreams = await this.fetchInlineStreamsFromMeta(
             addon,
             canStream ? streamRequestType : metaRequestType,
-            videoId
+            videoId,
+            { signal: options.signal }
           );
         }
         if (addonStreams.length === 0) {
@@ -249,6 +443,13 @@ class StreamRepository {
     const abortPluginWork = () => {
       acceptPluginChunks = false;
       pluginAbortController?.abort();
+      this.activePluginAttemptControllers.forEach((controller) => {
+        try {
+          controller.abort();
+        } catch (_) {
+          // Abort is best effort; the source session will settle below.
+        }
+      });
     };
     if (options.signal?.aborted) abortPluginWork();
     const forwardCallerAbort = () => abortPluginWork();
@@ -256,39 +457,78 @@ class StreamRepository {
     const pluginTask = (async () => {
       try {
         const progressivePluginGroups = [];
-        let progressiveWork = Promise.resolve();
-        const onPluginGroup = (group) => {
-          progressiveWork = progressiveWork.then(async () => {
-            if (!acceptPluginChunks) return;
-            const checked = await prepareDebridGroup(group, () => false, { present: false });
-            const merged = mergePluginGroup(checked);
-            const presented = DebridStreamPresentation.apply([merged])[0] || merged;
-            const existingIndex = progressivePluginGroups.findIndex(
-              (entry) => entry.addonName === presented.addonName
-            );
-            if (existingIndex >= 0) progressivePluginGroups[existingIndex] = presented;
-            else progressivePluginGroups.push(presented);
-            if (acceptPluginChunks && presented?.streams?.length) {
-              notifyChunk(presented);
+        while (acceptPluginChunks && !pluginAbortController?.signal.aborted) {
+          const ready = await this.waitForLocalPluginSearch(pluginAbortController?.signal || null);
+          if (!ready || !acceptPluginChunks || this.localPluginSearchPaused) return [];
+
+          const attemptController =
+            typeof AbortController === "function" ? new AbortController() : null;
+          const forwardSourceAbort = () => attemptController?.abort();
+          options.signal?.addEventListener?.("abort", forwardSourceAbort, { once: true });
+          if (attemptController) this.activePluginAttemptControllers.add(attemptController);
+
+          try {
+            let progressiveWork = Promise.resolve();
+            const onPluginGroup = (group) => {
+              progressiveWork = progressiveWork.then(async () => {
+                if (
+                  !acceptPluginChunks ||
+                  this.localPluginSearchPaused ||
+                  attemptController?.signal.aborted
+                )
+                  return;
+                const checked = await prepareDebridGroup(group, () => false, { present: false });
+                if (
+                  !acceptPluginChunks ||
+                  this.localPluginSearchPaused ||
+                  attemptController?.signal.aborted
+                )
+                  return;
+                const merged = mergePluginGroup(checked);
+                const presented = DebridStreamPresentation.apply([merged])[0] || merged;
+                const existingIndex = progressivePluginGroups.findIndex(
+                  (entry) => entry.addonName === presented.addonName
+                );
+                if (existingIndex >= 0) progressivePluginGroups[existingIndex] = presented;
+                else progressivePluginGroups.push(presented);
+                if (acceptPluginChunks && presented?.streams?.length) {
+                  notifyChunk(presented);
+                }
+              });
+            };
+            const pluginStreams = await this.getPluginStreams(type, videoId, {
+              ...options,
+              signal: attemptController?.signal || options.signal || null,
+              onPluginGroup
+            });
+            await progressiveWork;
+
+            // Android's transformLatest cancels the current local search when
+            // playback/source UI pauses it, then starts it again on resume.
+            // Do the same without cancelling the shared source session.
+            if (this.localPluginSearchPaused) continue;
+            if (attemptController?.signal.aborted && !pluginAbortController?.signal.aborted) {
+              continue;
             }
-          });
-        };
-        const pluginStreams = await this.getPluginStreams(type, videoId, {
-          ...options,
-          signal: pluginAbortController?.signal || options.signal || null,
-          onPluginGroup
-        });
-        await progressiveWork;
-        // If the manager had no callback-capable result (for example a future
-        // compatibility implementation), retain the final groups as a safe
-        // fallback. Current manager results are already prepared above.
-        if (!progressivePluginGroups.length && acceptPluginChunks) {
-          for (const group of pluginStreams) {
-            if (!acceptPluginChunks) return [];
-            progressivePluginGroups.push(await prepareDebridGroup(group, () => acceptPluginChunks));
+
+            // If the manager had no callback-capable result (for example a
+            // future compatibility implementation), retain the final groups
+            // as a safe fallback. Current manager results are callback-capable.
+            if (!progressivePluginGroups.length && acceptPluginChunks) {
+              for (const group of pluginStreams) {
+                if (!acceptPluginChunks) return [];
+                progressivePluginGroups.push(
+                  await prepareDebridGroup(group, () => acceptPluginChunks)
+                );
+              }
+            }
+            return acceptPluginChunks ? progressivePluginGroups : [];
+          } finally {
+            options.signal?.removeEventListener?.("abort", forwardSourceAbort);
+            if (attemptController) this.activePluginAttemptControllers.delete(attemptController);
           }
         }
-        return acceptPluginChunks ? progressivePluginGroups : [];
+        return [];
       } catch (error) {
         console.warn("Plugin stream fetch failed", error);
         return [];
@@ -302,7 +542,7 @@ class StreamRepository {
       pluginTimeoutId = setTimeout(() => {
         abortPluginWork();
         resolve([]);
-      }, STREAM_SOURCE_REQUEST_TIMEOUT_MS);
+      }, pluginSearchTimeoutMs());
     });
     const pluginStreamsPromise = Promise.race([pluginTask, pluginTimeout]);
 
@@ -422,7 +662,7 @@ class StreamRepository {
     };
   }
 
-  async fetchInlineStreamsFromMeta(addon, type, videoId) {
+  async fetchInlineStreamsFromMeta(addon, type, videoId, { signal = null } = {}) {
     const rawVideoId = String(videoId || "").trim();
     if (!addon?.baseUrl || !rawVideoId) {
       return [];
@@ -441,9 +681,12 @@ class StreamRepository {
     }
 
     for (const metaId of candidateMetaIds) {
+      if (signal?.aborted) {
+        return [];
+      }
       const url = this.buildMetaUrl(addon.baseUrl, type, metaId);
       const result = await safeApiCall(() =>
-        MetaApi.getMeta(url, { timeoutMs: STREAM_SOURCE_REQUEST_TIMEOUT_MS })
+        MetaApi.getMeta(url, { timeoutMs: STREAM_SOURCE_REQUEST_TIMEOUT_MS, signal })
       );
 
       if (result.status !== "success") {

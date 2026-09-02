@@ -1202,6 +1202,7 @@ Klaida: Bandomoji simuliuojama klaida — tai nėra tikras gedimas. Šaltinis gr
     <string name="plugin_runtime_error">Nepavyko patikrinti vykdymo aplinkos</string>
     <string name="plugin_runtime_checking">Tikrinama TV įskiepių vykdymo aplinka…</string>
     <string name="plugin_runtime_unsupported">Šioje TV vykdymo aplinkoje vykdymas nepasiekiamas</string>
+    <string name="plugin_runtime_limited">Šiame televizoriuje įskiepių palaikymas yra ribotas. Kai kurie teikėjai gali veikti lėčiau arba būti nepasiekiami.</string>
     <string name="plugin_runtime_tv_only">Vykdyti galima tik Nuvio JS saugyklas; išoriniai DEX ir seni šaltiniai lieka tik kaip metaduomenys.</string>
     <string name="plugin_runtime_heading">TV įskiepių vykdymo aplinka</string>
     <string name="plugin_settings_heading">Įskiepių nustatymai</string>

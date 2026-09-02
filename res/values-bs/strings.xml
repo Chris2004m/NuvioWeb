@@ -1651,6 +1651,7 @@
     <string name="plugin_runtime_error">Provjera runtimea nije uspjela</string>
     <string name="plugin_runtime_checking">Provjera TV plugin runtimea…</string>
     <string name="plugin_runtime_unsupported">Izvršavanje nije dostupno na ovom TV runtimeu</string>
+    <string name="plugin_runtime_limited">Podrška za plugine je ograničena na ovom TV-u. Neki provajderi mogu biti sporiji ili nedostupni.</string>
     <string name="plugin_runtime_tv_only">Izvršavati se mogu samo Nuvio JS repozitoriji; eksterni DEX i naslijeđeni izvori ostaju samo metapodaci.</string>
     <string name="plugin_runtime_heading">TV runtime dodataka</string>
     <string name="plugin_settings_heading">Postavke plugina</string>

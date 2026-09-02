@@ -2370,6 +2370,7 @@
     <string name="plugin_runtime_error">Pemeriksaan runtime gagal</string>
     <string name="plugin_runtime_checking">Memeriksa runtime plugin TV…</string>
     <string name="plugin_runtime_unsupported">Eksekusi tidak tersedia pada runtime TV ini</string>
+    <string name="plugin_runtime_limited">Dukungan plugin di TV ini terbatas. Beberapa penyedia mungkin lebih lambat atau tidak tersedia.</string>
     <string name="plugin_runtime_tv_only">Hanya repositori Nuvio JS yang dapat dieksekusi; sumber DEX eksternal dan lama hanya dipertahankan sebagai metadata.</string>
     <string name="plugin_runtime_heading">Runtime plugin TV</string>
     <string name="plugin_settings_heading">Pengaturan plugin</string>

@@ -1807,6 +1807,7 @@
     <string name="plugin_type_legacy">Legacy URL template · preserved only</string>
     <string name="plugin_type_unknown">Unknown type · disabled</string>
     <string name="plugin_runtime_unsupported">Execution unavailable on this TV runtime</string>
+    <string name="plugin_runtime_limited">Plugin support is limited on this TV. Some providers may be slower or unavailable.</string>
     <string name="plugin_tv_model_unsupported">Plugins are not available on this TV model. Add-ons, playback, library, and sync remain available.</string>
     <string name="plugin_dex_unsupported">CloudStream/DEX plugins are not supported on Web TV.</string>
     <string name="plugin_unknown_preserved">Repository type is unknown; it is preserved and disabled until it can be identified safely.</string>

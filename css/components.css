@@ -11160,6 +11160,14 @@ html.legacy-webos .debug-console-log-frame {
   color: var(--focus-color);
 }
 
+.plugins-runtime-card.is-warning {
+  border-color: rgba(241, 154, 154, 0.5);
+}
+
+.plugins-runtime-card.is-warning .plugins-runtime-icon {
+  color: #f19a9a;
+}
+
 .plugins-readonly-card {
   display: flex;
   align-items: center;

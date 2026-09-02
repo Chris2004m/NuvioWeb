@@ -1239,6 +1239,7 @@
     <string name="plugin_runtime_error">Kiểm tra runtime thất bại</string>
     <string name="plugin_runtime_checking">Đang kiểm tra runtime plugin trên TV…</string>
     <string name="plugin_runtime_unsupported">Không thể thực thi trên runtime TV này</string>
+    <string name="plugin_runtime_limited">Hỗ trợ plugin trên TV này bị giới hạn. Một số nhà cung cấp có thể chậm hơn hoặc không khả dụng.</string>
     <string name="plugin_runtime_tv_only">Chỉ kho Nuvio JS được thực thi; các nguồn DEX bên ngoài và nguồn cũ chỉ được giữ dưới dạng siêu dữ liệu.</string>
     <string name="plugin_runtime_heading">Runtime plugin TV</string>
     <string name="plugin_settings_heading">Cài đặt plugin</string>

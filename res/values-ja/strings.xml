@@ -1796,6 +1796,7 @@
     <string name="plugin_runtime_error">ランタイムの確認に失敗しました</string>
     <string name="plugin_runtime_checking">TVプラグインランタイムを確認中…</string>
     <string name="plugin_runtime_unsupported">このTVランタイムでは実行できません</string>
+    <string name="plugin_runtime_limited">このテレビではプラグインのサポートが制限されています。一部のプロバイダーは遅くなったり、利用できなかったりする場合があります。</string>
     <string name="plugin_runtime_tv_only">実行できるのはNuvio JSリポジトリのみです。外部DEXとレガシーソースはメタデータとしてのみ保持されます。</string>
     <string name="plugin_runtime_heading">TVプラグインランタイム</string>
     <string name="plugin_settings_heading">プラグイン設定</string>

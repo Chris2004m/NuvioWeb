@@ -2528,6 +2528,7 @@ function uniqueNonEmptyValues(values = []) {
 
 export const PlayerScreen = {
   async mount(params = {}) {
+    streamRepository.setLocalPluginSearchPaused(false);
     this.container = document.getElementById("player");
     this.container.style.display = "block";
     this.container.classList.toggle("player-platform-webos", Environment.isWebOS());
@@ -7836,16 +7837,21 @@ export const PlayerScreen = {
     return currentSeconds / durationSeconds >= NEXT_EPISODE_PREFETCH_PERCENT;
   },
 
-  getStreamCacheKey(videoId, itemType) {
+  getStreamCacheKey(videoId, itemType, season = null, episode = null) {
     const normalizedVideoId = String(videoId || "").trim();
     if (!normalizedVideoId) {
       return "";
     }
-    return `${normalizeItemType(itemType || this.params?.itemType || "movie")}:${normalizedVideoId}`;
+    return JSON.stringify([
+      normalizeItemType(itemType || this.params?.itemType || "movie"),
+      normalizedVideoId,
+      season == null ? null : Number(season),
+      episode == null ? null : Number(episode)
+    ]);
   },
 
-  getCachedPlayableStreamsForVideo(videoId, itemType) {
-    const cacheKey = this.getStreamCacheKey(videoId, itemType);
+  getCachedPlayableStreamsForVideo(videoId, itemType, season = null, episode = null) {
+    const cacheKey = this.getStreamCacheKey(videoId, itemType, season, episode);
     const cache = this.streamCandidatesByVideoId || (this.streamCandidatesByVideoId = new Map());
     if (!cacheKey || !cache.has(cacheKey)) {
       return null;
@@ -7860,7 +7866,9 @@ export const PlayerScreen = {
     }
     const cached = this.getCachedPlayableStreamsForVideo(
       nextEpisode.videoId,
-      this.params?.itemType || "series"
+      this.params?.itemType || "series",
+      nextEpisode.season,
+      nextEpisode.episode
     );
     return Array.isArray(cached) && cached.length > 0;
   },
@@ -7874,11 +7882,21 @@ export const PlayerScreen = {
     if (!force && !this.shouldPrefetchNextEpisodeStreams()) {
       return;
     }
-    const cacheKey = this.getStreamCacheKey(nextEpisode.videoId, itemType);
+    const cacheKey = this.getStreamCacheKey(
+      nextEpisode.videoId,
+      itemType,
+      nextEpisode.season,
+      nextEpisode.episode
+    );
     const loadPromises =
       this.streamCandidatesLoadPromises || (this.streamCandidatesLoadPromises = new Map());
     if (
-      this.getCachedPlayableStreamsForVideo(nextEpisode.videoId, itemType) ||
+      this.getCachedPlayableStreamsForVideo(
+        nextEpisode.videoId,
+        itemType,
+        nextEpisode.season,
+        nextEpisode.episode
+      ) ||
       loadPromises.has(cacheKey)
     ) {
       return;
@@ -8101,9 +8119,15 @@ export const PlayerScreen = {
     if (!normalizedVideoId) {
       return [];
     }
-    const cacheKey = this.getStreamCacheKey(normalizedVideoId, normalizedType);
+    const forceRefresh = options.forceRefresh === true;
+    const cacheKey = this.getStreamCacheKey(
+      normalizedVideoId,
+      normalizedType,
+      options.season,
+      options.episode
+    );
     const cache = this.streamCandidatesByVideoId || (this.streamCandidatesByVideoId = new Map());
-    if (cache.has(cacheKey)) {
+    if (!forceRefresh && cache.has(cacheKey)) {
       const cached = cache.get(cacheKey);
       const cachedStreams = orderStreamsByAddonOrder(
         Array.isArray(cached) ? cached.map((stream) => ({ ...stream })) : [],
@@ -8115,7 +8139,10 @@ export const PlayerScreen = {
     }
     const loadPromises =
       this.streamCandidatesLoadPromises || (this.streamCandidatesLoadPromises = new Map());
-    if (loadPromises.has(cacheKey)) {
+    if (forceRefresh) {
+      loadPromises.delete(cacheKey);
+    }
+    if (!forceRefresh && loadPromises.has(cacheKey)) {
       const loaded = await loadPromises.get(cacheKey);
       const loadedStreams = orderStreamsByAddonOrder(
         Array.isArray(loaded) ? loaded.map((stream) => ({ ...stream })) : [],
@@ -8132,6 +8159,7 @@ export const PlayerScreen = {
         itemId: String(this.params?.itemId || ""),
         season: options.season ?? null,
         episode: options.episode ?? null,
+        forceRefresh,
         onChunk: (chunkResult) => {
           const chunkItems = flattenStreamGroups(chunkResult);
           if (!chunkItems.length) {
@@ -8154,14 +8182,23 @@ export const PlayerScreen = {
           [],
           { isDirectDebrid: (stream) => DebridStreamPresentation.isDirectDebrid(stream) }
         );
-        cache.set(
-          cacheKey,
-          streamItems.map((stream) => ({ ...stream }))
-        );
+        if (streamItems.length) {
+          cache.set(
+            cacheKey,
+            streamItems.map((stream) => ({ ...stream }))
+          );
+        } else {
+          // Android's repository cache does not retain failed/empty-only
+          // sessions. Do not let an empty UI snapshot suppress the next
+          // provider search or make the source panel look permanently empty.
+          cache.delete(cacheKey);
+        }
         return streamItems;
       })
       .finally(() => {
-        loadPromises.delete(cacheKey);
+        if (loadPromises.get(cacheKey) === loadPromise) {
+          loadPromises.delete(cacheKey);
+        }
       });
     loadPromises.set(cacheKey, loadPromise);
 
@@ -8221,6 +8258,7 @@ export const PlayerScreen = {
   },
 
   async resolveNextEpisodeStreamByAutoPlayPolicy(nextEpisode, itemType, settings) {
+    streamRepository.setLocalPluginSearchPaused(false);
     const installedAddonNames = new Set(
       ((await addonRepository.getInstalledAddons().catch(() => [])) || [])
         .map((addon) => String(addon?.displayName || addon?.name || "").trim())
@@ -11790,6 +11828,7 @@ export const PlayerScreen = {
     if (!streamCandidate) {
       return;
     }
+    streamRepository.setLocalPluginSearchPaused(true);
     let targetUrl = streamDirectPlaybackUrl(streamCandidate);
     if (!targetUrl) {
       const resolveContext = {
@@ -19352,6 +19391,7 @@ export const PlayerScreen = {
   },
 
   openSourcesPanel({ forceReload = false } = {}) {
+    streamRepository.setLocalPluginSearchPaused(false);
     this.cancelSeekPreview({ commit: false });
     this.sourcesPanelVisible = true;
     this.sourcesLastNavigationRepeatAt = 0;
@@ -19379,7 +19419,7 @@ export const PlayerScreen = {
     // that had replied before playback started. Refresh once per video so a
     // slower addon can still join the in-player list without a manual reload.
     if (forceReload || !sourceRequestKey || sourceRequestKey !== this.completedSourceRequestKey) {
-      this.reloadSources();
+      this.reloadSources({ forceRefresh: forceReload });
     }
   },
 
@@ -19393,6 +19433,7 @@ export const PlayerScreen = {
   },
 
   closeSourcesPanel() {
+    streamRepository.setLocalPluginSearchPaused(true);
     this.sourcesPanelVisible = false;
     this.sourcesLastNavigationRepeatAt = 0;
     this.sourcesError = "";
@@ -19401,7 +19442,8 @@ export const PlayerScreen = {
     this.resetControlsAutoHide();
   },
 
-  async reloadSources() {
+  async reloadSources({ forceRefresh = false } = {}) {
+    streamRepository.setLocalPluginSearchPaused(false);
     if (this.sourcesLoading) {
       return;
     }
@@ -19423,6 +19465,7 @@ export const PlayerScreen = {
       itemId: String(this.params?.itemId || ""),
       season: this.params?.season ?? null,
       episode: this.params?.episode ?? null,
+      forceRefresh,
       onChunk: (chunkResult) => {
         if (token !== this.sourceLoadToken) {
           return;
@@ -19760,7 +19803,7 @@ export const PlayerScreen = {
 
     if (zone === "top") {
       if (index === 0) {
-        await this.reloadSources();
+        await this.reloadSources({ forceRefresh: true });
         return;
       }
       this.closeSourcesPanel();
@@ -19794,7 +19837,7 @@ export const PlayerScreen = {
       this.sourcesLastNavigationRepeatAt = now;
     }
     if (keyCode === 82) {
-      await this.reloadSources();
+      await this.reloadSources({ forceRefresh: true });
       return true;
     }
 
@@ -20346,6 +20389,7 @@ export const PlayerScreen = {
   },
 
   closeEpisodeStreamsView() {
+    streamRepository.setLocalPluginSearchPaused(true);
     this.episodePanelMode = "episodes";
     this.episodePanelStreamsLoading = false;
     this.episodePanelStreamsError = "";
@@ -20354,6 +20398,7 @@ export const PlayerScreen = {
   },
 
   async openEpisodeStreamsView({ forceReload = true } = {}) {
+    streamRepository.setLocalPluginSearchPaused(false);
     const selected = this.episodes[this.episodePanelIndex] || null;
     if (!selected?.id) {
       return;
@@ -20367,7 +20412,12 @@ export const PlayerScreen = {
     this.renderEpisodePanel();
 
     const itemType = this.params?.itemType || "series";
-    const cacheKey = this.getStreamCacheKey(selected.id, normalizeItemType(itemType));
+    const cacheKey = this.getStreamCacheKey(
+      selected.id,
+      normalizeItemType(itemType),
+      selected.season,
+      selected.episode
+    );
     if (forceReload) {
       this.streamCandidatesByVideoId?.delete?.(cacheKey);
     }
@@ -20376,7 +20426,8 @@ export const PlayerScreen = {
     try {
       const streams = await this.getPlayableStreamsForVideo(selected.id, itemType, {
         season: selected.season,
-        episode: selected.episode
+        episode: selected.episode,
+        forceRefresh: forceReload
       });
       if (
         token !== this.episodePanelStreamLoadToken ||
@@ -20862,6 +20913,7 @@ export const PlayerScreen = {
   },
 
   hideEpisodePanel() {
+    streamRepository.setLocalPluginSearchPaused(true);
     this.episodePanelVisible = false;
     this.episodePanelStreamLoadToken = Number(this.episodePanelStreamLoadToken || 0) + 1;
     const panel = this.uiRefs?.root?.querySelector("#episodeSidePanel");
@@ -20885,6 +20937,7 @@ export const PlayerScreen = {
     if (!selected?.id) {
       return;
     }
+    streamRepository.setLocalPluginSearchPaused(true);
     if (!selectedStream && this.episodePanelMode !== "streams") {
       await this.openEpisodeStreamsView({ forceReload: true });
       return;
@@ -22204,6 +22257,7 @@ export const PlayerScreen = {
 
   cleanup() {
     try {
+      streamRepository.setLocalPluginSearchPaused(true);
       this.playerRouteActive = false;
       this.playbackRecoveryActive = false;
       this.playbackRecoveryAttempts = 0;

@@ -2720,6 +2720,7 @@
     <string name="plugin_runtime_error">Çalışma zamanı denetimi başarısız</string>
     <string name="plugin_runtime_checking">TV eklenti çalışma zamanı denetleniyor…</string>
     <string name="plugin_runtime_unsupported">Bu TV çalışma zamanında çalıştırma kullanılamıyor</string>
+    <string name="plugin_runtime_limited">Bu TV'de eklenti desteği sınırlıdır. Bazı sağlayıcılar daha yavaş olabilir veya kullanılamayabilir.</string>
     <string name="plugin_runtime_tv_only">Yalnızca Nuvio JS depoları çalıştırılabilir; harici DEX ve eski kaynaklar yalnızca meta veri olarak korunur.</string>
     <string name="plugin_runtime_heading">TV eklenti çalışma zamanı</string>
     <string name="plugin_settings_heading">Eklenti ayarları</string>

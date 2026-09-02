@@ -2474,6 +2474,7 @@
     <string name="plugin_runtime_error">Preverjanje izvajalnega okolja ni uspelo</string>
     <string name="plugin_runtime_checking">Preverjanje izvajalnega okolja vtičnikov TV…</string>
     <string name="plugin_runtime_unsupported">Izvajanje v tem TV-okolju ni na voljo</string>
+    <string name="plugin_runtime_limited">Podpora vtičnikov je na tem televizorju omejena. Nekateri ponudniki so lahko počasnejši ali nedosegljivi.</string>
     <string name="plugin_runtime_tv_only">Izvajajo se lahko samo skladišča Nuvio JS; zunanji DEX in starejši viri ostanejo samo metapodatki.</string>
     <string name="plugin_runtime_heading">Izvajalno okolje vtičnikov TV</string>
     <string name="plugin_settings_heading">Nastavitve vtičnikov</string>

@@ -1200,6 +1200,7 @@
     <string name="plugin_runtime_error">Runtimecontrole mislukt</string>
     <string name="plugin_runtime_checking">TV-pluginruntime wordt gecontroleerd…</string>
     <string name="plugin_runtime_unsupported">Uitvoering is niet beschikbaar op deze TV-runtime</string>
+    <string name="plugin_runtime_limited">Pluginondersteuning is beperkt op deze tv. Sommige providers kunnen trager of niet beschikbaar zijn.</string>
     <string name="plugin_runtime_tv_only">Alleen Nuvio JS-repositories kunnen worden uitgevoerd; externe DEX- en verouderde bronnen blijven alleen metadata.</string>
     <string name="plugin_runtime_heading">TV-pluginruntime</string>
     <string name="plugin_settings_heading">Plugininstellingen</string>
