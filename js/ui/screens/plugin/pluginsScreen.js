@@ -807,9 +807,14 @@ export const PluginsScreen = {
       await this.addRepository();
       return;
     }
-    const [kind, id, flag] = action.split(":");
+    // Scraper IDs intentionally use `repositoryId:manifestId`, so preserve
+    // every segment instead of truncating the ID at its first colon.
+    const [kind, ...actionParts] = action.split(":");
+    const id = actionParts.join(":");
     if (kind === "toggle-all") {
-      PluginManager.setAllScrapersEnabled(id, flag === "1");
+      const flag = actionParts.pop();
+      const repositoryId = actionParts.join(":");
+      PluginManager.setAllScrapersEnabled(repositoryId, flag === "1");
       this.render();
       return;
     }
