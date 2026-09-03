@@ -21,6 +21,10 @@ import {
   detectWebOsAudioCapabilities
 } from "../../platform/webos/webosAudioCapabilities.js";
 import { WebOsLunaService } from "../../platform/webos/webosLunaService.js";
+import {
+  requestWebOsCompanionService,
+  subscribeWebOsCompanionService
+} from "../../platform/webos/webosCompanionService.js";
 import { WebOSPlayerExtensions } from "../../platform/webos/webosPlayerExtensions.js";
 import { loadStreamingLibs } from "../../runtime/loadStreamingLibs.js";
 import { WATCH_PROGRESS_UNKNOWN_DURATION_PERCENT } from "../../domain/model/watchProgress.js";
@@ -195,6 +199,8 @@ export const PlayerController = {
   currentPlaybackUrl: "",
   currentPlaybackHeaders: {},
   currentPlaybackMediaSourceType: null,
+  webOsPlaybackKeepAliveHandle: null,
+  webOsPlaybackKeepAliveToken: "",
   lastProgressSnapshot: null,
   lastKnownDurationSeconds: 0,
   avplayFallbackAttempts: new Set(),
@@ -561,6 +567,56 @@ export const PlayerController = {
     } else {
       WebOSPlayerExtensions.stopPlaybackKeepAwake();
     }
+  },
+
+  startWebOsPlaybackKeepAlive() {
+    if (!Platform.isWebOS()) {
+      return;
+    }
+
+    this.stopWebOsPlaybackKeepAlive();
+    const token = `media-playback:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+    this.webOsPlaybackKeepAliveToken = token;
+    try {
+      this.webOsPlaybackKeepAliveHandle = subscribeWebOsCompanionService({
+        method: "mediaPlaybackKeepAlive",
+        parameters: {
+          token,
+          // Keep the interval below the shortest observed webOS service
+          // eviction window while avoiding an excessive Luna request rate.
+          intervalMs: 5000
+        },
+        onFailure: (error) => {
+          if (token !== this.webOsPlaybackKeepAliveToken) {
+            return;
+          }
+          console.warn("webOS media playback keepalive failed", { token, error });
+        }
+      });
+    } catch (error) {
+      this.webOsPlaybackKeepAliveHandle = null;
+      this.webOsPlaybackKeepAliveToken = "";
+      console.warn("webOS media playback keepalive could not start", { token, error });
+    }
+  },
+
+  stopWebOsPlaybackKeepAlive() {
+    const token = String(this.webOsPlaybackKeepAliveToken || "").trim();
+    if (this.webOsPlaybackKeepAliveHandle) {
+      try {
+        this.webOsPlaybackKeepAliveHandle.cancel?.();
+      } catch (_) {
+        // Ignore local cancellation failures.
+      }
+      this.webOsPlaybackKeepAliveHandle = null;
+    }
+    if (token) {
+      requestWebOsCompanionService({
+        method: "mediaPlaybackKeepAliveStop",
+        parameters: { token }
+      }).catch(() => null);
+    }
+    this.webOsPlaybackKeepAliveToken = "";
   },
 
   emitVideoEvent(eventName, detail = null) {
@@ -4824,6 +4880,7 @@ export const PlayerController = {
       playbackUrl = String(proxyResult?.url || requestedUrl).trim() || requestedUrl;
       if (proxyResult?.proxied) {
         this.currentPlaybackUrl = playbackUrl;
+        this.startWebOsPlaybackKeepAlive();
         const debugPayload = {
           baseUrl: proxyResult.baseUrl,
           headerNames: proxyResult.headerNames,
@@ -4834,6 +4891,8 @@ export const PlayerController = {
         } else {
           logWebOsPlaybackDebug("PlayerController: webOS playback proxy selected", debugPayload);
         }
+      } else if (Platform.isWebOS()) {
+        this.stopWebOsPlaybackKeepAlive();
       }
     }
 
@@ -5098,6 +5157,7 @@ export const PlayerController = {
   },
 
   stop({ forceCloudSync = true, allowCloudSync = true, flushProgress = true } = {}) {
+    this.stopWebOsPlaybackKeepAlive();
     if (!this.video) return;
 
     this.stopProgressSaving();

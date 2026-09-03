@@ -220,8 +220,8 @@ function buildKeepAlivePayload(token, status) {
   });
 }
 
-function registerEngineFsKeepAliveCommands() {
-  service.register("enginefsKeepAlive", function (message) {
+function registerKeepAliveCommands(commandName, stopCommandName) {
+  service.register(commandName, function (message) {
     var payload = getMessagePayload(message);
     var token = String(payload.token || Date.now() + "-" + Math.random()).trim();
     var intervalMs = Math.max(
@@ -245,7 +245,7 @@ function registerEngineFsKeepAliveCommands() {
     }, intervalMs);
   });
 
-  service.register("enginefsKeepAliveStop", function (message) {
+  service.register(stopCommandName, function (message) {
     var payload = getMessagePayload(message);
     var stopped = stopKeepAlive(payload.token);
     respond(
@@ -257,6 +257,14 @@ function registerEngineFsKeepAliveCommands() {
       })
     );
   });
+}
+
+function registerEngineFsKeepAliveCommands() {
+  registerKeepAliveCommands("enginefsKeepAlive", "enginefsKeepAliveStop");
+}
+
+function registerMediaPlaybackKeepAliveCommands() {
+  registerKeepAliveCommands("mediaPlaybackKeepAlive", "mediaPlaybackKeepAliveStop");
 }
 
 function registerTracksCommand() {
@@ -1435,6 +1443,7 @@ registerCommand("status", true);
 registerSafeHttpProxyCommand("supabaseProxy");
 registerSafeHttpProxyCommand("safeHttpProxy");
 registerEngineFsKeepAliveCommands();
+registerMediaPlaybackKeepAliveCommands();
 registerTracksCommand();
 registerSubtitleTextCommand();
 registerBitmapSubtitleCommand();
