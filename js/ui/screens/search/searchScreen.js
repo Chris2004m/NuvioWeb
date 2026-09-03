@@ -1722,16 +1722,9 @@ export const SearchScreen = {
 
   keepSearchInputEditingKey(event, code) {
     const input = this.container?.querySelector("#searchInput");
-    const navigationKeys = [35, 36, 37, 38, 39, 40];
+    const navigationKeys = [35, 36, 37, 39];
     if (!input || navigationKeys.indexOf(code) === -1 || !this.isSearchInputEditingActive(event)) {
       return false;
-    }
-
-    if (Platform.isTizen() || Platform.isWebOS()) {
-      // The native TV keyboard owns directional navigation while the search
-      // field is active; otherwise the page focus graph can move underneath it.
-      event?.stopPropagation?.();
-      return true;
     }
 
     // Release left/right once the caret sits at the matching edge of the value
