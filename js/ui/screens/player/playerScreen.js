@@ -96,6 +96,8 @@ import {
   SUBTITLE_VERTICAL_OFFSET_DEFAULT,
   SUBTITLE_VERTICAL_OFFSET_PLAYER_STEP,
   formatSubtitleVerticalOffset,
+  getSubtitleVerticalOffsetVh,
+  getSubtitleVerticalResidualOffsetVh,
   normalizeSubtitleVerticalOffset,
   splitSubtitleVerticalOffset
 } from "../../../core/player/subtitleVerticalOffset.js";
@@ -1649,6 +1651,15 @@ function formatEndsAt(currentSeconds, durationSeconds, webOsLocaleInfo = null, p
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
+}
+
+function hasExplicitSubtitleVerticalPosition(snapshot) {
+  const rawLine = snapshot?.line;
+  if (rawLine == null || String(rawLine).trim().toLowerCase() === "auto") {
+    return false;
+  }
+  const line = Number(rawLine);
+  return Number.isFinite(line) && line !== -1;
 }
 
 function trackListToArray(trackList) {
@@ -8628,7 +8639,8 @@ export const PlayerScreen = {
       return;
     }
     const style = this.subtitleStyleSettings || {};
-    const verticalOffset = splitSubtitleVerticalOffset(style.verticalOffset);
+    const verticalOffsetVh = getSubtitleVerticalOffsetVh(style.verticalOffset);
+    const residualOffsetVh = getSubtitleVerticalResidualOffsetVh(style.verticalOffset);
     const subtitleTextOpacity = normalizeSubtitleTextOpacity(style.textOpacity);
     const subtitleColor = subtitleTextColorWithOpacity(
       style.textColor || "#FFFFFF",
@@ -8661,10 +8673,7 @@ export const PlayerScreen = {
     uiRoot.style.setProperty("--player-html-subtitle-font-size", htmlSubtitleFontSize);
     uiRoot.style.setProperty("--player-subtitle-font-weight", subtitleFontWeight);
     uiRoot.style.setProperty("--player-subtitle-shadow", subtitleShadow);
-    uiRoot.style.setProperty(
-      "--player-subtitle-offset",
-      `${(verticalOffset.value * -2).toFixed(2)}vh`
-    );
+    uiRoot.style.setProperty("--player-subtitle-offset", `${verticalOffsetVh.toFixed(2)}vh`);
     video.style.setProperty("--player-subtitle-color", subtitleColor);
     video.style.setProperty(
       "--player-subtitle-background",
@@ -8674,10 +8683,7 @@ export const PlayerScreen = {
     video.style.setProperty("--player-subtitle-font-size", `${subtitleFontSize}%`);
     video.style.setProperty("--player-subtitle-font-weight", subtitleFontWeight);
     video.style.setProperty("--player-subtitle-shadow", subtitleShadow);
-    video.style.setProperty(
-      "--player-subtitle-offset",
-      `${(verticalOffset.residualOffset * -2).toFixed(2)}vh`
-    );
+    video.style.setProperty("--player-subtitle-offset", `${residualOffsetVh.toFixed(2)}vh`);
     this.refreshSubtitleCueStyles();
     this.renderBitmapSubtitleAtCurrentTime({ force: true });
     if (refreshTrackRendering) {
@@ -8978,7 +8984,10 @@ export const PlayerScreen = {
       return;
     }
     const { lineOffset } = splitSubtitleVerticalOffset(offset);
-    if (lineOffset === 0) {
+    // A source-authored line (including percentage positioning) belongs to
+    // the subtitle itself. Keep it intact; Android applies its bottom padding
+    // only when the cue has no explicit line.
+    if (hasExplicitSubtitleVerticalPosition(snapshot) || lineOffset === 0) {
       this.restoreSubtitleCueSnapshot(cue, snapshot);
       return;
     }
@@ -14797,8 +14806,8 @@ export const PlayerScreen = {
     );
     const style = this.subtitleStyleSettings || {};
     const sizeScale = normalizeSubtitleFontSize(style.fontSize) / 100;
-    const verticalOffsetPx =
-      splitSubtitleVerticalOffset(style.verticalOffset).value * -0.02 * viewportHeight;
+    const verticalOffsetVh = getSubtitleVerticalOffsetVh(style.verticalOffset);
+    const verticalOffsetPx = (verticalOffsetVh / 100) * viewportHeight;
     const mode = this.getAspectModeDefinition();
     const rect = this.calculateAspectRect(mode.id, PlayerController.video);
     const modeScaleX = Number(rect.scaleX || 1);
@@ -14869,8 +14878,14 @@ export const PlayerScreen = {
       const baseCenterX = rect.x + (composition.x + composition.width / 2) * contentScaleX;
       const baseCenterY = rect.y + (composition.y + composition.height / 2) * contentScaleY;
       const targetCenterX = viewportWidth / 2 + (baseCenterX - viewportWidth / 2) * modeScaleX;
-      const targetCenterY =
+      const requestedCenterY =
         viewportHeight / 2 + (baseCenterY - viewportHeight / 2) * modeScaleY + verticalOffsetPx;
+      const targetCenterY =
+        verticalOffsetPx === 0
+          ? requestedCenterY
+          : targetHeight >= viewportHeight
+            ? viewportHeight / 2
+            : clamp(requestedCenterY, targetHeight / 2, viewportHeight - targetHeight / 2);
       context.drawImage(
         scratch,
         targetCenterX - targetWidth / 2,
@@ -14951,7 +14966,7 @@ export const PlayerScreen = {
           cueNode.style.left = `${group.position}%`;
           cueNode.style.right = "auto";
           const anchor = group.align === "start" ? "0%" : group.align === "end" ? "-100%" : "-50%";
-          cueNode.style.transform = `translate(${anchor}, -50%) translateY(var(--player-subtitle-offset))`;
+          cueNode.style.transform = `translate(${anchor}, -50%)`;
         }
       }
       if (group.size != null && group.line != null) {

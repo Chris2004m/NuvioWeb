@@ -12611,7 +12611,8 @@ html.legacy-webos .debug-console-log-frame {
 }
 
 .player-html-subtitle-positioned {
-  transform: translateY(-50%) translateY(var(--player-subtitle-offset));
+  /* Author-positioned cues must keep their own vertical coordinate. */
+  transform: translateY(-50%);
 }
 
 .player-html-subtitle-positioned.player-html-subtitle-align-start {
