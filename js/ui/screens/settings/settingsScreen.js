@@ -206,8 +206,10 @@ const FONT_OPTIONS = [
 
 const APP_LANGUAGE_NATIVE_LABELS = {
   ar: "Arabic",
+  bg: "Bulgarian",
   bs: "Bosnian",
   cs: "Cestina",
+  da: "Dansk",
   de: "Deutsch",
   en: "English",
   el: "Greek",
@@ -230,11 +232,14 @@ const APP_LANGUAGE_NATIVE_LABELS = {
   ru: "Russian",
   sk: "Slovencina",
   sl: "Slovenscina",
+  "sr-latn": "Srpski (latinica)",
   sv: "Svenska",
   ta: "Tamil",
   tr: "Turkce",
+  uk: "Ukrainian",
   vi: "Tieng Viet",
-  "zh-cn": "Chinese (Simplified)"
+  "zh-cn": "Chinese (Simplified)",
+  "zh-tw": "Chinese (Traditional)"
 };
 
 function appLanguageOptionLabel(localeId) {
@@ -5714,6 +5719,26 @@ export const SettingsScreen = {
         autoplayNextEpisode: !PlayerSettingsStore.get().autoplayNextEpisode
       });
     });
+    this.actionMap.set("playback:postPlayRecommendations", () => {
+      PlayerSettingsStore.set({
+        postPlayRecommendationsEnabled: !PlayerSettingsStore.get().postPlayRecommendationsEnabled
+      });
+    });
+    this.actionMap.set("playback:postPlayMovieThreshold", () => {
+      const current = PlayerSettingsStore.get().postPlayMovieThresholdPercent ?? 90;
+      this.openOptionDialog({
+        title: t("autoplay_post_play_movie_threshold", {}, "Movie Recommendation Timing"),
+        options: Array.from({ length: 21 }, (_, index) => {
+          const value = 80 + index;
+          return { id: value, label: `${value}%` };
+        }),
+        selectedId: current,
+        returnFocusKey: "playback:postPlayMovieThreshold",
+        onSelect: (option) => {
+          PlayerSettingsStore.set({ postPlayMovieThresholdPercent: Number(option.id) });
+        }
+      });
+    });
     this.actionMap.set("playback:preferBingeGroup", () => {
       PlayerSettingsStore.set({
         streamAutoPlayPreferBingeGroupForNextEpisode:
@@ -6231,6 +6256,16 @@ export const SettingsScreen = {
             checked: Boolean(model.player.autoplayNextEpisode)
           })}
           ${this.renderToggleRow({
+            focusKey: "playback:postPlayRecommendations",
+            title: t("autoplay_post_play_recommendations", {}, "Post-play Recommendations"),
+            subtitle: t(
+              "autoplay_post_play_recommendations_sub",
+              {},
+              "Show recommendations near the end of movies and series."
+            ),
+            checked: model.player.postPlayRecommendationsEnabled !== false
+          })}
+          ${this.renderToggleRow({
             focusKey: "playback:p2pEnabled",
             title: t("essential_p2p_streams", {}, "P2P streams"),
             subtitle: tizenP2pUnsupported
@@ -6283,6 +6318,30 @@ export const SettingsScreen = {
           subtitle: t("settings.playback.autoplayNextEpisode.subtitle"),
           checked: Boolean(model.player.autoplayNextEpisode)
         })}
+        ${this.renderToggleRow({
+          focusKey: "playback:postPlayRecommendations",
+          title: t("autoplay_post_play_recommendations", {}, "Post-play Recommendations"),
+          subtitle: t(
+            "autoplay_post_play_recommendations_sub",
+            {},
+            "Show recommendations near the end of movies and series."
+          ),
+          checked: model.player.postPlayRecommendationsEnabled !== false
+        })}
+        ${
+          model.player.postPlayRecommendationsEnabled !== false
+            ? this.renderActionRow({
+                focusKey: "playback:postPlayMovieThreshold",
+                title: t("autoplay_post_play_movie_threshold", {}, "Movie Recommendation Timing"),
+                subtitle: t(
+                  "autoplay_post_play_movie_threshold_sub",
+                  {},
+                  "Choose when movie recommendations appear. Episodes follow the Next Episode Threshold setting."
+                ),
+                value: `${model.player.postPlayMovieThresholdPercent ?? 90}%`
+              })
+            : ""
+        }
         ${this.renderToggleRow({
           focusKey: "playback:preferBingeGroup",
           title: t("autoplay_prefer_binge_group", {}, "Prefer Binge Group (Next Episode)"),

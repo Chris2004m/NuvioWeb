@@ -2697,4 +2697,5 @@
     <string name="plugin_default_supported_types">movie/tv</string>
     <string name="settings.plugins.openSubtitle">Gerenciar fornecedores Nuvio JS executáveis e metadados externos preservados</string>
     <string name="home.continueStatusWatchedPercent">{{percent}}% visto</string>
+    <string name="player_post_play_play_manually">Reproduzir manualmente</string>
 </resources>

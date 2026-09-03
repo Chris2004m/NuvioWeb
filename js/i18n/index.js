@@ -5,8 +5,10 @@ const RTL_LOCALES = new Set(["ar", "he"]);
 const SUPPORTED_LOCALES = [
   "en",
   "ar",
+  "bg",
   "bs",
   "cs",
+  "da",
   "de",
   "el",
   "es",
@@ -28,12 +30,15 @@ const SUPPORTED_LOCALES = [
   "ru",
   "sk",
   "sl",
+  "sr-latn",
   "sq",
   "sv",
   "ta",
   "tr",
+  "uk",
   "vi",
-  "zh-cn"
+  "zh-cn",
+  "zh-tw"
 ];
 
 const KEY_ALIASES = {

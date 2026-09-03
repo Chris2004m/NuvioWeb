@@ -1689,4 +1689,5 @@
     <string name="settings.plugins.refreshRepository">Osvježi repozitorij</string>
     <string name="settings.plugins.removeRepository">Ukloni repozitorij</string>
     <string name="home.continueStatusWatchedPercent">Pogledano {{percent}}%</string>
+    <string name="player_post_play_play_manually">Pusti ručno</string>
 </resources>

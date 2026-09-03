@@ -1745,6 +1745,7 @@ export const MetaDetailsScreen = {
     this.railFocusIndexByKey = {};
     this.watchedEpisodeKeys = new Set();
     this.autoOpenedContinueWatchingStream = false;
+    this.playOnLoadTriggered = false;
     this.restoredContentScrollTop = 0;
     this.restoredTrackScrollLeftByKey = {};
     this.bindTrailerProxyMessaging();
@@ -1964,6 +1965,7 @@ export const MetaDetailsScreen = {
     this.isLoadingDetail = false;
     void this.refreshLibraryMembership(token);
     this.maybeAutoOpenContinueWatchingStream();
+    this.maybePlayOnLoad(token);
     void this.refreshTrailerSource(meta, token);
     void this.loadTraktComments({ force: true });
 
@@ -2682,6 +2684,36 @@ export const MetaDetailsScreen = {
       }
     }
     this.navigateToStreamScreenForMovie(extraParams);
+  },
+
+  maybePlayOnLoad(token = this.detailLoadToken) {
+    if (
+      !this.params?.playOnLoad ||
+      this.playOnLoadTriggered ||
+      this.autoOpenedContinueWatchingStream ||
+      this.isBackNavigation
+    ) {
+      return;
+    }
+    this.playOnLoadTriggered = true;
+    const start = () => {
+      if (
+        token !== this.detailLoadToken ||
+        !this.container ||
+        this.isBackNavigation ||
+        this.autoOpenedContinueWatchingStream
+      ) {
+        return;
+      }
+      void this.playDefaultFromHero({
+        manualSelection: Boolean(this.params?.manualSelection)
+      });
+    };
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => requestAnimationFrame(start));
+    } else {
+      setTimeout(start, 0);
+    }
   },
 
   getStreamNavigationOptions() {

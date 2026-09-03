@@ -2389,4 +2389,5 @@
     <string name="settings.plugins.refreshRepository">Repository புதுப்பி</string>
     <string name="settings.plugins.removeRepository">Repository அகற்று</string>
     <string name="home.continueStatusWatchedPercent">{{percent}}% பார்க்கப்பட்டது</string>
+    <string name="player_post_play_play_manually">கைமுறையாக இயக்கு</string>
 </resources>
