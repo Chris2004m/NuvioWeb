@@ -86,8 +86,7 @@ function extractAddonEntries(rows = []) {
     .filter((entry) => entry.url);
 }
 
-function applyPulledAddons(rows = []) {
-  const entries = extractAddonEntries(rows);
+function applyPulledAddons(entries = []) {
   const urls = entries.map((entry) => entry.url).filter(Boolean);
   const currentNames = addonRepository.getAddonDisplayNameOverrides();
   addonRepository.setAddonDisplayNameOverrides(
@@ -101,6 +100,35 @@ function applyPulledAddons(rows = []) {
     { replace: true }
   );
   addonRepository.setAddonEnabledStates(entries, { replace: true });
+  return urls;
+}
+
+function prepareRemoteAddonSnapshot(rows) {
+  const entries = extractAddonEntries(rows);
+  const urls = entries.map((entry) => entry.url).filter(Boolean);
+  const localUrls = addonRepository.getInstalledAddonUrls();
+
+  // Android TV does not treat an empty remote snapshot as authoritative when
+  // local addons already exist. An empty response must not erase the addon list
+  // (or its names/enabled states) used by catalog, stream, and subtitle repositories.
+  if (urls.length === 0) {
+    if (localUrls.length > 0) {
+      console.warn(
+        `Addon sync pull returned an empty remote list while local has ${localUrls.length} entries; preserving local addons`
+      );
+    }
+    return { urls: [...localUrls], shouldApply: false };
+  }
+
+  applyPulledAddons(entries);
+  return { urls, shouldApply: true };
+}
+
+async function reconcileRemoteAddonSnapshot(rows) {
+  const { urls, shouldApply } = prepareRemoteAddonSnapshot(rows);
+  if (shouldApply) {
+    await addonRepository.setAddonOrder(urls, { silent: true });
+  }
   return urls;
 }
 
@@ -131,8 +159,7 @@ export const LibrarySyncService = {
           `user_id=eq.${encodeURIComponent(ownerId)}&profile_id=eq.${profileId}&select=*&order=sort_order.asc`,
           true
         );
-        const addonUrls = applyPulledAddons(addonRows);
-        await addonRepository.setAddonOrder(addonUrls, { silent: true });
+        const addonUrls = await reconcileRemoteAddonSnapshot(addonRows);
         recordPullStatus("ok", { count: addonUrls.length });
         return addonUrls;
       } catch (addonsTableError) {
@@ -153,8 +180,7 @@ export const LibrarySyncService = {
           `owner_id=eq.${encodeURIComponent(ownerId)}&select=*&order=position.asc`,
           true
         );
-        const urls = applyPulledAddons(rows);
-        await addonRepository.setAddonOrder(urls, { silent: true });
+        const urls = await reconcileRemoteAddonSnapshot(rows);
         recordPullStatus("ok", { count: urls.length });
         return urls;
       } catch (tvTableError) {
@@ -175,8 +201,7 @@ export const LibrarySyncService = {
             { p_profile_id: profileId },
             true
           );
-          const urls = applyPulledAddons(rpcRows);
-          await addonRepository.setAddonOrder(urls, { silent: true });
+          const urls = await reconcileRemoteAddonSnapshot(rpcRows);
           recordPullStatus("ok", { count: urls.length });
           return urls;
         } catch (rpcError) {
