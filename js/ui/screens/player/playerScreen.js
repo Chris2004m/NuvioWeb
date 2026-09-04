@@ -97,6 +97,10 @@ import {
   POST_PLAY_IN_APP_TRAILER_PLAYBACK_ENABLED
 } from "./postPlayRecommendationController.js";
 import {
+  normalizePlayerEpisodeMetadata,
+  resolvePostPlayEpisodeMetadataResolved
+} from "../../../core/player/playerEpisodeMetadata.js";
+import {
   buildHtmlSubtitleCue,
   getSubtitleAssAlignment,
   getSubtitleAssAlignmentSettings,
@@ -2825,7 +2829,16 @@ export const PlayerScreen = {
     this.speedDialogIndex = Math.max(0, PLAYER_SPEEDS.indexOf(1));
 
     this.postPlayEpisodeMetadataProvided = Array.isArray(params.episodes);
-    this.episodes = this.postPlayEpisodeMetadataProvided ? params.episodes : [];
+    this.episodes = isSeriesItemType(params?.itemType || "movie")
+      ? normalizePlayerEpisodeMetadata(params.episodes, { fallbackSeason: params?.season })
+      : this.postPlayEpisodeMetadataProvided
+        ? params.episodes
+        : [];
+    this.postPlayEpisodeMetadataResolved = resolvePostPlayEpisodeMetadataResolved({
+      explicitResolution: params.nextEpisodeMetadataResolved,
+      episodes: this.episodes,
+      nextEpisodeVideoId: params.nextEpisodeVideoId
+    });
     this.episodePanelVisible = false;
     const explicitEpisodeIndex = this.episodes.findIndex((entry) => entry.id === params.videoId);
     const fallbackEpisodeIndex = this.episodes.findIndex((entry) => {
@@ -3089,6 +3102,7 @@ export const PlayerScreen = {
       void this.fetchParentalGuide();
       void this.fetchSkipIntervals();
       void this.hydratePauseOverlayMeta();
+      void this.loadPostPlayEpisodeMetadata(mountToken);
     }
     this.renderEpisodePanel();
     this.applyAspectMode({ showToast: false });
@@ -3238,19 +3252,76 @@ export const PlayerScreen = {
     if (!isSeriesItemType(this.params?.itemType || "movie")) {
       return true;
     }
-    if (this.params?.nextEpisodeMetadataResolved === true) {
-      return true;
+    return Boolean(this.postPlayEpisodeMetadataResolved);
+  },
+
+  async loadPostPlayEpisodeMetadata(mountToken = null) {
+    const itemType = normalizeItemType(this.params?.itemType || "movie");
+    if (
+      !isSeriesItemType(itemType) ||
+      this.isExternalFrameMode() ||
+      this.isPostPlayEpisodeMetadataResolved() ||
+      !this.isActiveMountToken(mountToken)
+    ) {
+      return;
     }
-    if (this.params?.nextEpisodeMetadataResolved === false) {
-      return false;
+
+    const itemId = String(this.params?.itemId || this.params?.contentId || "").trim();
+    if (!itemId) {
+      return;
     }
-    // An explicitly supplied episode array is authoritative even when empty:
-    // an empty resolved list means that the series has no next episode. Keep
-    // the unresolved state distinct so a direct player route cannot show the
-    // post-play overlay before its episode metadata is known.
-    return Boolean(
-      this.postPlayEpisodeMetadataProvided || String(this.params?.nextEpisodeVideoId || "").trim()
-    );
+
+    try {
+      // Match Android's player-runtime ownership: resolve the canonical series
+      // metadata independently of whatever extras the stream route carried.
+      const result = await metaRepository.getMetaFromAllAddons(itemType, itemId);
+      if (
+        !this.isActiveMountToken(mountToken) ||
+        Router.getCurrent() !== "player" ||
+        result?.status !== "success" ||
+        !result?.data
+      ) {
+        return;
+      }
+
+      this.episodes = normalizePlayerEpisodeMetadata(result.data.videos, {
+        fallbackSeason: this.params?.season
+      });
+      this.postPlayEpisodeMetadataProvided = true;
+      this.postPlayEpisodeMetadataResolved = true;
+
+      const currentVideoId = String(this.params?.videoId || "").trim();
+      const currentEpisodeIndex = currentVideoId
+        ? this.episodes.findIndex((episode) => String(episode?.id || "") === currentVideoId)
+        : -1;
+      if (currentEpisodeIndex >= 0) {
+        this.episodePanelIndex = currentEpisodeIndex;
+      } else {
+        const currentSeason = this.params?.season == null ? null : Number(this.params.season);
+        const currentEpisode = Number(this.params?.episode || 0);
+        const positionIndex = this.episodes.findIndex(
+          (episode) =>
+            (currentSeason == null || Number(episode?.season) === currentSeason) &&
+            Number(episode?.episode) === currentEpisode
+        );
+        if (positionIndex >= 0) {
+          this.episodePanelIndex = positionIndex;
+        }
+      }
+
+      if (this.episodePanelVisible) {
+        this.syncEpisodePanelSeasonToIndex();
+        this.renderEpisodePanel();
+      }
+      this.evaluatePostPlayRecommendation();
+    } catch (error) {
+      // Android keeps the metadata gate unresolved on failure. Failing closed
+      // prevents a missing next-episode decision from changing post-play
+      // behavior or competing with autoplay.
+      if (this.isActiveMountToken(mountToken)) {
+        console.warn("Player episode metadata load failed", error);
+      }
+    }
   },
 
   blocksPostPlayRecommendation() {
@@ -7612,8 +7683,13 @@ export const PlayerScreen = {
   getPlaybackEventErrorDetail(eventDetail = {}) {
     const detail = eventDetail && typeof eventDetail === "object" ? eventDetail : {};
     const hlsResponseCode = Number(detail.hlsResponseCode || 0);
+    const avplayErrorDetail =
+      detail.avplayErrorDetail && typeof detail.avplayErrorDetail === "object"
+        ? JSON.stringify(detail.avplayErrorDetail)
+        : detail.avplayErrorDetail;
     return [
       detail.avplayError,
+      avplayErrorDetail,
       detail.hlsErrorType,
       detail.hlsErrorDetails,
       hlsResponseCode >= 400 && hlsResponseCode <= 599 ? `HTTP ${hlsResponseCode}` : "",
@@ -7786,6 +7862,10 @@ export const PlayerScreen = {
     const engineFs = candidate?.engineFs || raw?.engineFs || this.currentEngineFsStream || null;
     const mediaError = video?.error || null;
     const eventErrorDetail = this.getPlaybackEventErrorDetail(eventDetail);
+    const avplaySnapshot =
+      eventDetail?.avplaySnapshot || PlayerController.getAvPlayDiagnosticSnapshot?.() || null;
+    const avplayErrorDiagnostic =
+      eventDetail?.avplayErrorDetail || PlayerController.getLastAvPlayErrorDiagnostic?.() || null;
     const rememberedHlsError =
       typeof PlayerController.getLastHlsErrorDetail === "function"
         ? PlayerController.getLastHlsErrorDetail()
@@ -7851,6 +7931,46 @@ export const PlayerScreen = {
     );
     pushPlaybackDiagnosticLine(lines, "DASH error", eventDetail?.dashError);
     pushPlaybackDiagnosticLine(lines, "AVPlay error", eventDetail?.avplayError);
+    pushPlaybackDiagnosticLine(
+      lines,
+      "AVPlay error detail",
+      avplayErrorDiagnostic && typeof avplayErrorDiagnostic === "object"
+        ? JSON.stringify(avplayErrorDiagnostic)
+        : avplayErrorDiagnostic,
+      600
+    );
+    pushPlaybackDiagnosticLine(lines, "AVPlay state", avplaySnapshot?.state);
+    pushPlaybackDiagnosticLine(lines, "AVPlay current time ms", avplaySnapshot?.currentTimeMs);
+    pushPlaybackDiagnosticLine(lines, "AVPlay duration ms", avplaySnapshot?.durationMs);
+    pushPlaybackDiagnosticLine(
+      lines,
+      "AVPlay buffering",
+      avplaySnapshot?.buffering == null ? "" : String(Boolean(avplaySnapshot.buffering))
+    );
+    pushPlaybackDiagnosticLine(
+      lines,
+      "AVPlay buffering duration ms",
+      avplaySnapshot?.bufferingDurationMs
+    );
+    pushPlaybackDiagnosticLine(
+      lines,
+      "AVPlay buffering progress",
+      avplaySnapshot?.bufferingProgress == null ? "" : `${avplaySnapshot.bufferingProgress}%`
+    );
+    pushPlaybackDiagnosticLine(lines, "AVPlay current bandwidth", avplaySnapshot?.currentBandwidth);
+    pushPlaybackDiagnosticLine(lines, "AVPlay available bitrate", avplaySnapshot?.availableBitrate);
+    pushPlaybackDiagnosticLine(
+      lines,
+      "AVPlay audio tracks",
+      avplaySnapshot?.audioTracks?.length ? JSON.stringify(avplaySnapshot.audioTracks) : "",
+      900
+    );
+    pushPlaybackDiagnosticLine(
+      lines,
+      "AVPlay current streams",
+      avplaySnapshot?.currentStreams?.length ? JSON.stringify(avplaySnapshot.currentStreams) : "",
+      1200
+    );
     pushPlaybackDiagnosticLine(lines, "HTML media error", mediaError?.message || mediaError?.code);
     pushPlaybackDiagnosticLine(lines, "Video readyState", video?.readyState);
     pushPlaybackDiagnosticLine(lines, "Video networkState", video?.networkState);
@@ -8917,16 +9037,13 @@ export const PlayerScreen = {
     if (!nextEpisode && this.episodes.length) {
       const currentSeasonRaw = this.params?.season;
       const currentSeason = Number(currentSeasonRaw);
+      const hasCurrentSeason =
+        currentSeasonRaw != null && Number.isFinite(currentSeason) && currentSeason >= 0;
       const currentEpisode = Number(this.params?.episode || 0);
-      if (
-        currentSeasonRaw != null &&
-        Number.isFinite(currentSeason) &&
-        currentSeason >= 0 &&
-        currentEpisode > 0
-      ) {
+      if (currentEpisode > 0 && (currentSeasonRaw == null || hasCurrentSeason)) {
         const currentEntry = this.episodes.find(
           (episode) =>
-            Number(episode?.season || 0) === currentSeason &&
+            (!hasCurrentSeason || Number(episode?.season) === currentSeason) &&
             Number(episode?.episode || 0) === currentEpisode
         );
         nextEpisode = this.getNextEpisodeInSequence(currentEntry);
@@ -8962,13 +9079,23 @@ export const PlayerScreen = {
       return null;
     }
     const currentSeason = Number(currentEpisode?.season);
-    const sequence = this.episodes.filter((episode) =>
-      currentSeason === 0 ? Number(episode?.season) === 0 : Number(episode?.season) > 0
-    );
+    const hasCurrentSeason =
+      currentEpisode?.season != null && Number.isFinite(currentSeason) && currentSeason >= 0;
+    const sequence = hasCurrentSeason
+      ? this.episodes.filter((episode) =>
+          currentSeason === 0 ? Number(episode?.season) === 0 : Number(episode?.season) > 0
+        )
+      : [...this.episodes]
+          .filter((episode) => Number(episode?.episode || 0) > 0)
+          .sort(
+            (left, right) =>
+              (Number(left?.season) || 0) - (Number(right?.season) || 0) ||
+              Number(left?.episode || 0) - Number(right?.episode || 0)
+          );
     const currentIndex = sequence.findIndex(
       (episode) =>
         String(episode?.id || "") === String(currentEpisode?.id || "") ||
-        (Number(episode?.season || 0) === currentSeason &&
+        ((!hasCurrentSeason || Number(episode?.season) === currentSeason) &&
           Number(episode?.episode || 0) === Number(currentEpisode?.episode || 0))
     );
     return currentIndex >= 0 ? sequence[currentIndex + 1] || null : null;
@@ -11964,6 +12091,7 @@ export const PlayerScreen = {
   },
 
   setControlsVisible(visible, { focus = false } = {}) {
+    const wasControlsVisible = this.controlsVisible;
     this.controlsVisible = Boolean(visible);
     if (this.isExternalFrameMode()) {
       return;
@@ -11984,7 +12112,18 @@ export const PlayerScreen = {
       this.resetControlsAutoHide();
     } else {
       this.clearControlsAutoHide();
-      this.focusPlayerRootForHiddenControls();
+      // Android transfers focus to the visible next-episode overlay as part
+      // of the same controls-hidden state update. Smart manages focus
+      // manually, so waiting for the next playback tick leaves the DOM card
+      // selected while the logical focus remains on the player root.
+      if (wasControlsVisible) {
+        this.renderNextEpisodeCard();
+      }
+      if (this.controlFocusZone === "nextEpisode" && this.isNextEpisodeCardFocusable()) {
+        this.syncNextEpisodeCardFocusState();
+      } else {
+        this.focusPlayerRootForHiddenControls();
+      }
     }
   },
 
@@ -13926,20 +14065,11 @@ export const PlayerScreen = {
     if (Number(this.lastPlaybackProgressAt || 0) < startedAt) {
       return engineAlreadyValidated;
     }
-    const stablePlaybackMs = Date.now() - startedAt;
     if (this.playbackEngineValidated) {
       this.postValidationRecoveryValidationActive = false;
       this.postValidationSameEngineRecoveryAttempts = 0;
-      console.info("Playback engine remained stable after same-engine recovery", {
-        engine: currentEngine,
-        stablePlaybackMs
-      });
     } else {
       this.playbackEngineValidated = true;
-      console.info("Playback engine validated after stable playback", {
-        engine: currentEngine,
-        stablePlaybackMs
-      });
     }
     return true;
   },
@@ -15883,11 +16013,9 @@ export const PlayerScreen = {
       // not fire it; make ass.js capture requestAnimationFrame instead.
       forceRafFrameLoop: Environment.isWebOS(),
       // The webOS native pipeline can leave video.paused=true while the app
-      // is playing. Kick the newly-created renderer only when the controller
-      // and player UI both still consider playback active, so a paused
-      // selection does not start an uncancellable frame loop.
-      forcePlaybackFrameLoopKick:
-        Environment.isWebOS() && PlayerController.isPlaying && !this.paused
+      // is playing, and the UI paused flag can lag that state. The controller
+      // state is authoritative when deciding whether to kick the renderer.
+      forcePlaybackFrameLoopKick: Environment.isWebOS() && PlayerController.isPlaying
     });
     if (!renderer || typeof renderer.init !== "function") {
       return { applied: false, fallbackVtt: convertAssBodyToVtt(body) };

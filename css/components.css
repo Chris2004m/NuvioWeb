@@ -15107,6 +15107,13 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
   scroll-padding-bottom: 10px;
 }
 
+/* Android LazyColumn items keep their measured height. Do the same here so
+   legacy flex layouts expose real overflow instead of compressing cards until
+   the focus can move beyond the visible rail without scrolling. */
+.player-subtitle-rail > * {
+  flex: 0 0 auto;
+}
+
 .player-subtitle-rail::-webkit-scrollbar,
 .player-audio-track-list::-webkit-scrollbar {
   display: none;
@@ -15496,6 +15503,10 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
   background: transparent;
   border-color: var(--player-focus-ring);
   color: var(--player-atv-text-primary);
+}
+
+.player-subtitle-modal .player-dialog-item.selected.focused {
+  border-color: var(--player-focus-ring);
 }
 
 .player-dialog-item.selected .player-dialog-item-main,
