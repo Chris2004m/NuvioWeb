@@ -1805,7 +1805,22 @@ export const MetaDetailsScreen = {
       </div>
     `;
 
-    await this.loadDetail();
+    // Android composes Detail immediately and lets the ViewModel load metadata
+    // independently. The loading shell is already visible, so do not hold
+    // route completion or Back/D-pad handling on canonicalization or metadata
+    // requests.
+    const loadToken = this.detailLoadToken;
+    void this.loadDetail().catch((error) => {
+      if (
+        loadToken !== this.detailLoadToken ||
+        Router.getCurrent() !== "detail" ||
+        !this.container
+      ) {
+        return;
+      }
+      console.warn("Detail background load failed", error);
+      this.renderError("Unable to load detail.");
+    });
   },
 
   async loadDetail() {

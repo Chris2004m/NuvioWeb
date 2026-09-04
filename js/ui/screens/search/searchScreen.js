@@ -438,10 +438,14 @@ export const SearchScreen = {
     this.searchRouteEnterPending = true;
     this.activationGuardUntil = Date.now() + 220;
     this.layoutPrefs = LayoutPreferences.get();
+    const sidebarProfilePromise = getSidebarProfileState().catch((err) => {
+      console.warn("Search sidebar profile failed to load", err);
+      return null;
+    });
     try {
-      this.sidebarProfile = await getSidebarProfileState();
+      this.sidebarProfile = await getSidebarProfileState({ cacheOnly: true });
     } catch (err) {
-      console.warn("debug: fail on load", err);
+      console.warn("Search cached sidebar profile failed to load", err);
       this.sidebarProfile = null;
     }
     this.sidebarExpanded = false;
@@ -470,7 +474,6 @@ export const SearchScreen = {
     this.pendingPosterHoldTarget = null;
     this.pendingPosterHoldTimer = null;
     this.hydrateFromRouteState(navigationContext?.restoredState || null, params);
-    await this.refreshWatchedTitleIds();
     if (!navigationContext?.isBackNavigation) {
       this.focusZone = "content";
       this.sidebarExpanded = false;
@@ -478,24 +481,48 @@ export const SearchScreen = {
       this.pillIconOnly = false;
     }
     this.loadToken = (this.loadToken || 0) + 1;
+    const routeLoadToken = this.loadToken;
+    const watchedTitleIdsPromise = this.refreshWatchedTitleIds();
     const hasExplicitQuery = Boolean(String(params.query || "").trim());
     const restoredQuery = String(navigationContext?.restoredState?.query || "").trim();
     const shouldUseRestoredState = Boolean(
       navigationContext?.restoredState &&
       (!hasExplicitQuery || restoredQuery === String(params.query || "").trim())
     );
-    if (shouldUseRestoredState) {
-      this.render();
-      return;
-    }
-    this.renderLoading();
-    try {
-      await this.reloadRows();
-    } catch (err) {
-      console.error("searchScreen: Failed to load rows", err);
-      this.rows = [];
-      this.render();
-    }
+    // Android composes the search surface before catalog and watched-state IO
+    // completes. Paint the Smart TV shell now so the native input and sidebar
+    // remain usable while the row request runs in the background.
+    this.render();
+
+    void sidebarProfilePromise.then((profile) => {
+      if (!profile || routeLoadToken !== this.loadToken || Router.getCurrent() !== "search") {
+        return;
+      }
+      // The profile/avatar is cosmetic. Do not replace the search DOM after
+      // the user starts typing; the next render will use the refreshed value.
+      this.sidebarProfile = profile;
+    });
+
+    void (async () => {
+      try {
+        await watchedTitleIdsPromise;
+        if (routeLoadToken !== this.loadToken || Router.getCurrent() !== "search") {
+          return;
+        }
+        if (shouldUseRestoredState) {
+          this.requestRender();
+          return;
+        }
+        await this.reloadRows();
+      } catch (err) {
+        if (routeLoadToken !== this.loadToken || Router.getCurrent() !== "search") {
+          return;
+        }
+        console.error("searchScreen: Failed to load rows", err);
+        this.rows = [];
+        this.render();
+      }
+    })();
   },
 
   renderLoading() {

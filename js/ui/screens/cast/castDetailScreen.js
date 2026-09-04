@@ -160,7 +160,17 @@ export const CastDetailScreen = {
     }
 
     this.renderLoading();
-    await this.loadCastDetails();
+    const loadToken = this.loadToken;
+    // Android launches the person-detail request from the ViewModel after the
+    // loading surface is composed. Do the same so a slow TMDB request cannot
+    // hold the route or prevent Back from being handled.
+    void this.loadCastDetails().catch((error) => {
+      if (loadToken !== this.loadToken || Router.getCurrent() !== "castDetail") {
+        return;
+      }
+      console.warn("Cast detail background load failed", error);
+      this.renderError("Failed to load cast details.");
+    });
   },
 
   async getPersonIdFromName(name) {
@@ -186,12 +196,18 @@ export const CastDetailScreen = {
       const settings = TmdbSettingsStore.get();
       const apiKey = String(TMDB_API_KEY || "").trim();
       if (!apiKey) {
+        if (token !== this.loadToken || Router.getCurrent() !== "castDetail") {
+          return;
+        }
         this.renderError("TMDB API key not configured.");
         return;
       }
       let personId = String(this.params?.castId || "").trim();
       if (!personId || !/^\d+$/.test(personId)) {
         personId = await this.getPersonIdFromName(this.params?.castName || "");
+      }
+      if (token !== this.loadToken || Router.getCurrent() !== "castDetail") {
+        return;
       }
       if (!personId) {
         this.renderError("Cast profile not found.");
@@ -201,6 +217,9 @@ export const CastDetailScreen = {
       const language = normalizeTmdbLanguageCode(settings.language || "en-US");
       const url = `${TMDB_BASE_URL}/person/${encodeURIComponent(personId)}?api_key=${encodeURIComponent(apiKey)}&language=${encodeURIComponent(language)}&append_to_response=combined_credits,images`;
       const response = await fetch(url);
+      if (token !== this.loadToken || Router.getCurrent() !== "castDetail") {
+        return;
+      }
       if (!response.ok) {
         this.renderError("Failed to load cast details.");
         return;
@@ -274,6 +293,9 @@ export const CastDetailScreen = {
 
       this.render();
     } catch (error) {
+      if (token !== this.loadToken || Router.getCurrent() !== "castDetail") {
+        return;
+      }
       console.warn("Cast detail load failed", error);
       this.renderError("Failed to load cast details.");
     }

@@ -2189,6 +2189,8 @@ export const SettingsScreen = {
   async mount(_params = {}, navigationContext = {}) {
     this.container = document.getElementById("settings");
     ScreenUtils.show(this.container);
+    this.settingsMountToken = (this.settingsMountToken || 0) + 1;
+    const mountToken = this.settingsMountToken;
     if (!this.handleWheelBound) {
       this.handleWheelBound = this.handleWheelEvent.bind(this);
       this.container.addEventListener("wheel", this.handleWheelBound, { passive: false });
@@ -2227,12 +2229,18 @@ export const SettingsScreen = {
     this.dialogFocusIndex = Number.isFinite(this.dialogFocusIndex) ? this.dialogFocusIndex : 0;
     this.sidebarExpanded = false;
     this.pillIconOnly = false;
-    const [sidebarProfile, initialModel] = await Promise.all([
-      getSidebarProfileState(),
-      this.collectModel()
-    ]);
-    this.sidebarProfile = sidebarProfile;
-    this.model = initialModel;
+    const sidebarProfilePromise = getSidebarProfileState().catch((error) => {
+      console.warn("Settings sidebar profile failed to load", error);
+      return null;
+    });
+    try {
+      this.sidebarProfile = await getSidebarProfileState({ cacheOnly: true });
+      this.model = await this.collectModel({ cacheOnly: true });
+    } catch (error) {
+      console.warn("Settings cached model failed to load", error);
+      this.sidebarProfile = this.sidebarProfile || null;
+      this.model = this.model || (await this.collectModel({ cacheOnly: true }));
+    }
     await this.render({ refreshModel: false });
     this.isMounted = true;
     this.memberAccessUnsubscribe = MemberAccessRepository.subscribe((access) => {
@@ -2245,6 +2253,37 @@ export const SettingsScreen = {
         return;
       }
       void this.render({ refreshModel: true });
+    });
+
+    // Android renders the settings surface from local state immediately and
+    // refreshes remote membership/profile data independently. Keep the same
+    // ordering on Smart TV so a slow Supabase/avatar request cannot hold the
+    // Settings route or its focus rail.
+    void (async () => {
+      const [sidebarProfile, model] = await Promise.all([
+        sidebarProfilePromise,
+        this.collectModel()
+      ]);
+      if (
+        !this.isMounted ||
+        mountToken !== this.settingsMountToken ||
+        Router.getCurrent() !== "settings"
+      ) {
+        return;
+      }
+      if (sidebarProfile) {
+        this.sidebarProfile = sidebarProfile;
+      }
+      this.model = model;
+      await this.render({ refreshModel: false });
+    })().catch((error) => {
+      if (
+        this.isMounted &&
+        mountToken === this.settingsMountToken &&
+        Router.getCurrent() === "settings"
+      ) {
+        console.warn("Settings background model refresh failed", error);
+      }
     });
   },
 
@@ -2312,13 +2351,15 @@ export const SettingsScreen = {
     return `data-focus-key="${escapeHtml(focusKey)}"`;
   },
 
-  async collectModel() {
+  async collectModel({ cacheOnly = false } = {}) {
     const authState = AuthManager.getAuthState();
     this.ensureAccountSyncOverview(authState);
     const [addons, profiles, memberAccess] = await Promise.all([
-      addonRepository.getInstalledAddons(),
+      addonRepository.getInstalledAddons(cacheOnly ? { cacheOnly: true } : {}),
       ProfileManager.getProfiles(),
-      MemberAccessRepository.getAccess().catch(() => MemberAccessRepository.getCurrentAccess())
+      cacheOnly
+        ? Promise.resolve(MemberAccessRepository.getCachedAccess())
+        : MemberAccessRepository.getAccess().catch(() => MemberAccessRepository.getCurrentAccess())
     ]);
     const activeProfileId = ProfileManager.getActiveProfileId();
     const pluginSources = PluginManager.listPluginSources();
@@ -8176,6 +8217,7 @@ export const SettingsScreen = {
 
   cleanup() {
     this.isMounted = false;
+    this.settingsMountToken = (this.settingsMountToken || 0) + 1;
     this.memberAccessUnsubscribe?.();
     this.memberAccessUnsubscribe = null;
     this.persistUiState();
