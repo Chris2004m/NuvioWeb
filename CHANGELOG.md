@@ -2,17 +2,11 @@
 
 ### Improvements & Fixes
 
-- Ported Android TV post-play recommendations to Smart TV, including next-episode selection, trailer playback, TMDB/Trakt/MDBList metadata, player preferences, focus, Back handling, and localized UI.
-- Aligned subtitle positioning and rendering with Android across WebVTT, ASS/SSA, and Tizen AVPlay, while preserving authored cue coordinates and improving subtitle-track reactivation.
-- Stabilized webOS plugin and proxy playback runtime, including companion-service lifecycle handling, port coordination, and safer playback fallback behavior.
-- Hardened the Smart TV Plugins screen with action-row focus constraints and provider-ID preservation for reliable D-pad navigation and provider actions.
-- Made Home, Library, Search/Discover, Catalog/Collection, Detail/Cast/TMDB, Settings, QR login, and Catalog Order routes render from local state before remote work completes, with stale-load guards that preserve focus and Back navigation.
-- Preserved library and watched state during synchronization by treating empty remote addon snapshots safely, caching and normalizing Trakt watched movies, and matching watched badges across TMDB, Trakt, IMDb, and slug identities.
-- Serialized profile plugin catalog synchronization and awaited user-initiated removals, preventing concurrent pushes from racing with pulls while respecting backoff and documenting the lifecycle.
-- Improved TV playback resilience with adaptive webOS live-HLS startup, Tizen AVPlay buffering and sanitized codec/error diagnostics, canonical episode metadata resolution, and reliable next-episode focus and sequencing.
-- Kept native search input navigation consistent with the Smart TV D-pad contract.
-- Made the startup update popup reliable on slow Tizen boots by waiting for the initial route and retrying transient GitHub release-check failures while preserving dismissal behavior.
-- Corrected the README release links so installer, Tizen WGT, and webOS downloads point to the Smart TV releases.
+- Aligned Smart TV playback with Android TV, including post-play recommendations, next-episode and trailer playback, TMDB/Trakt/MDBList metadata, player preferences, subtitle positioning, localized UI, and richer Tizen/webOS diagnostics (@WhiteGiso)
+- Stabilized plugin execution and playback across Tizen and webOS, with safer companion-service handling, proxy fallbacks, provider actions, profile synchronization, and reliable Plugins-screen D-pad focus (@WhiteGiso)
+- Improved Smart TV navigation and startup responsiveness by rendering Home, Library, Search, Discover, Catalogs, Collections, Detail, Settings, QR login, and TMDB routes before remote work completes while preserving focus and Back behavior (@WhiteGiso)
+- Preserved library and watched state across profiles and remote synchronization, including safe empty addon snapshots, Trakt watched movies, cross-provider title identity matching, and consistent native search navigation (@WhiteGiso)
+- Made startup update detection reliable on slow Tizen boots with route coordination and transient-request retries, and corrected the README release links for installer, Tizen WGT, and webOS downloads (@WhiteGiso)
 
 ## 1.0.5
 
