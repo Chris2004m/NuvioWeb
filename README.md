@@ -18,7 +18,7 @@ Nuvio TV supports **Samsung Tizen TVs from 2018 onward (Tizen 4+)** and **LG web
 On Tizen 4, some advanced audio/subtitle features may be limited, and torrent/P2P playback is unavailable by design.
 On Tizen 5+ and LG webOS, torrent/P2P uses only the bundled local companion service; no external torrent streaming server is configured or required.
 
-- [Nuvio TV Installer](https://github.com/NuvioMedia/NuvioTVSmart-Installer/releases/latest) for Windows, macOS, and Linux
+- [Nuvio TV Installer](https://github.com/NuvioMedia/NuvioTVSmart/releases/latest) for Windows, macOS, and Linux
 - [Samsung Tizen WGT](https://github.com/NuvioMedia/NuvioTVSmart/releases/latest) for manual installation
 - [LG webOS Homebrew repository](https://raw.githubusercontent.com/NuvioMedia/NuvioTVWebOS/main/webosbrew/apps.json)
 - [LG webOS IPK](https://github.com/NuvioMedia/NuvioTVSmart/releases/latest) for manual installation
