@@ -222,9 +222,10 @@ secondario che eredita il principale non può generare un push del set principal
 remoto prima di scaricare il push pendente, come Android, e non applica uno snapshot se una modifica
 locale arriva durante il pull.
 
-Il pull dei plugin viene eseguito nel ciclo startup completo, nel warm cycle e quando si entra nella
-pagina Plugin; le richieste concorrenti per lo stesso profilo vengono accorpate e le riconciliazioni
-sono serializzate. Questo è un pull dei dati secondo il flusso Android, non un preload del servizio:
+Il pull dei plugin viene eseguito nel ciclo startup completo, nel warm cycle e dopo l'attivazione di
+un profilo; la pagina Plugin osserva lo stato locale e non avvia un pull autonomo, come Android.
+Le richieste concorrenti per lo stesso profilo vengono accorpate e le riconciliazioni sono serializzate.
+Questo è un pull dei dati secondo il flusso Android, non un preload del servizio:
 se lo snapshot non richiede alcun documento remoto, `PluginService` non viene avviato.
 
 Se lo stato locale contiene repository `UNKNOWN` o righe remote opache, il pull non tenta un push che
