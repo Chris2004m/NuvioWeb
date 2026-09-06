@@ -2472,10 +2472,6 @@ export const ProfileSelectionScreen = {
       );
       ThemeManager.apply({ enforceAccess: true, access: memberAccess });
       I18n.apply();
-      // Profile activation is the last gate before entering the experience.
-      // On supported Tizen this waits for PluginService's actual HTTP health
-      // response; on older Tizen the coordinator returns skipped.
-      await StartupSyncService.ensurePluginServiceReady();
       const experienceRoute = await resolveExperienceRoute(profileId);
       await Router.navigate(
         experienceRoute,

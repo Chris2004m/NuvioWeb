@@ -261,9 +261,6 @@ async function enterWithLastProfile({ restoreWebOsRoute = false } = {}) {
       console.warn("Stream badge image prerender failed", error);
     });
   }
-  // On supported Tizen this is the final PluginService readiness gate; on
-  // older Tizen the coordinator returns skipped because plugins are disabled.
-  await StartupSyncService.ensurePluginServiceReady();
   const experienceRoute = activeProfile ? await resolveExperienceRoute(activeProfile.id) : "home";
   const resumeRoute =
     restoreWebOsRoute && typeof Router.consumeWebOsResumeRoute === "function"
@@ -535,11 +532,15 @@ async function bootstrapApp() {
   if (shouldDisableTizenPluginSupport()) {
     markBootStage("PluginService disabled on Tizen below 6.0");
   } else {
-    markBootStage("Starting essential PluginService");
+    markBootStage("Starting optional PluginService");
     // The WRT bridge has already been loaded by index.html. Platform.init() is
-    // therefore the first stable point at which the service can be started;
-    // startLifecycleMonitor() blocks boot until the real /health response.
-    await PluginServiceClient.startLifecycleMonitor();
+    // therefore the first stable point at which the service can be started.
+    // PluginService is optional: keep its watchdog/recovery loop active, but
+    // never make the application shell wait for its initial /health response.
+    void PluginServiceClient.startLifecycleMonitor().catch(() => {
+      // Health diagnostics and the lifecycle watchdog own the retry/reporting
+      // path. A failed optional service must not fail application bootstrap.
+    });
   }
   applyPerformanceMode();
   markBootStage("Loading language resources");
@@ -623,10 +624,6 @@ async function bootstrapApp() {
       loginTrace("authenticated subscriber sync scheduled");
       routeAfterAuthentication().catch((error) => {
         console.warn("Failed to resolve authenticated route", error);
-        if (error?.code === "PLUGIN_SERVICE_NOT_READY") {
-          renderFatalError(error);
-          return;
-        }
         Router.navigate("profileSelection");
       });
     }
