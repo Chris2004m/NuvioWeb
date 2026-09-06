@@ -23992,18 +23992,6 @@ export const PlayerScreen = {
       }
     }
 
-    if (
-      !this.paused &&
-      this.controlsVisible &&
-      !this.isDialogOpen() &&
-      Boolean(event?.repeat) &&
-      (keyCode === 37 || keyCode === 39)
-    ) {
-      this.focusProgressBar();
-      this.beginSeekPreview(keyCode === 37 ? -1 : 1, true);
-      return;
-    }
-
     if (!this.controlsVisible) {
       if (keyCode === 37) {
         this.autoHideControlsAfterSeek = false;
