@@ -18,6 +18,7 @@ import { ThemeManager } from "../../ui/theme/themeManager.js";
 import { MemberAccessRepository } from "../../data/remote/supabase/memberAccessRepository.js";
 import { I18n } from "../../i18n/index.js";
 import { hasProfileSettingsCloudSyncPending } from "../../data/local/profileScopedStore.js";
+import { Platform } from "../../platform/index.js";
 import {
   getSyncBackoffRemainingMs,
   isSyncBackoffActive,
@@ -591,11 +592,16 @@ export const StartupSyncService = {
       return false;
     }
 
-    // PluginSyncService is the hard Tizen startup barrier. It verifies the
-    // service's HTTP /health response before opening its remote transaction;
-    // keep it first and outside runSurface so a missing port cannot be
-    // downgraded to an ordinary recoverable surface error.
-    await PluginSyncService.pull(activeProfileId);
+    // Tizen's PluginService must be ready before plugin reconciliation because
+    // its service transport can otherwise leave a queued transaction in an
+    // ambiguous state. On webOS the service is optional for account sync: a
+    // missing service must not prevent watched items and watch progress from
+    // refreshing the Home Continue Watching row.
+    if (Platform.isTizen()) {
+      await PluginSyncService.pull(activeProfileId);
+    } else {
+      await runSurface("plugins", () => PluginSyncService.pull(activeProfileId));
+    }
 
     await Promise.all([
       runSurface("collections", () => CollectionSyncService.pull(activeProfileId)),

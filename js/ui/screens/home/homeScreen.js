@@ -3989,16 +3989,9 @@ export const HomeScreen = {
   // Constrained TV generations (plus low-end devices) cannot afford the animated
   // spring scroll on every focus move: each move runs a ~440ms rAF loop writing
   // scrollTop/scrollLeft per frame, which stacks into seconds of input lag. Snap
-  // focus scrolling instead for the constrained runtime profile. Smart TVs use
-  // the same input-safe snap even when their browser generation is modern:
-  // runtime generation is not a guarantee that the TV compositor can sustain
-  // the Android-style spring camera under discrete D-pad input.
+  // focus scrolling instead for the constrained runtime profile.
   shouldUseImmediateFocusScroll() {
-    return Boolean(
-      this.isPerformanceConstrained() ||
-      getTvRuntimePerformanceProfile().isTvRuntime ||
-      globalThis.document?.body?.classList?.contains("smart-tv-motion-reduced")
-    );
+    return this.isPerformanceConstrained();
   },
 
   hasCollectionHomeRows() {
@@ -4137,9 +4130,9 @@ export const HomeScreen = {
   },
 
   shouldProgressivelyRenderDeferredRows() {
-    if (Platform.isWebOS() && this.hasCollectionHomeRows()) {
-      return false;
-    }
+    // Publish each deferred batch as soon as it resolves. Collections are part
+    // of the visible Home order too; waiting for every catalog request makes
+    // the rows below the first batch appear to be missing on webOS.
     return !this.isPerformanceConstrained();
   },
 
@@ -7000,9 +6993,6 @@ export const HomeScreen = {
     // Avoid overlapping flex-size transitions that leave stale poster layers on
     // constrained TV generations and low-end devices.
     const instant = Boolean(options?.instant || this.isPerformanceConstrained());
-    const smartTvMotionReduced = Boolean(
-      globalThis.document?.body?.classList?.contains("smart-tv-motion-reduced")
-    );
     const preserveHeroMedia = Boolean(options?.preserveHeroMedia);
     const excludeNode = options?.excludeNode instanceof HTMLElement ? options.excludeNode : null;
     const targets = new Set();
@@ -7024,11 +7014,10 @@ export const HomeScreen = {
         instant && target instanceof HTMLElement ? target.style.transition : "";
       const previousFrameTransition =
         instant && frame instanceof HTMLElement ? frame.style.transition : "";
-      // TV performance CSS marks these transitions !important, so the instant collapse must match it.
-      if (instant && !smartTvMotionReduced && target instanceof HTMLElement) {
+      if (instant && target instanceof HTMLElement) {
         target.style.setProperty("transition", "none", "important");
       }
-      if (instant && !smartTvMotionReduced && frame instanceof HTMLElement) {
+      if (instant && frame instanceof HTMLElement) {
         frame.style.setProperty("transition", "none", "important");
       }
       target.classList.remove("is-expanded", "is-trailer-active", "is-expanded-backdrop-ready");
@@ -7038,7 +7027,7 @@ export const HomeScreen = {
       } else {
         this.clearTrailerLayer(trailerLayer);
       }
-      if (instant && !smartTvMotionReduced && target instanceof HTMLElement) {
+      if (instant && target instanceof HTMLElement) {
         void target.offsetWidth;
         requestAnimationFrame(() => {
           if (target.isConnected) {
@@ -10530,7 +10519,11 @@ export const HomeScreen = {
     if (refreshIndex) {
       this.homeLazyImageHydrationNeedsIndexRefresh = true;
     }
-    if (deferUntilVerticalSettle && this.layoutMode === "modern") {
+    if (
+      deferUntilVerticalSettle &&
+      this.shouldUseImmediateFocusScroll() &&
+      this.layoutMode === "modern"
+    ) {
       if (this.homeLazyImageHydrationSettleTimer) {
         clearTimeout(this.homeLazyImageHydrationSettleTimer);
       }

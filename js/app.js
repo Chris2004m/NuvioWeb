@@ -173,16 +173,10 @@ function applyPerformanceMode() {
   // Keep the Tizen class as a platform-layout fallback; performance gating is
   // handled exclusively by the runtime profile above.
   const legacyTizen = Platform.isTizen();
-  // Smart-TV input remains Android-compatible, but the Home camera/card motion
-  // is intentionally reduced on webOS/Tizen because a modern TV runtime can
-  // still have a much slower compositor than the Android reference device.
-  const smartTvMotionReduced = tvRuntime.isTvRuntime;
   const rootClasses = document.documentElement.classList;
   const modernSidebarBlurCapable = !rootClasses.contains("no-backdrop-filter") && !constrained;
   document.documentElement.classList.toggle("performance-constrained", constrained);
   document.body.classList.toggle("performance-constrained", constrained);
-  document.documentElement.classList.toggle("smart-tv-motion-reduced", smartTvMotionReduced);
-  document.body.classList.toggle("smart-tv-motion-reduced", smartTvMotionReduced);
   document.documentElement.classList.toggle(
     "modern-sidebar-blur-capable",
     modernSidebarBlurCapable
