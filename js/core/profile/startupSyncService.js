@@ -289,6 +289,10 @@ export const StartupSyncService = {
     this.profileScopedSyncEnabled = true;
   },
 
+  ensurePluginServiceReady({ force = true } = {}) {
+    return PluginSyncService.ensureReadyForPull({ force });
+  },
+
   subscribeToPullCompleted(listener) {
     if (typeof listener !== "function") {
       return () => {};
@@ -587,12 +591,17 @@ export const StartupSyncService = {
       return false;
     }
 
+    // PluginSyncService is the hard Tizen startup barrier. It verifies the
+    // service's HTTP /health response before opening its remote transaction;
+    // keep it first and outside runSurface so a missing port cannot be
+    // downgraded to an ordinary recoverable surface error.
+    await PluginSyncService.pull(activeProfileId);
+
     await Promise.all([
       runSurface("collections", () => CollectionSyncService.pull(activeProfileId)),
       runSurface("home catalog settings", () =>
         HomeCatalogSettingsSyncService.pull(activeProfileId)
       ),
-      runSurface("plugins", () => PluginSyncService.pull(activeProfileId)),
       runSurface("addons", () => LibrarySyncService.pull()),
       runSurface("saved library", () => SavedLibrarySyncService.pull(activeProfileId))
     ]);

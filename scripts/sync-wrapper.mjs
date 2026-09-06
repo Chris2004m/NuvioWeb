@@ -19,8 +19,19 @@ const tizenEngineFsServiceDirName = "tizen";
 const tizenEngineFsServiceRelativePath = "services/tizen/enginefs-service.js";
 const tizenEngineFsRuntimeDirRelativePath = "services/tizen/runtime";
 const tizenPluginServiceRelativePath = "services/tizen/plugin-service.js";
-const tizenPluginServiceSupportRelativePath = "services/plugin-http.cjs";
-const tizenPluginServiceBridgeRelativePath = "services/tizen/wrt-service-bridge.js";
+const tizenPluginServiceSourceRelativePath = "services/plugin-http.cjs";
+const obsoleteTizenPluginServiceSourceRelativePath = "services/tizen/plugin-http.cjs";
+const obsoleteTizenServiceBridgeRelativePath = "services/tizen/wrt-service-bridge.js";
+
+function buildTizenServiceBridgeMarkup() {
+  // Keep the WRT service import inline, matching Samsung's Web Service example.
+  return `  <script type="module">
+    import * as service from "wrt:service";
+    if (typeof window !== "undefined") {
+      window.__NUVIO_TIZEN_WRT_SERVICE__ = service;
+    }
+  </script>\n`;
+}
 const wrapperIconFiles = {
   webosIcon: {
     source: path.join(rootDir, "assets", "images", "icon.png"),
@@ -133,7 +144,7 @@ async function syncFolder(targetDir, folderName) {
 async function syncServiceFolder(
   targetDir,
   serviceDirName,
-  { targetServiceDirName = serviceDirName } = {}
+  { targetServiceDirName = serviceDirName, excludeNames = [] } = {}
 ) {
   const targetServicesDir = path.join(targetDir, "services");
   await mkdir(targetServicesDir, { recursive: true });
@@ -149,7 +160,17 @@ async function syncServiceFolder(
   await cp(
     path.join(rootDir, "services", serviceDirName),
     path.join(targetServicesDir, targetServiceDirName),
-    { recursive: true }
+    {
+      recursive: true,
+      filter(sourcePath) {
+        const relativePath = path.relative(
+          path.join(rootDir, "services", serviceDirName),
+          sourcePath
+        );
+        const topLevelName = relativePath.split(path.sep)[0];
+        return !excludeNames.includes(topLevelName);
+      }
+    }
   );
 }
 
@@ -234,7 +255,7 @@ function buildTizenIndexHtml() {
   <title>${appName}</title>
   <script src="$WEBAPIS/webapis/webapis.js"></script>
   <script src="assets/runtime/legacy-features.js"></script>
-  <script type="module" src="${tizenPluginServiceBridgeRelativePath}"></script>
+${buildTizenServiceBridgeMarkup()}
   <link rel="stylesheet" href="css/base.css" />
   <link rel="stylesheet" href="css/layout.css" />
   <link rel="stylesheet" href="css/components.css" />
@@ -266,8 +287,6 @@ function buildTizenMainJs({ engineFsServiceId = "", pluginServiceId = "" } = {})
   window.__NUVIO_TIZEN_ENGINEFS_SERVICE_ID__ = ${JSON.stringify(engineFsServiceId)};
   window.__NUVIO_TIZEN_PLUGIN_SERVICE_ENABLED__ = ${Boolean(pluginServiceId)};
   window.__NUVIO_TIZEN_PLUGIN_SERVICE_ID__ = ${JSON.stringify(pluginServiceId)};
-  window.__NUVIO_TIZEN_SERVICE_DIAGNOSTICS__ = true;
-  window.__NUVIO_PLUGIN_SYNC_DIAGNOSTICS__ = true;
 
   function registerRemoteKeys() {
     var tvInput = window.tizen && window.tizen.tvinputdevice;
@@ -386,7 +405,10 @@ async function updateWebOsMetadata(targetDir) {
 
 async function syncWebOsCompanionFiles(targetDir) {
   await syncServiceFolder(targetDir, webOsServiceSourceDirName, {
-    targetServiceDirName: webOsServiceDirName
+    targetServiceDirName: webOsServiceDirName,
+    // sync:webos currently synchronizes the media companion service only;
+    // keep the nested plugin service from being copied into that service.
+    excludeNames: ["plugin"]
   });
 
   const serviceDir = path.join(targetDir, "services", webOsServiceDirName);
@@ -433,13 +455,11 @@ async function syncTizenPluginService(targetDir) {
       path.join(targetDir, tizenPluginServiceRelativePath)
     ),
     cp(
-      path.join(rootDir, "services", "plugin-http.cjs"),
-      path.join(targetDir, tizenPluginServiceSupportRelativePath)
+      path.join(rootDir, tizenPluginServiceSourceRelativePath),
+      path.join(targetDir, tizenPluginServiceSourceRelativePath)
     ),
-    cp(
-      path.join(rootDir, tizenPluginServiceBridgeRelativePath),
-      path.join(targetDir, tizenPluginServiceBridgeRelativePath)
-    )
+    rm(path.join(targetDir, obsoleteTizenPluginServiceSourceRelativePath), { force: true }),
+    rm(path.join(targetDir, obsoleteTizenServiceBridgeRelativePath), { force: true })
   ]);
 }
 
@@ -487,8 +507,17 @@ function upsertTizenPrivilege(xml, privilegeName) {
   return insertIntoWidget(xml, `<tizen:privilege name="${privilegeName}"/>`);
 }
 
-function readTizenApplicationId(xml) {
-  const match = String(xml || "").match(/<tizen:application\b[^>]*\bid="([^"]+)"/);
+function removeTizenPrivilege(xml, privilegeName) {
+  const escaped = privilegeName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const privilegePattern = new RegExp(
+    `\\s*<tizen:privilege\\b[^>]*\\bname=["']${escaped}["'][^>]*/>`,
+    "gi"
+  );
+  return String(xml || "").replace(privilegePattern, "");
+}
+
+function readTizenPackageId(xml) {
+  const match = String(xml || "").match(/<tizen:application\b[^>]*\bpackage="([^"]+)"/);
   return match ? match[1] : "";
 }
 
@@ -507,10 +536,8 @@ function removeTizenPluginService(xml) {
 }
 
 function upsertTizenEngineFsService(xml, serviceId) {
-  // Keep the Apps2Samsung/wrapper manifest in the exact shape used by the
-  // working 1.0.1 P2P package. The service id is derived from the Tizen
-  // application id (not the package id), and the legacy service declaration
-  // intentionally has no type/category attributes.
+  // Keep the wrapper on the application-id service identifier used by the
+  // known-good EngineFS package and its Tizen launch path.
   const serviceSnippet = `<tizen:service id="${serviceId}" auto-restart="false" on-boot="false">
     <tizen:content src="${tizenEngineFsServiceRelativePath}"/>
     <tizen:name>Nuvio EngineFS Service</tizen:name>
@@ -582,15 +609,22 @@ async function updateTizenMetadata(targetDir) {
   configXml = upsertTizenRequiredVersion(configXml, compatibilityPolicy.tizenRequiredVersion);
   configXml = upsertTizenFeature(configXml, "http://tizen.org/feature/web.service");
   configXml = upsertTizenPrivilege(configXml, "http://tizen.org/privilege/application.launch");
-  const tizenAppId = readTizenApplicationId(configXml);
-  const engineFsServiceId = tizenAppId ? `${tizenAppId}.EngineFsService` : "";
-  const pluginServiceId = tizenAppId ? `${tizenAppId}.PluginService` : "";
+  // Remove privileges from the old application.kill shutdown fallback so
+  // wrapper upgrades remain installable with a public certificate.
+  configXml = removeTizenPrivilege(configXml, "http://tizen.org/privilege/application.info");
+  configXml = removeTizenPrivilege(configXml, "http://tizen.org/privilege/appmanager.kill");
+  const tizenPackageId = readTizenPackageId(configXml);
+  if (!tizenPackageId) {
+    throw new Error(
+      `Invalid Tizen wrapper config at ${configPath}: missing package attribute on <tizen:application>.`
+    );
+  }
+  const engineFsServiceId = `${tizenPackageId}.EngineFsService`;
+  const pluginServiceId = `${tizenPackageId}.PluginService`;
   if (engineFsServiceId) {
     configXml = upsertTizenEngineFsService(configXml, engineFsServiceId);
   }
-  if (pluginServiceId) {
-    configXml = upsertTizenPluginService(configXml, pluginServiceId);
-  }
+  configXml = upsertTizenPluginService(configXml, pluginServiceId);
 
   await writeTextFile(configPath, configXml);
   await syncTizenIcon(targetDir);

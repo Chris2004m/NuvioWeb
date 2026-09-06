@@ -1,31 +1,43 @@
-/* global module, require, process */
+/* global module, require */
 "use strict";
 
 var SERVICE_TAG = "[Nuvio PluginService]";
 var DEFAULT_PORT = 2711;
-var FALLBACK_PORT = 11471;
-
-function runtimeProcess() {
-  try {
-    return typeof process !== "undefined" && process ? process : null;
-  } catch (_) {
-    return null;
-  }
-}
-
-function runtimeEnv(name) {
-  var currentProcess = runtimeProcess();
-  return currentProcess && currentProcess.env ? currentProcess.env[name] : null;
-}
-
-var configuredPort = normalizePort(runtimeEnv("NUVIO_PLUGIN_SERVICE_PORT"), DEFAULT_PORT);
-var candidates = [configuredPort];
-if (FALLBACK_PORT !== configuredPort) candidates.push(FALLBACK_PORT);
-var candidateIndex = 0;
 var server = null;
 var activePort = 0;
 var startRequested = false;
 var lifecycleToken = 0;
+var STARTUP_LOG_EVENTS = {
+  onStart: true,
+  "plugin-http load success": true,
+  "listen called": true,
+  "server listening": true,
+  "startup failed": true,
+  "server error": true,
+  onStop: true,
+  "fetch received": true,
+  "fetch admission rejected": true,
+  "fetch validation failed": true,
+  "fetch begin": true,
+  "fetch transport selected": true,
+  "fetch transport module failed": true,
+  "fetch transport request begin": true,
+  "fetch transport request created": true,
+  "fetch transport request sent": true,
+  "fetch transport request threw": true,
+  "fetch transport timeout": true,
+  "fetch transport error": true,
+  "fetch response begin": true,
+  "fetch response error": true,
+  "fetch response stream error": true,
+  "fetch response ended": true,
+  "fetch response failed": true,
+  "fetch redirect": true,
+  "fetch callback success": true,
+  "fetch callback failed": true,
+  "fetch response sent": true,
+  "fetch route threw": true
+};
 
 function diagnosticError(error) {
   var details = {
@@ -37,17 +49,40 @@ function diagnosticError(error) {
   return details;
 }
 
-function diagnostic() {
-  // Diagnostic console output is intentionally disabled in normal builds.
-}
-
-function normalizePort(value, fallback) {
-  var parsed = Number(value);
-  return Number.isInteger(parsed) && parsed >= 1024 && parsed <= 65535 ? parsed : fallback;
-}
-
-function errorText(error) {
-  return error && error.stack ? error.stack : String(error || "Unknown plugin service error");
+function diagnostic(event, details) {
+  try {
+    if (typeof console === "undefined") return;
+    var eventName = String(event || "").toLowerCase();
+    var status = Number(
+      details &&
+        (details.status || details.providerStatus || details.statusCode || details.httpStatus)
+    );
+    var isFailure =
+      /failed|error|threw|unavailable|incompatible|timeout|invalid|exception|fatal|crash/.test(
+        eventName
+      ) || status >= 500;
+    var isWarning =
+      status >= 400 || /warn|warning|rejected|unsupported|degraded|stopped/.test(eventName);
+    if (!STARTUP_LOG_EVENTS[event] && !isFailure && !isWarning) return;
+    var logger = console.log;
+    if (isFailure) {
+      logger = console.error || console.log;
+    } else if (isWarning) {
+      logger = console.warn || console.log;
+    }
+    if (typeof logger !== "function") return;
+    var suffix = "";
+    if (details !== undefined) {
+      try {
+        suffix = " " + JSON.stringify(details);
+      } catch (_) {
+        suffix = " [details unavailable]";
+      }
+    }
+    logger.call(console, SERVICE_TAG + " " + event + suffix);
+  } catch (_) {
+    // Diagnostics must never prevent the service from starting or stopping.
+  }
 }
 
 function closeServer(target) {
@@ -77,83 +112,6 @@ function probeNodeRuntime() {
   }
 }
 
-function probeExistingPluginService(port, callback) {
-  var http;
-  try {
-    http = require("http");
-  } catch (_) {
-    callback(false);
-    return;
-  }
-  if (!http || typeof http.request !== "function") {
-    callback(false);
-    return;
-  }
-
-  var settled = false;
-  var request = null;
-  function finish(isPluginService) {
-    if (settled) return;
-    settled = true;
-    diagnostic("existing service probe result", {
-      port: port,
-      compatible: isPluginService === true
-    });
-    callback(isPluginService === true);
-  }
-
-  try {
-    request = http.request(
-      {
-        host: "127.0.0.1",
-        port: port,
-        path: "/health",
-        method: "GET"
-      },
-      function (response) {
-        var body = "";
-        response.on("data", function (chunk) {
-          if (body.length < 8192) body += String(chunk);
-        });
-        response.on("end", function () {
-          if (response.statusCode !== 200) {
-            finish(false);
-            return;
-          }
-          try {
-            var payload = JSON.parse(body || "{}");
-            finish(
-              payload &&
-                payload.returnValue === true &&
-                payload.service === "nuvio-plugin-network" &&
-                Number(payload.protocolVersion || 0) === 1
-            );
-          } catch (_) {
-            finish(false);
-          }
-        });
-        response.on("error", function () {
-          finish(false);
-        });
-      }
-    );
-    request.on("error", function () {
-      finish(false);
-    });
-    if (typeof request.setTimeout === "function") {
-      request.setTimeout(700, function () {
-        try {
-          request.destroy();
-        } catch (_) {}
-        finish(false);
-      });
-    }
-    request.end();
-  } catch (_) {
-    finish(false);
-  }
-}
-
 function failStart(token, error) {
   if (token !== lifecycleToken) return;
   startRequested = false;
@@ -163,31 +121,23 @@ function failStart(token, error) {
     server = null;
   }
   diagnostic("startup failed", { error: diagnosticError(error) });
-  console.error(SERVICE_TAG + " failed to listen", errorText(error));
 }
 
-function bindCandidate(token, pluginHttp) {
+function bindServer(token, pluginHttp) {
   if (token !== lifecycleToken) return;
-  if (candidateIndex >= candidates.length) {
-    failStart(token, new Error("No available local plugin service port"));
-    return;
-  }
-
-  var candidate = candidates[candidateIndex];
   var localServer;
-  diagnostic("bind attempt", {
-    port: candidate,
-    candidateIndex: candidateIndex,
-    candidates: candidates.slice()
-  });
+  diagnostic("bind attempt", { port: DEFAULT_PORT });
   try {
-    localServer = pluginHttp.createPluginHttpServer({ port: candidate });
+    localServer = pluginHttp.createPluginHttpServer({
+      port: DEFAULT_PORT,
+      trace: diagnostic
+    });
     if (!localServer || typeof localServer.listen !== "function") {
       throw new Error("Plugin HTTP server is unavailable");
     }
-    diagnostic("server factory success", { port: candidate });
+    diagnostic("server factory success", { port: DEFAULT_PORT });
   } catch (error) {
-    diagnostic("server factory failed", { port: candidate, error: diagnosticError(error) });
+    diagnostic("server factory failed", { port: DEFAULT_PORT, error: diagnosticError(error) });
     failStart(token, error);
     return;
   }
@@ -201,8 +151,8 @@ function bindCandidate(token, pluginHttp) {
       return;
     }
     listening = true;
-    activePort = candidate;
-    diagnostic("server listening", { port: candidate, loopback: "127.0.0.1" });
+    activePort = DEFAULT_PORT;
+    diagnostic("server listening", { port: DEFAULT_PORT, loopback: "127.0.0.1" });
   }
   function handleBindError(error) {
     if (token !== lifecycleToken) {
@@ -210,52 +160,17 @@ function bindCandidate(token, pluginHttp) {
       return;
     }
     if (listening) {
-      console.error(SERVICE_TAG + " server error", errorText(error));
+      diagnostic("server error", { port: DEFAULT_PORT, error: diagnosticError(error) });
       return;
     }
     if (handled) return;
     handled = true;
     diagnostic("server bind error", {
-      port: candidate,
-      error: diagnosticError(error),
-      hasFallback: candidateIndex < candidates.length - 1
+      port: DEFAULT_PORT,
+      error: diagnosticError(error)
     });
     closeServer(localServer);
     server = null;
-    if (error && error.code === "EADDRINUSE") {
-      probeExistingPluginService(candidate, function (isExistingPluginService) {
-        if (token !== lifecycleToken) return;
-        if (isExistingPluginService) {
-          activePort = candidate;
-          diagnostic("compatible existing service reused", { port: candidate });
-          console.warn(
-            SERVICE_TAG +
-              " port " +
-              candidate +
-              " is already served by a compatible PluginService; reusing it"
-          );
-          return;
-        }
-        if (candidateIndex < candidates.length - 1) {
-          candidateIndex += 1;
-          diagnostic("fallback port selected", {
-            previousPort: candidate,
-            nextPort: candidates[candidateIndex]
-          });
-          console.warn(
-            SERVICE_TAG +
-              " port " +
-              candidate +
-              " is already in use; trying 127.0.0.1:" +
-              candidates[candidateIndex]
-          );
-          bindCandidate(token, pluginHttp);
-          return;
-        }
-        failStart(token, error);
-      });
-      return;
-    }
     failStart(token, error);
   }
   localServer.on("listening", markListening);
@@ -265,8 +180,8 @@ function bindCandidate(token, pluginHttp) {
     // Keep the exact one-argument overload used by the working EngineFS
     // runtime. Some Tizen lightweight runtimes acknowledge the host/callback
     // overload without creating a reachable loopback listener.
-    localServer.listen(candidate);
-    diagnostic("listen called", { port: candidate, argumentCount: 1 });
+    localServer.listen(DEFAULT_PORT);
+    diagnostic("listen called", { port: DEFAULT_PORT, argumentCount: 1 });
   } catch (error) {
     handleBindError(error);
   }
@@ -279,25 +194,23 @@ function start() {
   }
 
   startRequested = true;
-  candidateIndex = 0;
   activePort = 0;
   var token = ++lifecycleToken;
-  var currentProcess = runtimeProcess();
-  diagnostic("onStart", {
-    candidates: candidates.slice(),
-    configuredPort: configuredPort,
-    nodeVersion:
-      currentProcess && currentProcess.version ? String(currentProcess.version) : "unknown"
-  });
+  diagnostic("onStart", { port: DEFAULT_PORT });
   try {
     probeNodeRuntime();
-    diagnostic("plugin-http load begin", { module: "../plugin-http.cjs" });
+    // Resolve the canonical implementation from the sibling services file.
+    // Tizen 6+ uses the same CommonJS layout in development and in the WGT.
+    diagnostic("plugin-http load begin", { module: "canonical-plugin-http" });
     var pluginHttp = require("../plugin-http.cjs");
     if (!pluginHttp || typeof pluginHttp.createPluginHttpServer !== "function") {
       throw new Error("Plugin HTTP implementation is unavailable");
     }
-    diagnostic("plugin-http load success", { createPluginHttpServer: true });
-    bindCandidate(token, pluginHttp);
+    diagnostic("plugin-http load success", {
+      module: "canonical-plugin-http",
+      createPluginHttpServer: true
+    });
+    bindServer(token, pluginHttp);
   } catch (error) {
     diagnostic("onStart failed before bind", { error: diagnosticError(error) });
     failStart(token, error);
@@ -308,18 +221,18 @@ function stop() {
   var previousPort = activePort;
   lifecycleToken += 1;
   startRequested = false;
-  candidateIndex = 0;
   activePort = 0;
   var current = server;
   server = null;
   closeServer(current);
-  diagnostic("onExit", { closed: Boolean(current), previousPort: previousPort });
+  diagnostic("onStop", {
+    closed: Boolean(current),
+    previousPort: previousPort
+  });
 }
 
-// Tizen Web Service applications are entered through onStart. Keeping the
-// server out of module evaluation makes startup, failure reporting and
-// shutdown follow the same lifecycle as the working EngineFS service.
+// Tizen Web Service applications are entered through onStart and stopped
+// through onStop. Keeping the server out of module evaluation makes startup,
+// failure reporting and shutdown follow the documented service lifecycle.
 module.exports.onStart = start;
-module.exports.onExit = stop;
-// Compatibility alias for older Tizen service runtimes.
 module.exports.onStop = stop;

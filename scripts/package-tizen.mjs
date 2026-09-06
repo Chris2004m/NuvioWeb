@@ -25,8 +25,20 @@ const defaultWidgetUri = "https://nuvio.tv";
 const tizenEngineFsServiceRelativePath = "services/tizen/enginefs-service.js";
 const tizenEngineFsRuntimeDirRelativePath = "services/tizen/runtime";
 const tizenPluginServiceRelativePath = "services/tizen/plugin-service.js";
-const tizenPluginServiceSupportRelativePath = "services/plugin-http.cjs";
-const tizenPluginServiceBridgeRelativePath = "services/tizen/wrt-service-bridge.js";
+const tizenPluginServiceSourceRelativePath = "services/plugin-http.cjs";
+const tizenEngineFsServicePort = 2710;
+const tizenPluginServicePort = 2711;
+
+function buildTizenServiceBridgeMarkup(enabled) {
+  if (!enabled) return "";
+  // Keep the WRT service import inline, matching Samsung's Web Service example.
+  return `  <script type="module">
+    import * as service from "wrt:service";
+    if (typeof window !== "undefined") {
+      window.__NUVIO_TIZEN_WRT_SERVICE__ = service;
+    }
+  </script>\n`;
+}
 
 function isTruthy(value) {
   return /^(1|true|yes|on)$/i.test(String(value || ""));
@@ -152,10 +164,10 @@ function validateStoreServiceOptions({
   }
 }
 
-function buildIndexHtml({ includePluginService = false } = {}) {
-  const pluginServiceBridge = includePluginService
-    ? `  <script type="module" src="${tizenPluginServiceBridgeRelativePath}"></script>\n`
-    : "";
+function buildIndexHtml({ includeEngineFsService = false, includePluginService = false } = {}) {
+  const pluginServiceBridge = buildTizenServiceBridgeMarkup(
+    includeEngineFsService || includePluginService
+  );
   return `<!DOCTYPE html>
 <html lang="en" class="no-flex-gap no-css-grid no-css-math no-backdrop-filter no-aspect-ratio">
 <head>
@@ -195,11 +207,6 @@ window.__NUVIO_TIZEN_ENGINEFS_SERVICE_ENABLED__ = ${includeEngineFsService};
 window.__NUVIO_TIZEN_ENGINEFS_SERVICE_ID__ = ${JSON.stringify(configuredServiceId)};
 window.__NUVIO_TIZEN_PLUGIN_SERVICE_ENABLED__ = ${includePluginService};
 window.__NUVIO_TIZEN_PLUGIN_SERVICE_ID__ = ${JSON.stringify(configuredPluginServiceId)};
-// Keep the next device run richly observable while the Tizen service boundary
-// is being diagnosed. The application-side diagnostics are gated by these
-// flags; the packaged service files keep their own startup logs.
-window.__NUVIO_TIZEN_SERVICE_DIAGNOSTICS__ = true;
-window.__NUVIO_PLUGIN_SYNC_DIAGNOSTICS__ = true;
 
 var tvInput = window.tizen && window.tizen.tvinputdevice;
 if (tvInput && typeof tvInput.registerKey === "function") {
@@ -278,19 +285,15 @@ async function stageTizenEngineFsService() {
 }
 
 async function stageTizenPluginService() {
-  await mkdir(path.join(stagingDir, "services", "tizen"), { recursive: true });
+  await mkdir(path.join(stagingDir, "services"), { recursive: true });
   await Promise.all([
     cp(
       path.join(rootDir, tizenPluginServiceRelativePath),
       path.join(stagingDir, tizenPluginServiceRelativePath)
     ),
     cp(
-      path.join(rootDir, "services", "plugin-http.cjs"),
-      path.join(stagingDir, tizenPluginServiceSupportRelativePath)
-    ),
-    cp(
-      path.join(rootDir, tizenPluginServiceBridgeRelativePath),
-      path.join(stagingDir, tizenPluginServiceBridgeRelativePath)
+      path.join(rootDir, tizenPluginServiceSourceRelativePath),
+      path.join(stagingDir, tizenPluginServiceSourceRelativePath)
     )
   ]);
 }
@@ -338,7 +341,7 @@ async function stagePackage({
     ),
     writeFile(
       path.join(stagingDir, "index.html"),
-      buildIndexHtml({ includePluginService }),
+      buildIndexHtml({ includeEngineFsService, includePluginService }),
       "utf8"
     ),
     writeFile(
@@ -601,11 +604,7 @@ function requiredTizenServiceFiles({
         ]
       : []),
     ...(requirePluginService
-      ? [
-          tizenPluginServiceRelativePath,
-          tizenPluginServiceSupportRelativePath,
-          tizenPluginServiceBridgeRelativePath
-        ]
+      ? [tizenPluginServiceRelativePath, tizenPluginServiceSourceRelativePath]
       : [])
   ];
 }
@@ -665,25 +664,78 @@ async function assertTizenServicePackage(
         `Tizen WGT main.js does not reference the declared PluginService id ${packageId}.PluginService.`
       );
     }
+    if (requireEngineFsService && /11470|11471/.test(mainJs)) {
+      throw new Error("Tizen WGT EngineFS/PluginService must not contain fallback ports.");
+    }
   }
 
-  if (requirePluginService) {
+  if (requireEngineFsService || requirePluginService) {
     const indexEntry = zip.file("index.html");
     if (!indexEntry) {
       throw new Error("Tizen WGT is missing index.html for the Tizen service bridge.");
     }
     const indexHtml = await indexEntry.async("string");
     if (
-      !/<script\s+type=["']module["']\s+src=["']services\/tizen\/wrt-service-bridge\.js["']/i.test(
+      !/<script\s+type=["']module["']>\s*import\s+\*\s+as\s+service\s+from\s+["']wrt:service["'];/is.test(
         indexHtml
       )
     ) {
-      throw new Error("Tizen WGT is missing the wrt:service module bridge.");
+      throw new Error("Tizen WGT is missing the inline wrt:service module bridge.");
     }
+  }
 
+  if (requirePluginService) {
+    const pluginServiceEntry = zip.file(tizenPluginServiceRelativePath);
+    const pluginServiceSource = await pluginServiceEntry.async("string");
+    const pluginHttpEntry = zip.file(tizenPluginServiceSourceRelativePath);
+    if (!pluginHttpEntry) {
+      throw new Error(
+        `Tizen WGT is missing the packaged PluginService helper ${tizenPluginServiceSourceRelativePath}.`
+      );
+    }
+    const pluginHttpSource = await pluginHttpEntry.async("string");
+    if (!pluginServiceSource.includes('require("../plugin-http.cjs")')) {
+      throw new Error(
+        "Tizen WGT PluginService must use the canonical relative plugin-http module."
+      );
+    }
+    if (
+      /NUVIO_TIZEN_PLUGIN_(HTTP|FETCH)_BUNDLED|tizen55BundledFetchFactory/.test(pluginServiceSource)
+    ) {
+      throw new Error(
+        "Tizen WGT PluginService must not contain the removed Tizen 5.5 compatibility bundle."
+      );
+    }
+    if (!pluginHttpSource.includes("function createPluginHttpServer(")) {
+      throw new Error("Tizen WGT PluginService helper is missing createPluginHttpServer.");
+    }
+    if (/legacyTizen55|allowInsecureTls|tizen-5\.5/i.test(pluginHttpSource)) {
+      throw new Error(
+        "Tizen WGT PluginService helper must not contain removed Tizen 5.5 compatibility logic."
+      );
+    }
+    if (!pluginServiceSource.includes(`var DEFAULT_PORT = ${tizenPluginServicePort};`)) {
+      throw new Error("Tizen WGT PluginService must use the fixed port 2711.");
+    }
+    if (/FALLBACK_PORT|candidateIndex/.test(pluginServiceSource)) {
+      throw new Error("Tizen WGT PluginService must not contain a fallback port.");
+    }
+  }
+
+  if (requireEngineFsService) {
     const engineFsEntry = zip.file(tizenEngineFsServiceRelativePath);
-    if (engineFsEntry && requireEngineFsService) {
-      const engineFsSource = await engineFsEntry.async("string");
+    const engineFsSource = await engineFsEntry.async("string");
+    if (
+      !new RegExp(
+        `process\\.env\\.PORT\\s*=\\s*process\\.env\\.PORT\\s*\\|\\|\\s*["']${tizenEngineFsServicePort}["']`
+      ).test(engineFsSource)
+    ) {
+      throw new Error("Tizen WGT EngineFS must use the fixed port 2710.");
+    }
+    if (/11470|11471|FALLBACK_PORT|candidateIndex/.test(engineFsSource)) {
+      throw new Error("Tizen WGT EngineFS/PluginService must not contain fallback ports.");
+    }
+    if (requirePluginService) {
       if (/require\(["']\.\/plugin-service\.js["']\)/.test(engineFsSource)) {
         throw new Error("Tizen WGT EngineFS and PluginService must remain independent.");
       }

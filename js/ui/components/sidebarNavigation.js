@@ -326,7 +326,12 @@ export function isSelectedSidebarAction(action, selectedRoute = "") {
   return getItemForAction(action)?.route === String(selectedRoute || "");
 }
 
-export function renderLegacySidebar({ selectedRoute = "home", profile = null, layout = {} } = {}) {
+export function renderLegacySidebar({
+  selectedRoute = "home",
+  profile = null,
+  layout = {},
+  expanded = false
+} = {}) {
   const items = sidebarItems(layout);
   const selectedItem = getSelectedItem(selectedRoute);
   const profileState = profile || {};
@@ -337,7 +342,7 @@ export function renderLegacySidebar({ selectedRoute = "home", profile = null, la
   const performanceConstrained = getTvRuntimePerformanceProfile().isPerformanceConstrained;
 
   return `
-    <aside class="home-sidebar root-sidebar root-sidebar-legacy${performanceConstrained ? " performance-constrained" : ""}"
+    <aside class="home-sidebar root-sidebar root-sidebar-legacy${expanded ? " expanded content-expanded" : ""}${performanceConstrained ? " performance-constrained" : ""}"
            data-selected-route="${selectedRoute}"
            data-collapsible="${collapsible ? "true" : "false"}">
       ${
@@ -484,7 +489,7 @@ export function renderRootSidebar({
       layout
     });
   }
-  return renderLegacySidebar({ selectedRoute, profile, layout });
+  return renderLegacySidebar({ selectedRoute, profile, layout, expanded });
 }
 
 export function bindRootSidebarEvents(
@@ -562,6 +567,10 @@ export function setLegacySidebarExpanded(container, expanded) {
   if (!sidebar) {
     return;
   }
+  if (sidebar._legacyCloseFrame) {
+    cancelAnimationFrame(sidebar._legacyCloseFrame);
+    sidebar._legacyCloseFrame = null;
+  }
   if (sidebar._legacyOpenTimer) {
     clearTimeout(sidebar._legacyOpenTimer);
     sidebar._legacyOpenTimer = null;
@@ -590,8 +599,9 @@ export function setLegacySidebarExpanded(container, expanded) {
   sidebar.classList.remove("content-expanded");
   syncSidebarStateClasses(container);
   void sidebar.offsetWidth;
-  requestAnimationFrame(() => {
+  sidebar._legacyCloseFrame = requestAnimationFrame(() => {
     sidebar.classList.remove("expanded");
+    sidebar._legacyCloseFrame = null;
     scheduleRootSidebarTextFit(container);
     syncSidebarStateClasses(container);
   });
