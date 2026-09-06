@@ -1,3 +1,12 @@
+## 1.0.8
+
+### Improvements & Fixes
+
+- Restored animated Home focus transitions and spring scrolling on modern webOS while retaining constrained-runtime safeguards (@WhiteGiso)
+- Fixed progressive Home catalog rendering and visible poster hydration so lower rows and artwork no longer arrive late during D-pad navigation (@WhiteGiso)
+- Prevented an unavailable optional webOS PluginService from blocking watched items, watch progress, and Continue Watching refreshes (@WhiteGiso)
+- Decoded escaped Android newline sequences when importing localized strings (@WhiteGiso)
+
 ## 1.0.7
 
 ### Improvements & Fixes
