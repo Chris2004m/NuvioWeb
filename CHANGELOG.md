@@ -1,3 +1,13 @@
+## 1.0.7
+
+### Improvements & Fixes
+
+- Disabled executable plugins and plugin pull/push synchronization on Samsung Tizen 4.x and 5.x while preserving the supported EngineFS/P2P path, and documented the platform limits (@WhiteGiso)
+- Standardized the supported Tizen 6+ service pipeline with fixed service ports, canonical WGT packaging, strict health readiness, watchdog recovery, and actionable plugin diagnostics (@WhiteGiso)
+- Unified the webOS media and plugin companion layout and hardened Smart TV service, playback, subtitle, navigation, and remote-request handling (@WhiteGiso)
+- Improved profile-scoped plugin and watched-state synchronization with provider identity matching and local-state preservation when tracking services fail (@WhiteGiso)
+- Removed obsolete Tizen compatibility bridges, legacy service definitions, and unused repository/store-submission assets (@WhiteGiso)
+
 ## 1.0.6
 
 ### Improvements & Fixes
