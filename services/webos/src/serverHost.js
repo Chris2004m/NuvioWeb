@@ -15,6 +15,16 @@ function patchWebOsMediaRuntimeCode(code, filename) {
     return source;
   }
 
+  // The vendored proxy always passes an https.Agent to node-fetch. node-fetch
+  // rejects that agent for http:// destinations, so an otherwise reachable
+  // HTTP stream is returned as a generic proxy 500. Keep the custom agent for
+  // HTTPS and let node-fetch select its normal HTTP agent for HTTP URLs.
+  var proxyAgentTarget = 'agent:httpsAgent,redirect:"manual"';
+  var proxyAgentReplacement = 'agent:"https:"===dest.protocol?httpsAgent:null,redirect:"manual"';
+  if (source.indexOf(proxyAgentReplacement) < 0 && source.indexOf(proxyAgentTarget) >= 0) {
+    source = source.replace(proxyAgentTarget, proxyAgentReplacement);
+  }
+
   // The app-side proxy URL builder encodes each header value once before
   // placing it in the route. The vendored EngineFS HLS rewriter serializes
   // those propagated headers again for every child URL, so normalize one

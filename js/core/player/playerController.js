@@ -373,9 +373,65 @@ export const PlayerController = {
       return null;
     };
 
+    const inferFromNestedQueryValues = (search) => {
+      if (!search?.forEach) {
+        return null;
+      }
+
+      let inferredType = null;
+      search.forEach((value) => {
+        if (inferredType) {
+          return;
+        }
+
+        const rawValue = String(value || "").trim();
+        if (!rawValue) {
+          return;
+        }
+
+        const candidates = [rawValue];
+        try {
+          const decodedValue = decodeURIComponent(rawValue);
+          if (decodedValue !== rawValue) {
+            candidates.push(decodedValue);
+          }
+        } catch (_) {
+          // Keep the original query value when it is only partially encoded.
+        }
+
+        candidates.some((candidate) => {
+          try {
+            const nestedUrl = new URL(candidate);
+            inferredType = inferByPath(nestedUrl.pathname, nestedUrl.searchParams);
+          } catch (_) {
+            inferredType = inferByPath(candidate, null);
+          }
+
+          if (inferredType) {
+            return true;
+          }
+
+          const normalizedCandidate = candidate.toLowerCase();
+          if (/(^|[=/_.?&-])m3u8($|[=/_.?&-])/.test(normalizedCandidate)) {
+            inferredType = "application/vnd.apple.mpegurl";
+          } else if (/(^|[=/_.?&-])mpd($|[=/_.?&-])/.test(normalizedCandidate)) {
+            inferredType = "application/dash+xml";
+          } else if (/(^|[=/_.?&-])isml?(?:\/manifest)?($|[=/_.?&-])/.test(normalizedCandidate)) {
+            inferredType = "application/vnd.ms-sstr+xml";
+          }
+          return Boolean(inferredType);
+        });
+      });
+
+      return inferredType;
+    };
+
     try {
       const parsed = new URL(raw);
-      return inferByPath(parsed.pathname, parsed.searchParams);
+      return (
+        inferByPath(parsed.pathname, parsed.searchParams) ||
+        inferFromNestedQueryValues(parsed.searchParams)
+      );
     } catch (_) {
       return inferByPath(raw, null);
     }
