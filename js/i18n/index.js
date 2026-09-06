@@ -492,6 +492,10 @@ function decodeUnicodeEscapes(value) {
   );
 }
 
+function decodeAndroidStringEscapes(value) {
+  return decodeUnicodeEscapes(value).replace(/\\n/g, "\n");
+}
+
 function parseStringsXml(source) {
   const parser = new DOMParser();
   const xml = parser.parseFromString(source, "application/xml");
@@ -504,7 +508,7 @@ function parseStringsXml(source) {
     if (!name) {
       return messages;
     }
-    messages[name] = decodeUnicodeEscapes(node.textContent || "");
+    messages[name] = decodeAndroidStringEscapes(node.textContent || "");
     return messages;
   }, {});
 }
