@@ -1,3 +1,12 @@
+## 1.0.10
+
+### Improvements & Fixes
+
+- Confirmed the Tizen 6.0 minimum for plugins after Tizen 5.5 service-runtime testing; retained the existing Tizen 5.x plugin and synchronization block while preserving EngineFS torrent support (@WhiteGiso)
+- Kept the production PluginService transport with certificate verification and excluded experimental Tizen 5.5 bundling and network adaptations (@WhiteGiso)
+- Refresh addon catalog responses after manual synchronization, including failed sync attempts, matching Android's refresh behavior (@WhiteGiso)
+- Isolated catalog cache entries by addon URL and prevented in-flight responses from repopulating invalidated cache entries (@WhiteGiso)
+
 ## 1.0.9
 
 ### Improvements & Fixes
