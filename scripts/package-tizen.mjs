@@ -694,6 +694,17 @@ async function assertTizenServicePackage(
       );
     }
     const pluginHttpSource = await pluginHttpEntry.async("string");
+    // Reject the experimental transport even if its old diagnostic marker is absent.
+    // EngineFS remains a separate service and must not replace plugin HTTPS.
+    if (
+      /nuvio-enginefs-fetch|plugin-network\.cjs|createLazyEngineFsTransport|rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED/.test(
+        pluginServiceSource + "\n" + pluginHttpSource
+      )
+    ) {
+      throw new Error(
+        "Tizen PluginService must retain its native certificate-verifying transport."
+      );
+    }
     if (!pluginServiceSource.includes('require("../plugin-http.cjs")')) {
       throw new Error(
         "Tizen WGT PluginService must use the canonical relative plugin-http module."
