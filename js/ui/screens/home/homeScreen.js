@@ -4486,6 +4486,15 @@ export const HomeScreen = {
     if (!display) {
       return;
     }
+    const previousHeroId = String(heroNode.dataset.itemId || "").trim();
+    const previousHeroType = String(heroNode.dataset.itemType || "")
+      .trim()
+      .toLowerCase();
+    const nextHeroId = String(hero?.id || "").trim();
+    const nextHeroType = String(hero?.type || "movie")
+      .trim()
+      .toLowerCase();
+    const isNewHero = previousHeroId !== nextHeroId || previousHeroType !== nextHeroType;
     heroNode.dataset.itemId = hero?.id || "";
     heroNode.dataset.itemType = hero?.type || "movie";
     heroNode.dataset.itemTitle = hero?.name || "Untitled";
@@ -4504,7 +4513,9 @@ export const HomeScreen = {
       const src = display.backdrop || "";
       if (backdrop instanceof HTMLImageElement) {
         const shouldFreezeBackdrop =
-          Boolean(hero?.heroMetaEnriching) && String(backdrop.getAttribute("src") || "").trim();
+          Boolean(hero?.heroMetaEnriching) &&
+          !isNewHero &&
+          String(backdrop.getAttribute("src") || "").trim();
         if (!shouldFreezeBackdrop) {
           animateHeroBackdropSwap(backdrop, src, display.title || "featured", heroCrossfadeMs, {
             transitionMode: heroTransitionMode
@@ -6228,15 +6239,33 @@ export const HomeScreen = {
         if (!latestHero || buildHeroIdentity(latestHero) !== scheduledHeroIdentity) {
           return;
         }
-        if (shouldEnrichModernHero(latestHero)) {
-          void this.enrichCurrentHeroAsync(latestHero, focusToken, { deferCommit: true });
+        const shouldEnrichHero = shouldEnrichModernHero(latestHero);
+        const focusedHero = shouldEnrichHero
+          ? { ...latestHero, heroMetaEnriching: true }
+          : { ...latestHero, heroMetaEnriching: false };
+
+        // Android publishes the newly focused preview as soon as focus settles;
+        // metadata enrichment remains an independent background update. Waiting
+        // for the addon request here leaves the previous backdrop on screen for
+        // several seconds on a slow TV and makes the later swap look like a
+        // flicker.
+        this.heroItem = focusedHero;
+        const matchedIndex = this.heroCandidates.findIndex(
+          (item) => String(item?.id || "") === String(focusedHero.id || "")
+        );
+        if (matchedIndex >= 0) {
+          this.heroIndex = matchedIndex;
+        }
+        this.applyHeroToDom();
+
+        if (shouldEnrichHero) {
+          void this.enrichCurrentHeroAsync(focusedHero, focusToken, { deferCommit: true });
           return;
         }
-        // Commit after focus settles, without making the whole Hero wait for
-        // both media requests. Each layer already starts/reuses its own
-        // guarded preload before swapping, matching Android's independent
-        // AsyncImage loading path.
-        void preloadHeroAssets(latestHero, "modern");
+
+        // Each media layer starts/reuses its own guarded preload before
+        // swapping, matching Android's independent AsyncImage loading path.
+        void preloadHeroAssets(focusedHero, "modern");
         if (Number(this.heroFocusToken || 0) !== focusToken) {
           return;
         }
@@ -6252,14 +6281,9 @@ export const HomeScreen = {
         if (!settledHero || buildHeroIdentity(settledHero) !== scheduledHeroIdentity) {
           return;
         }
-        this.heroItem = settledHero;
-        const matchedIndex = this.heroCandidates.findIndex(
-          (item) => String(item?.id || "") === String(settledHero.id || "")
-        );
-        if (matchedIndex >= 0) {
-          this.heroIndex = matchedIndex;
+        if (buildHeroIdentity(this.heroItem) !== scheduledHeroIdentity) {
+          return;
         }
-        this.applyHeroToDom();
       });
     };
     this.heroFocusDelayTimer = setTimeout(commitHeroWhenSettled, delay);
