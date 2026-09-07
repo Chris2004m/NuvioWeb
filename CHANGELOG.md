@@ -1,3 +1,13 @@
+## 1.0.9
+
+### Improvements & Fixes
+
+- Improved HLS request budgets, buffering and webOS playback recovery, and reduced transient stall log noise (@WhiteGiso)
+- Fixed next-episode overlay focus and extended next-episode source resolution time (@WhiteGiso)
+- Improved Home image hydration efficiency, hero overflow and Library Discover navigation (@WhiteGiso)
+- Expanded directional remote key normalization and added a webOS service path for TMDB lookups (@WhiteGiso)
+- Reconciled verified empty cloud plugin snapshots while preserving dirty local state, restricted plugin HTTP access to loopback clients and aligned provider request timeouts (@WhiteGiso)
+
 ## 1.0.8
 
 ### Improvements & Fixes
