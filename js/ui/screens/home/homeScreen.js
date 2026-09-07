@@ -127,7 +127,8 @@ import {
   HOME_PERF_DEBUG,
   HOME_RETURN_FOCUS_STATE_KEY,
   HOME_ROW_RETRY_TIMEOUT_MS,
-  HOME_ROW_TIMEOUT_MS
+  HOME_ROW_TIMEOUT_MS,
+  HOME_STABLE_GATE_TIMEOUT_MS
 } from "./homeConstants.js";
 import { mergeRefreshedHomeRows } from "./homeRowMerge.js";
 import {
@@ -4172,6 +4173,37 @@ export const HomeScreen = {
       cancelAnimationFrame(this.homeRenderFrame);
       this.homeRenderFrame = null;
     }
+  },
+
+  cancelInitialHomeLoadTimeout() {
+    if (this.initialHomeLoadTimeout) {
+      clearTimeout(this.initialHomeLoadTimeout);
+      this.initialHomeLoadTimeout = null;
+    }
+  },
+
+  releaseInitialHomeLoading() {
+    this.isInitialHomeLoading = false;
+    this.cancelInitialHomeLoadTimeout();
+  },
+
+  scheduleInitialHomeLoadTimeout(loadToken) {
+    this.cancelInitialHomeLoadTimeout();
+    this.initialHomeLoadTimeout = setTimeout(() => {
+      this.initialHomeLoadTimeout = null;
+      if (
+        loadToken !== this.homeLoadToken ||
+        Router.getCurrent() !== "home" ||
+        !this.isInitialHomeLoading
+      ) {
+        return;
+      }
+      // Match Android's stable Home gate: a slow or incomplete startup must
+      // reveal the available surface instead of keeping a full-screen loader
+      // indefinitely. The catalog requests continue in the background.
+      this.releaseInitialHomeLoading();
+      this.requestBackgroundRender();
+    }, HOME_STABLE_GATE_TIMEOUT_MS);
   },
 
   invalidateNavigationModel() {
@@ -9173,6 +9205,7 @@ export const HomeScreen = {
     // snapshot above is the first paint; keep the route and remote navigation
     // responsive while the existing progressive loader fills the rows.
     const loadToken = this.homeLoadToken;
+    this.scheduleInitialHomeLoadTimeout(loadToken);
     void this.loadData({ background: false })
       .then(() => {
         if (loadToken !== this.homeLoadToken || Router.getCurrent() !== "home") {
@@ -9197,7 +9230,7 @@ export const HomeScreen = {
         if (loadToken !== this.homeLoadToken || Router.getCurrent() !== "home") {
           return;
         }
-        this.isInitialHomeLoading = false;
+        this.releaseInitialHomeLoading();
         console.error("Home background load failed", error);
         this.requestBackgroundRender();
       });
@@ -9385,7 +9418,7 @@ export const HomeScreen = {
         if (!this.heroItem) {
           this.heroItem = this.pickInitialHero();
         }
-        this.isInitialHomeLoading = false;
+        this.releaseInitialHomeLoading();
         this.hasLoadedOnce = true;
         this.requestBackgroundRender();
         this.maybeStartPendingHomeBackgroundRefresh();
@@ -9452,7 +9485,7 @@ export const HomeScreen = {
     }
     this.loadedProfileId = String(ProfileManager.getActiveProfileId() || "");
     this.loadedWatchProgressSourceKey = watchProgressRepository.getContinueWatchingSourceKey();
-    this.isInitialHomeLoading = false;
+    this.releaseInitialHomeLoading();
     this.hasLoadedOnce = true;
     this.render();
     this.maybeStartPendingHomeBackgroundRefresh();
@@ -12324,6 +12357,7 @@ export const HomeScreen = {
     this.posterListPicker = null;
     this.persistCurrentFocusState();
     this.homeLoadToken = (this.homeLoadToken || 0) + 1;
+    this.cancelInitialHomeLoadTimeout();
     this._trackPaginationInFlight?.clear();
     this.cancelScheduledRender();
     this.cancelModernCameraFollow({ stopAnimations: true });
