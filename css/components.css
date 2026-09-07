@@ -6651,7 +6651,7 @@ button:focus-visible {
     calc(100% - var(--home-content-start) - var(--modern-hero-copy-right))
   );
   max-width: calc(100% - var(--home-content-start) - var(--modern-hero-copy-right));
-  overflow: hidden;
+  overflow: visible;
 }
 
 .home-screen-shell.home-layout-modern

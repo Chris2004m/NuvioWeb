@@ -2065,6 +2065,7 @@ export const LibraryScreen = {
     }
     if (
       action === "gotoSearch" ||
+      action === "gotoDiscover" ||
       action === "gotoLibrary" ||
       action === "gotoPlugin" ||
       action === "gotoSettings" ||

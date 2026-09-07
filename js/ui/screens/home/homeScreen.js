@@ -10592,11 +10592,10 @@ export const HomeScreen = {
       return;
     }
     const anchorRow = anchorNode?.closest?.(HOME_LAZY_IMAGE_ROW_SELECTOR) || null;
-    if (
-      !forceFullScan &&
-      anchorRow instanceof HTMLElement &&
-      anchorRow === this.lastHomeLazyImageHydrationAnchorRow
-    ) {
+    const useBoundedTvHydration = this.shouldUseImmediateFocusScroll();
+    const sameAnchorRow =
+      anchorRow instanceof HTMLElement && anchorRow === this.lastHomeLazyImageHydrationAnchorRow;
+    if (!forceFullScan && !refreshIndex && sameAnchorRow && !useBoundedTvHydration) {
       // The first pass for a focused row hydrates every image in that row. On
       // subsequent horizontal moves, the viewport geometry for every other row
       // is unchanged, so rescanning and measuring all distant lazy images only
@@ -10617,7 +10616,6 @@ export const HomeScreen = {
       this.container;
     const viewportRect = viewport.getBoundingClientRect();
     const constrained = this.isPerformanceConstrained();
-    const useBoundedTvHydration = this.shouldUseImmediateFocusScroll();
     // Android prefetches the visible window plus a small row/card neighborhood.
     // Keep the browser's DOM-mounted rows from turning every vertical focus
     // move into a burst of eager image requests.
@@ -10629,11 +10627,25 @@ export const HomeScreen = {
     const focusedRowMargin = focusedRow
       ? Math.max(96, Math.round(Number(anchorNode?.offsetWidth || 0) * 0.65))
       : horizontalMargin;
-    imageRows.forEach(({ row, images }) => {
+    const pendingLoads = [];
+    imageRows.forEach((entry) => {
+      const { row } = entry;
       if (row instanceof HTMLElement && !row.isConnected) {
         return;
       }
       const isFocusedRow = Boolean(anchorRow && row === anchorRow);
+      if (
+        sameAnchorRow &&
+        useBoundedTvHydration &&
+        !forceFullScan &&
+        !refreshIndex &&
+        !isFocusedRow
+      ) {
+        return;
+      }
+      const images = entry.images.filter((image) => image.isConnected && image.dataset.src);
+      entry.images = images;
+      if (!images.length) return;
       // Android's LazyRow loads the visible cards plus a small prefetch
       // neighborhood, not every item in the focused row. Keep the same
       // bounded behavior on Smart-TV runtimes; older/browser fallback paths
@@ -10672,10 +10684,14 @@ export const HomeScreen = {
         // The app already decides when an image is close enough to load. Leaving
         // loading="lazy" here delegates that decision back to old TV browsers,
         // which can miscalculate visibility inside the nested modern-home viewport.
-        image.loading = "eager";
-        image.removeAttribute("data-src");
-        image.src = src;
+        pendingLoads.push({ image, src });
       });
+    });
+    // Complete geometry reads before changing image layout/loading state.
+    pendingLoads.forEach(({ image, src }) => {
+      image.loading = "eager";
+      image.removeAttribute("data-src");
+      image.src = src;
     });
   },
 
