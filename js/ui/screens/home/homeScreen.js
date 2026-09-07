@@ -12423,11 +12423,15 @@ export const HomeScreen = {
       // Keep the rendered TV Home alive while another screen is shown. Rebuilding
       // a large catalog after display:none forces a full parse/layout/paint on
       // constrained TV browsers, while Android keeps the Home back-stack state.
+      // Keep the DOM cached, but remove it from the compositor completely. Some
+      // TV runtimes can still present composited descendants after visibility and
+      // transform changes, which lets the old Home bleed through a new route.
       this.container.style.position = "absolute";
       this.container.style.top = "0";
       this.container.style.right = "0";
       this.container.style.bottom = "0";
       this.container.style.left = "0";
+      this.container.style.display = "none";
       this.container.style.visibility = "hidden";
       this.container.style.pointerEvents = "none";
       this.container.classList.add("home-dom-preserved");

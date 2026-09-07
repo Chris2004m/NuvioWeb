@@ -2502,6 +2502,7 @@ button:focus-visible {
    retained layer offscreen as well as hiding it: some composited descendants
    can outlive ancestor visibility changes while the next route is mounting. */
 #home.home-dom-preserved {
+  display: none !important;
   z-index: -1;
   transform: translateX(-200vw) !important;
 }
@@ -25045,7 +25046,50 @@ html.tizen-tv #player.post-play-visible .tizen-avplay-object {
   }
 }
 
+/* Android TV's FocusMarqueeText keeps episode card nodes stable and only
+   scrolls the focused title when its text overflows. The wrapper is the clip
+   viewport; only the text span moves, so no duplicate title layer is painted. */
+.series-episode-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.series-episode-title-text {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.series-episode-title.is-marquee-active .series-episode-title-text {
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+  will-change: transform;
+  animation: nuvioEpisodeTitleMarquee var(--episode-marquee-duration, 1000ms) linear 3;
+}
+
+@keyframes nuvioEpisodeTitleMarquee {
+  0%,
+  12% {
+    transform: translateX(0);
+  }
+
+  88%,
+  100% {
+    transform: translateX(var(--episode-marquee-distance, 0px));
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .series-episode-title-text {
+    animation: none !important;
+  }
+
   .player-post-play-recommendation,
   .player-post-play-backdrop-image,
   .player-post-play-summary,
