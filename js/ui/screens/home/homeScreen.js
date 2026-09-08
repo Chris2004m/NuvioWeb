@@ -1267,7 +1267,8 @@ function normalizeEpisodeEntry(video = {}) {
     ),
     overview: firstNonEmpty(video?.overview, video?.description),
     released: firstNonEmpty(video?.released, video?.releaseInfo),
-    runtimeMinutes: parseRuntimeMinutes(video?.runtimeMinutes ?? video?.runtime ?? 0)
+    runtimeMinutes: parseRuntimeMinutes(video?.runtimeMinutes ?? video?.runtime ?? 0),
+    available: typeof video?.available === "boolean" ? video.available : null
   };
 }
 
@@ -1569,6 +1570,9 @@ function shouldShowNextUpEpisodeForContinueWatching(
   // same setting gate so missing metadata cannot make an upcoming episode
   // appear as an already aired Next Up item.
   if (releaseTime == null) {
+    if (candidate?.available === false) {
+      return false;
+    }
     return showUnairedNextUp;
   }
   if (releaseTime <= Date.now()) {
@@ -11152,15 +11156,8 @@ export const HomeScreen = {
         if (!meta) {
           return null;
         }
-        meta = await this.enrichContinueWatchingMetaWithTmdb(meta, {
-          contentId,
-          contentType,
-          season: progressEntry?.season,
-          episode: progressEntry?.episode
-        });
-
         const watchedEpisodeKeys = watchedEpisodeIndex.get(contentId) || new Set();
-        const nextEpisode = this.resolveNextUpEpisode(
+        const resolvedNextEpisode = this.resolveNextUpEpisode(
           meta,
           progressEntry,
           allProgress,
@@ -11169,6 +11166,22 @@ export const HomeScreen = {
             showUnairedNextUp: this.layoutPrefs?.showUnairedNextUp
           }
         );
+        if (!resolvedNextEpisode) {
+          return null;
+        }
+
+        // Android resolves the next episode from addon metadata first, then
+        // enriches that exact season/episode. This also keeps season rollover
+        // release dates on the same TMDB path as mid-season episodes.
+        meta = await this.enrichContinueWatchingMetaWithTmdb(meta, {
+          contentId,
+          contentType,
+          season: resolvedNextEpisode.season,
+          episode: resolvedNextEpisode.episode
+        });
+        const nextEpisode =
+          findEpisodeEntry(meta?.videos, resolvedNextEpisode.season, resolvedNextEpisode.episode) ||
+          resolvedNextEpisode;
         if (!nextEpisode) {
           return null;
         }
@@ -11304,7 +11317,8 @@ export const HomeScreen = {
       if (!tmdbId) {
         return meta;
       }
-      const enrichment = await withTimeout(
+      const isSeries = isSeriesTypeForContinueWatching(contentType);
+      const enrichmentPromise = withTimeout(
         TmdbMetadataService.fetchEnrichment({
           tmdbId,
           contentType,
@@ -11312,14 +11326,13 @@ export const HomeScreen = {
         }),
         2200,
         null
-      );
-      if (!enrichment) {
-        return meta;
-      }
-      const isSeries = isSeriesTypeForContinueWatching(contentType);
-      const episodeMap =
-        settings.useEpisodes && isSeries && item.season != null && Number(item.season) >= 0
-          ? await withTimeout(
+      ).catch(() => null);
+      const episodeMapPromise =
+        isSeries &&
+        (settings.useEpisodes || settings.useReleaseDates) &&
+        item.season != null &&
+        Number(item.season) >= 0
+          ? withTimeout(
               TmdbMetadataService.fetchEpisodeEnrichment({
                 tmdbId,
                 seasonNumbers: [Number(item.season)],
@@ -11327,8 +11340,13 @@ export const HomeScreen = {
               }),
               1800,
               new Map()
-            )
-          : new Map();
+            ).catch(() => new Map())
+          : Promise.resolve(new Map());
+      const [enrichment, episodeMap] = await Promise.all([enrichmentPromise, episodeMapPromise]);
+      if (!enrichment && !episodeMap.size) {
+        return meta;
+      }
+      const showEnrichment = enrichment || {};
       const videos =
         episodeMap.size && Array.isArray(meta.videos)
           ? meta.videos.map((video) => {
@@ -11346,13 +11364,17 @@ export const HomeScreen = {
               }
               return {
                 ...video,
-                title: episode.title || video.title,
-                overview: episode.overview || video.overview,
+                title: settings.useEpisodes ? episode.title || video.title : video.title,
+                overview: settings.useEpisodes
+                  ? episode.overview || video.overview
+                  : video.overview,
                 released: settings.useReleaseDates
                   ? episode.airDate || video.released
                   : video.released,
-                thumbnail: episode.thumbnail || video.thumbnail,
-                runtime: episode.runtime || video.runtime
+                thumbnail: settings.useEpisodes
+                  ? episode.thumbnail || video.thumbnail
+                  : video.thumbnail,
+                runtime: settings.useEpisodes ? episode.runtime || video.runtime : video.runtime
               };
             })
           : meta.videos;
@@ -11361,29 +11383,37 @@ export const HomeScreen = {
       );
       return {
         ...meta,
-        name: settings.useBasicInfo ? enrichment.localizedTitle || meta.name : meta.name,
+        name: settings.useBasicInfo ? showEnrichment.localizedTitle || meta.name : meta.name,
         description: settings.useBasicInfo
-          ? enrichment.description || meta.description
+          ? showEnrichment.description || meta.description
           : meta.description,
-        background: settings.useArtwork ? enrichment.backdrop || meta.background : meta.background,
-        backdrop: settings.useArtwork ? enrichment.backdrop || meta.backdrop : meta.backdrop,
-        poster: settings.useArtwork ? enrichment.poster || meta.poster : meta.poster,
-        thumbnail: settings.useArtwork ? enrichment.poster || meta.thumbnail : meta.thumbnail,
-        logo: settings.useArtwork ? enrichment.logo || meta.logo : meta.logo,
+        background: settings.useArtwork
+          ? showEnrichment.backdrop || meta.background
+          : meta.background,
+        backdrop: settings.useArtwork ? showEnrichment.backdrop || meta.backdrop : meta.backdrop,
+        poster: settings.useArtwork ? showEnrichment.poster || meta.poster : meta.poster,
+        thumbnail: settings.useArtwork ? showEnrichment.poster || meta.thumbnail : meta.thumbnail,
+        logo: settings.useArtwork ? showEnrichment.logo || meta.logo : meta.logo,
         genres:
-          settings.useBasicInfo && enrichment.genres?.length ? enrichment.genres : meta.genres,
+          settings.useBasicInfo && showEnrichment.genres?.length
+            ? showEnrichment.genres
+            : meta.genres,
         releaseInfo: settings.useReleaseDates
-          ? enrichment.releaseInfo || meta.releaseInfo
+          ? showEnrichment.releaseInfo || meta.releaseInfo
           : meta.releaseInfo,
-        released: settings.useReleaseDates ? enrichment.released || meta.released : meta.released,
-        runtime: settings.useDetails ? enrichment.runtime || meta.runtime : meta.runtime,
-        country: settings.useDetails ? enrichment.country || meta.country : meta.country,
-        language: settings.useDetails ? enrichment.language || meta.language : meta.language,
-        ageRating: settings.useDetails ? enrichment.ageRating || meta.ageRating : meta.ageRating,
-        status: settings.useDetails ? enrichment.status || meta.status : meta.status,
+        released: settings.useReleaseDates
+          ? showEnrichment.released || meta.released
+          : meta.released,
+        runtime: settings.useDetails ? showEnrichment.runtime || meta.runtime : meta.runtime,
+        country: settings.useDetails ? showEnrichment.country || meta.country : meta.country,
+        language: settings.useDetails ? showEnrichment.language || meta.language : meta.language,
+        ageRating: settings.useDetails
+          ? showEnrichment.ageRating || meta.ageRating
+          : meta.ageRating,
+        status: settings.useDetails ? showEnrichment.status || meta.status : meta.status,
         tmdbRating:
-          settings.useBasicInfo && typeof enrichment.rating === "number"
-            ? Number(enrichment.rating.toFixed(1))
+          settings.useBasicInfo && typeof showEnrichment.rating === "number"
+            ? Number(showEnrichment.rating.toFixed(1))
             : meta.tmdbRating,
         episodeThumbnail: settings.useArtwork
           ? currentEpisode?.thumbnail || meta.episodeThumbnail
