@@ -59,6 +59,7 @@ import {
   renderModernHomeLayout
 } from "./modernHomeLayout.js";
 import { formatHomeRuntimeText, shouldPreserveHomeRuntimeText } from "./homeRuntime.js";
+import { shouldKeepNextUpForAiringSetting } from "./nextUpAiringVisibility.js";
 import {
   buildCatalogDisableKey,
   buildCatalogOrderKey,
@@ -2034,8 +2035,10 @@ function readContinueWatchingDisplaySnapshot(scopeKey) {
   if (Date.now() - Number(entry.savedAt || 0) > CW_DISPLAY_SNAPSHOT_MAX_AGE_MS) {
     return [];
   }
+  const showUnairedNextUp = LayoutPreferences.get()?.showUnairedNextUp !== false;
   return entry.items
     .map((item) => refreshContinueWatchingReleaseState(item))
+    .filter((item) => shouldKeepNextUpForAiringSetting(item, showUnairedNextUp))
     .filter((item) => {
       if (!isCloudContinueWatchingItem(item)) {
         return true;
@@ -11268,9 +11271,14 @@ export const HomeScreen = {
       }
     );
 
-    return nextUpItems.sort(
-      (left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0)
-    );
+    // The episode search already applied this setting to the addon release
+    // date. Check it again here because TMDB release dates are merged in after
+    // that, so this is the first point where the card's final release state is
+    // known.
+    const showUnairedNextUp = this.layoutPrefs?.showUnairedNextUp !== false;
+    return nextUpItems
+      .filter((item) => shouldKeepNextUpForAiringSetting(item, showUnairedNextUp))
+      .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0));
   },
 
   persistContinueWatchingSnapshot() {
