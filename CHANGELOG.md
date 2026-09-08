@@ -1,3 +1,13 @@
+## 1.1.0
+
+### Improvements & Fixes
+
+- Aligned series detail episode rendering with Android TV through stable season and episode updates, duplicate-card removal, long-season virtualization, and focused title marquee behavior (@WhiteGiso)
+- Published focused Home heroes immediately, stabilized artwork crossfades and focused GIF cleanup, and prevented preserved Home content from bleeding into other routes (@WhiteGiso)
+- Improved Continue Watching Next Up resolution by enriching the selected season and episode, applying TMDB release dates independently, and filtering unavailable episodes (@WhiteGiso)
+- Kept Skip Intro visibility and D-pad focus synchronized with playback loading while containing left and right overlay navigation events (@WhiteGiso)
+- Restored Android-aligned poster focus scaling across Home layouts and fixed subtitle rail sizing on legacy Chromium TV runtimes (@WhiteGiso)
+
 ## 1.0.10
 
 ### Improvements & Fixes
