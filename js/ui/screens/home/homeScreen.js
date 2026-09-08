@@ -543,6 +543,23 @@ function preloadHeroAssets(hero, layoutMode = "modern") {
   return Promise.all([preloadImageSource(display?.backdrop), preloadImageSource(display?.logo)]);
 }
 
+function prepareHeroImageEnter(image, enterClass) {
+  // A reused image is already opaque. Without an immediate reset, changing src
+  // flashes the new artwork while CSS starts fading from 1 towards 0; the next
+  // animation frame then reverses that fade instead of entering from 0.
+  const transition = image.style.getPropertyValue("transition");
+  const priority = image.style.getPropertyPriority("transition");
+  image.style.setProperty("transition", "none", "important");
+  image.classList.remove("is-visible");
+  image.classList.add(enterClass);
+  void image.offsetWidth;
+  if (transition) {
+    image.style.setProperty("transition", transition, priority);
+  } else {
+    image.style.removeProperty("transition");
+  }
+}
+
 function animateHeroBackdropSwap(
   backdrop,
   nextSrc,
@@ -602,7 +619,7 @@ function animateHeroBackdropSwap(
         backdrop.classList.remove("placeholder");
         return;
       }
-      backdrop.classList.add("home-hero-backdrop-transition-enter");
+      prepareHeroImageEnter(backdrop, "home-hero-backdrop-transition-enter");
       backdrop.classList.remove("placeholder");
       backdrop.setAttribute("src", normalizedSrc);
       backdrop.setAttribute("alt", normalizedAlt);
@@ -635,11 +652,12 @@ function animateHeroBackdropSwap(
     let ghost = null;
     if (parent && currentSrc) {
       ghost = backdrop.cloneNode(false);
+      ghost.classList.remove("home-hero-backdrop-transition-enter", "is-visible");
       ghost.classList.add("home-hero-backdrop-transition-ghost");
       parent.insertBefore(ghost, backdrop);
     }
 
-    backdrop.classList.add("home-hero-backdrop-transition-enter");
+    prepareHeroImageEnter(backdrop, "home-hero-backdrop-transition-enter");
     backdrop.classList.remove("placeholder");
     backdrop.setAttribute("src", normalizedSrc);
     backdrop.setAttribute("alt", normalizedAlt);
@@ -717,7 +735,7 @@ function animateHeroLogoSwap(
         logoNode.setAttribute("alt", normalizedAlt);
         return;
       }
-      logoNode.classList.add("home-hero-logo-transition-enter");
+      prepareHeroImageEnter(logoNode, "home-hero-logo-transition-enter");
       logoNode.setAttribute("src", normalizedSrc);
       logoNode.setAttribute("alt", normalizedAlt);
       requestAnimationFrame(() => {
@@ -748,11 +766,12 @@ function animateHeroLogoSwap(
     let ghost = null;
     if (parent && currentSrc) {
       ghost = logoNode.cloneNode(false);
+      ghost.classList.remove("home-hero-logo-transition-enter", "is-visible");
       ghost.classList.add("home-hero-logo-transition-ghost");
       parent.insertBefore(ghost, logoNode);
     }
 
-    logoNode.classList.add("home-hero-logo-transition-enter");
+    prepareHeroImageEnter(logoNode, "home-hero-logo-transition-enter");
     logoNode.setAttribute("src", normalizedSrc);
     logoNode.setAttribute("alt", normalizedAlt);
 
@@ -6537,6 +6556,10 @@ export const HomeScreen = {
       return;
     }
     node.classList.remove("is-focus-gif-active");
+    // Match Android's focused-only GIF lifecycle: hiding the overlay is not
+    // enough on TV browsers because an <img> with src keeps decoding/animating.
+    // Preserve data-src so the asset can be loaded again on the next focus.
+    gifNode.removeAttribute("src");
   },
 
   syncFocusedCollectionCardState() {
