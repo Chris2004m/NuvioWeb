@@ -1,3 +1,12 @@
+## 1.1.1
+
+### Improvements & Fixes
+
+- Aligned Tizen VOD HLS playback with Android by preferring hls.js when MSE is available while retaining AVPlay and native HLS fallbacks (@WhiteGiso)
+- Preserved Tizen playback-proxy startup for packaged EngineFS services when generic web-service capability is unavailable (@WhiteGiso)
+- Prevented bright seams in Arabic HTML subtitles by compositing text opacity separately from the outline layer (@WhiteGiso)
+- Improved plugin provider connectivity by trying all resolved DNS addresses within the existing request deadline and tracing per-address connection timeouts (@WhiteGiso)
+
 ## 1.1.0
 
 ### Improvements & Fixes
