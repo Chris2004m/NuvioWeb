@@ -6957,6 +6957,7 @@ button:focus-visible {
 
 .home-screen-shell.home-layout-modern .home-poster-card {
   transition:
+    transform 160ms cubic-bezier(0.2, 0, 0, 1),
     flex-basis 180ms ease-out,
     min-width 180ms ease-out,
     max-width 180ms ease-out,
@@ -15088,6 +15089,9 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
 .player-subtitle-overlay-grid {
   display: grid;
   grid-template-columns: 220px 1fr 280px;
+  /* Bound the implicit row on Chromium 69: percentage-height rails otherwise
+     expand to their contents and never become scrollable (Android LazyColumn). */
+  grid-template-rows: minmax(0, 1fr);
   gap: 14px;
   flex: 1 1 0;
   height: auto;
@@ -20860,15 +20864,16 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
   background-color: transparent !important;
 }
 
-/* Keep poster focus feedback aligned with Android TV without restoring the
-   expensive home-wide animation set on constrained TV runtimes. */
-.performance-constrained .home-screen-shell.home-layout-classic .home-poster-card,
-.performance-constrained .home-screen-shell.home-layout-grid .home-poster-card {
+/* Android's PosterCardStyle uses a 1.02 focus scale independently of backdrop
+   expansion. Keep this targeted feedback on every layout and runtime. */
+.home-screen-shell.home-layout-classic .home-poster-card,
+.home-screen-shell.home-layout-grid .home-poster-card {
   transition: transform 160ms cubic-bezier(0.2, 0, 0, 1) !important;
 }
 
-.performance-constrained .home-screen-shell.home-layout-classic .home-poster-card.focused,
-.performance-constrained .home-screen-shell.home-layout-grid .home-poster-card.focused {
+.home-screen-shell.home-layout-classic .home-poster-card.focused,
+.home-screen-shell.home-layout-grid .home-poster-card.focused,
+.home-screen-shell.home-layout-modern .home-poster-card.focused {
   transform: translateZ(0) scale(1.02) !important;
 }
 
@@ -20876,6 +20881,7 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
    stays out of the D-pad scrolling path while preserving the Android motion. */
 .performance-constrained .home-screen-shell.home-layout-modern .home-poster-card {
   transition:
+    transform 160ms cubic-bezier(0.2, 0, 0, 1),
     flex-basis 180ms cubic-bezier(0.2, 0, 0, 1),
     min-width 180ms cubic-bezier(0.2, 0, 0, 1),
     max-width 180ms cubic-bezier(0.2, 0, 0, 1),
@@ -24026,6 +24032,8 @@ html.no-css-grid .player-subtitle-style-rail {
 
 html.no-css-grid .player-subtitle-rail {
   gap: 8px;
+  /* Stretch to the final flex row, not its pre-shrink percentage height. */
+  height: auto;
   padding: 16px 0;
 }
 
