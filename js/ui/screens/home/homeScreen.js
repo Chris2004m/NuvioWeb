@@ -3378,7 +3378,7 @@ export const HomeScreen = {
     this.lastMainFocus = target;
     this.rememberMainRowFocus(target);
     this.syncFocusedCollectionCardState();
-    this.scheduleModernHeroUpdate(target);
+    this.scheduleModernHeroUpdate(target, { immediate: true });
     this.scheduleFocusedPosterFlow(target);
     return true;
   },
@@ -3516,7 +3516,9 @@ export const HomeScreen = {
     if (!this.isRestoringFocusFromBack) {
       this.ensureMainVerticalVisibility(target, "down");
     }
-    this.scheduleModernHeroUpdate(target);
+    this.scheduleModernHeroUpdate(target, {
+      immediate: Boolean(this.isRestoringFocusFromBack)
+    });
     this.scheduleFocusedPosterFlow(target);
     return true;
   },
@@ -6167,7 +6169,7 @@ export const HomeScreen = {
     this.openContinueWatchingFromItem(item);
   },
 
-  scheduleModernHeroUpdate(node, { deferUntilVerticalSettle = false } = {}) {
+  scheduleModernHeroUpdate(node, { deferUntilVerticalSettle = false, immediate = false } = {}) {
     if (this.layoutMode !== "modern") {
       return;
     }
@@ -6196,9 +6198,9 @@ export const HomeScreen = {
     const previous = Number(this.lastModernHeroNavAt || 0);
     const isRapidNav =
       previous > 0 && now - previous < MODERN_HOME_CONSTANTS.heroRapidNavThresholdMs;
-    const delay = this.getHeroFocusDelay({ rapid: isRapidNav });
+    const delay = immediate ? 0 : this.getHeroFocusDelay({ rapid: isRapidNav });
     this.lastModernHeroNavAt = now;
-    if (isRapidNav) {
+    if (isRapidNav || immediate) {
       this.container
         ?.querySelector(".home-modern-hero-card")
         ?.classList.add("is-hero-focus-pending");

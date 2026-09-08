@@ -8344,10 +8344,10 @@ export const MetaDetailsScreen = {
     if (!target) {
       return false;
     }
-    const previous = this.container.querySelector(".focusable.focused");
-    this.container
-      .querySelectorAll(".focusable")
-      .forEach((node) => node.classList.remove("focused"));
+    const previous = this.container.querySelector(".focused");
+    this.container.querySelectorAll(".focused").forEach((node) => {
+      if (node !== target) node.classList.remove("focused");
+    });
     target.classList.add("focused");
     target.focus({ preventScroll: true });
     this.rememberEpisodeFocus(target, list);
@@ -8398,7 +8398,7 @@ export const MetaDetailsScreen = {
     } else if (typeof target.scrollIntoView === "function") {
       target.scrollIntoView({ block: "nearest", inline: "nearest" });
     }
-    if (!preserveVerticalScroll) {
+    if (!preserveVerticalScroll && !animated) {
       this.syncDetailScrollBounds(target);
     }
     this.syncEpisodeTitleMarquee();
