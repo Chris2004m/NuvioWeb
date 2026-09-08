@@ -7,6 +7,7 @@ const START_TIMEOUT_MS = 12000;
 const PROBE_TIMEOUT_MS = 2500;
 const SERVICE_START_CALL_TIMEOUT_MS = 4000;
 const TIZEN_DEFAULT_OPERATION = "http://tizen.org/appcontrol/operation/default";
+const PURPOSES_ALLOWING_LEGACY_SERVICE = new Set(["p2p", "playback-proxy"]);
 
 let startPromise = null;
 
@@ -301,14 +302,25 @@ export const TizenEngineFsService = {
         supportsP2p: capabilities.supportsP2p
       }
     });
-    if (purpose !== "p2p" && !capabilities.supportsWebService) {
+    // Samsung firmware may report web.service=false even when a packaged
+    // EngineFS service can still be started through the legacy service API.
+    // Only callers with an explicit local-service contract may use that path;
+    // generic and subtitle callers retain the capability gate.
+    if (
+      !capabilities.engineFsServicePackaged ||
+      (!PURPOSES_ALLOWING_LEGACY_SERVICE.has(purpose) && !capabilities.supportsWebService)
+    ) {
       diagnostic("ensure skipped", {
-        reason: "Tizen web service support is unavailable on this TV",
+        reason: !capabilities.engineFsServicePackaged
+          ? "Tizen EngineFS service is not packaged"
+          : "Tizen web service support is unavailable on this TV",
         purpose
       });
       return {
         status: "unsupported",
-        detail: "Tizen web service support is unavailable on this TV"
+        detail: !capabilities.engineFsServicePackaged
+          ? "Tizen EngineFS service is not packaged"
+          : "Tizen web service support is unavailable on this TV"
       };
     }
     if (purpose === "p2p" && !capabilities.supportsP2p) {
