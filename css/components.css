@@ -12525,7 +12525,7 @@ html.legacy-webos .debug-console-log-frame {
   font-weight: var(--player-subtitle-font-weight);
   line-height: 1.28;
   text-align: center;
-  text-shadow: var(--player-subtitle-shadow);
+  text-shadow: none;
   pointer-events: none;
 }
 
@@ -12666,12 +12666,26 @@ html.legacy-webos .debug-console-log-frame {
   text-shadow: var(--player-subtitle-shadow);
 }
 
-/* Composite the complete fill run before applying alpha. This avoids the
-   bright seams produced when Chromium blends overlapping Arabic glyphs twice. */
+/* Apply alpha to an isolated wrapper while keeping the font on its child.
+   Blink otherwise blends overlapping Arabic glyphs per glyph. */
 .player-html-subtitle-text {
   position: relative;
+  display: inline-block;
+  max-width: 100%;
   z-index: 1;
+  isolation: isolate;
   opacity: var(--player-subtitle-text-opacity);
+  text-shadow: none;
+}
+
+.player-html-subtitle-glyphs {
+  display: inline;
+  font-family: inherit;
+  font-size: inherit;
+  font-style: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  white-space: inherit;
   text-shadow: none;
 }
 

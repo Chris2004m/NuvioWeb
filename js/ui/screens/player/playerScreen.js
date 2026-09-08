@@ -16981,9 +16981,12 @@ export const PlayerScreen = {
             shadowNode.setAttribute("aria-hidden", "true");
             const textNode = document.createElement("span");
             textNode.className = "player-html-subtitle-text";
+            const glyphNode = document.createElement("span");
+            glyphNode.className = "player-html-subtitle-glyphs";
             const normalizedLine = normalizeWebOsHtmlSubtitleText(cleanLine);
             shadowNode.textContent = normalizedLine;
-            textNode.textContent = normalizedLine;
+            glyphNode.textContent = normalizedLine;
+            textNode.appendChild(glyphNode);
             lineNode.appendChild(shadowNode);
             lineNode.appendChild(textNode);
             cueNode.appendChild(lineNode);
