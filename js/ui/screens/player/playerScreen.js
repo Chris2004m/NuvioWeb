@@ -5324,16 +5324,21 @@ export const PlayerScreen = {
     label?.style.setProperty("-webkit-text-fill-color", color, "important");
   },
 
-  isSkipIntroButtonFocusable() {
+  isSkipIntroButtonVisible() {
     const container = this.uiRefs?.skipIntro;
     const button = container?.querySelector(".player-skip-intro-btn");
+    const isConnected =
+      button?.isConnected === true ||
+      (button?.isConnected == null && globalThis.document?.contains?.(button) === true);
+    return Boolean(button && isConnected && !container.classList.contains("hidden"));
+  },
+
+  // Match Android TV's focus graph: a rendered Skip button is the source of
+  // truth for D-pad navigation. Playback readiness controls rendering and the
+  // action itself, but must not invalidate a still-visible focus target.
+  isSkipIntroButtonFocusable() {
     return Boolean(
-      button &&
-      button.isConnected &&
-      !container.classList.contains("hidden") &&
-      this.activeSkipInterval &&
-      !this.skipIntervalDismissed &&
-      this.isSkipIntroPlaybackReady()
+      this.isSkipIntroButtonVisible() && this.activeSkipInterval && !this.skipIntervalDismissed
     );
   },
 
@@ -12799,12 +12804,14 @@ export const PlayerScreen = {
         }
         this.clearBufferingSpinnerTimer();
       }
+      this.renderSkipIntroButton();
       return;
     }
     if (this.isStartupErrorVisible()) {
       overlay.classList.add("hidden");
       bufferingSpinner?.classList.add("hidden");
       this.clearBufferingSpinnerTimer();
+      this.renderSkipIntroButton();
       return;
     }
     const showStartupOverlay =
@@ -12866,6 +12873,10 @@ export const PlayerScreen = {
         this.schedulePauseOverlay();
       }
     }
+    // Keep the Skip overlay in sync with loading/buffering transitions before
+    // the D-pad focus graph is evaluated. Android removes the composable from
+    // the focus graph as soon as it is no longer actually visible.
+    this.renderSkipIntroButton();
     this.renderNextEpisodeCard();
   },
 
@@ -23935,12 +23946,18 @@ export const PlayerScreen = {
     const overlayButtonsCoexist = skipOverlayFocusable && nextOverlayFocusable;
     if (overlayButtonsCoexist && (keyCode === 37 || keyCode === 39)) {
       if (keyCode === 39 && skipOverlayFocused && this.focusNextEpisodeCard()) {
+        event?.stopPropagation?.();
+        event?.stopImmediatePropagation?.();
         return;
       }
       if (keyCode === 37 && nextOverlayFocused && this.focusSkipIntroButton()) {
+        event?.stopPropagation?.();
+        event?.stopImmediatePropagation?.();
         return;
       }
       if (skipOverlayFocused || nextOverlayFocused) {
+        event?.stopPropagation?.();
+        event?.stopImmediatePropagation?.();
         this.resetControlsAutoHide();
         return;
       }
