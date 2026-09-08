@@ -31,7 +31,8 @@ import { TmdbSettingsStore } from "../../../data/local/tmdbSettingsStore.js";
 import { PlayerSettingsStore } from "../../../data/local/playerSettingsStore.js";
 import {
   MoreLikeThisSourcePreference,
-  TraktSettingsStore
+  TraktSettingsStore,
+  WatchProgressSource
 } from "../../../data/local/traktSettingsStore.js";
 import {
   requestJson as traktRequestJson,
@@ -60,9 +61,10 @@ import {
 import { StreamPreferencesStore } from "../../../data/local/streamPreferencesStore.js";
 import { buildWatchedTitleIdSet, isTitleItemWatched } from "../../components/watchedTitleBadge.js";
 import {
-  WATCH_PROGRESS_COMPLETED_THRESHOLD,
   getWatchProgressFraction,
+  isWatchProgressCompleted,
   isWatchProgressInProgress,
+  watchProgressCompletedThreshold,
   resolveWatchProgressResumePositionMs
 } from "../../../domain/model/watchProgress.js";
 
@@ -70,7 +72,6 @@ const TMDB_BASE_URL = "https://api.themoviedb.org/3";
 const EPISODE_HOLD_DELAY_MS = 650;
 const POSTER_HOLD_DELAY_MS = 650;
 const HERO_HOLD_DELAY_MS = 650;
-const DETAIL_PROGRESS_END_THRESHOLD = WATCH_PROGRESS_COMPLETED_THRESHOLD;
 const TRAKT_COMMENTS_LIMIT = 100;
 const DETAIL_SCROLL_STIFFNESS = 180;
 const DETAIL_SCROLL_DAMPING_RATIO = 0.95;
@@ -282,6 +283,59 @@ function normalizeEpisodes(videos = [], contentType = "") {
 
 function detailProgressFraction(progress = {}) {
   return getWatchProgressFraction(progress);
+}
+
+function isDetailProgressCompleted(progress = {}) {
+  return detailProgressFraction(progress) >= watchProgressCompletedThreshold(progress);
+}
+
+function isSimklProgressSourceSelected() {
+  return watchProgressRepository.getContinueWatchingSource() === WatchProgressSource.SIMKL;
+}
+
+function getDetailAllProgressPromise() {
+  const progressPromise = isSimklProgressSourceSelected()
+    ? watchProgressRepository.getAllForContinueWatching()
+    : watchProgressRepository.getAll();
+  return progressPromise.catch((error) => {
+    console.warn("Detail all-progress lookup failed", error);
+    return [];
+  });
+}
+
+function hasCompletedSimklMovieProgress(progressItems = [], contentReference = {}) {
+  return (Array.isArray(progressItems) ? progressItems : []).some((entry) => {
+    return (
+      String(entry?.source || "")
+        .trim()
+        .toLowerCase() === "simkl_playback" &&
+      String(entry?.contentType || "")
+        .trim()
+        .toLowerCase() === "movie" &&
+      entry?.season == null &&
+      entry?.episode == null &&
+      watchedItemsShareIdentity(entry, contentReference) &&
+      isWatchProgressCompleted(entry)
+    );
+  });
+}
+
+function hasInProgressSimklMovieProgress(progressItems = [], contentReference = {}) {
+  return (Array.isArray(progressItems) ? progressItems : []).some((entry) => {
+    return (
+      String(entry?.source || "")
+        .trim()
+        .toLowerCase() === "simkl_playback" &&
+      String(entry?.contentType || "")
+        .trim()
+        .toLowerCase() === "movie" &&
+      entry?.season == null &&
+      entry?.episode == null &&
+      watchedItemsShareIdentity(entry, contentReference) &&
+      detailProgressFraction(entry) > 0 &&
+      !isDetailProgressCompleted(entry)
+    );
+  });
 }
 
 function pushUniqueResumeId(ids, value) {
@@ -1946,7 +2000,7 @@ export const MetaDetailsScreen = {
     const isSavedPromise = savedLibraryRepository.isSaved(itemId);
     const progressPromise = watchProgressRepository.getResumeByContentId(itemId);
     const watchedItemPromise = watchedItemsRepository.isWatched(itemId);
-    const allProgressPromise = watchProgressRepository.getAll();
+    const allProgressPromise = getDetailAllProgressPromise();
     const allWatchedPromise = watchedItemsRepository.getAll();
 
     const [metaResult, isSaved, initialProgress, watchedItem, allProgressItems, allWatchedItems] =
@@ -1996,9 +2050,11 @@ export const MetaDetailsScreen = {
     }
     this.resumeProgress = progress && isWatchProgressInProgress(progress) ? progress : null;
     this.isSavedInLibrary = isSaved;
+    const detailContentReference = buildDetailContentReference(itemId, meta, this.params);
     this.isMarkedWatched = Boolean(
       projectedTitleWatched ||
-      watchedItem ||
+      (watchedItem && !hasInProgressSimklMovieProgress(allProgressItems, detailContentReference)) ||
+      hasCompletedSimklMovieProgress(allProgressItems, detailContentReference) ||
       (progress &&
         Number(progress.durationMs || 0) > 0 &&
         Number(progress.positionMs || 0) >= Number(progress.durationMs || 0))
@@ -2085,10 +2141,11 @@ export const MetaDetailsScreen = {
       void this.loadTraktComments({ force: true });
 
       const tasks = [];
+      const simklProgressSourceSelected = isSimklProgressSourceSelected();
       if (isSeriesDetailMeta(this.meta, this.episodes)) {
         tasks.push(withTimeout(this.fetchSeriesRatingsBySeason(this.meta), 5000, {}));
         const traktId = this.meta?.ids?.trakt;
-        if (traktId) {
+        if (traktId && !simklProgressSourceSelected) {
           tasks.push(
             withTimeout(
               detailWatchedEnrichmentService.enrichSeriesWatchedState(
@@ -2106,7 +2163,7 @@ export const MetaDetailsScreen = {
           withTimeout(this.fetchMovieCollection(this.meta), 5000, { items: [], name: "" })
         );
         const movieTraktId = this.meta?.ids?.trakt;
-        if (movieTraktId) {
+        if (movieTraktId && !simklProgressSourceSelected) {
           tasks.push(
             withTimeout(
               detailWatchedEnrichmentService.enrichMovieWatchedState(
@@ -2505,7 +2562,7 @@ export const MetaDetailsScreen = {
     const latestProgress = this.getLatestSeriesProgress(progress, progressItems);
     const progressEpisode = this.findEpisodeFromProgress(latestProgress);
     if (progressEpisode) {
-      if (detailProgressFraction(latestProgress) >= DETAIL_PROGRESS_END_THRESHOLD) {
+      if (isDetailProgressCompleted(latestProgress)) {
         return Number(
           this.getNextEpisodeAfter(progressEpisode)?.season || progressEpisode.season || 0
         );
@@ -2546,12 +2603,12 @@ export const MetaDetailsScreen = {
     if (!episodes.length) {
       return null;
     }
-    if (currentEpisode && detailProgressFraction(progress) < DETAIL_PROGRESS_END_THRESHOLD) {
+    if (currentEpisode && !isDetailProgressCompleted(progress)) {
       return currentEpisode;
     }
     const completedKeys =
       this.watchedEpisodeKeys instanceof Set ? new Set(this.watchedEpisodeKeys) : new Set();
-    if (currentEpisode && detailProgressFraction(progress) >= DETAIL_PROGRESS_END_THRESHOLD) {
+    if (currentEpisode && isDetailProgressCompleted(progress)) {
       completedKeys.add(
         `${Number(currentEpisode.season || 0)}:${Number(currentEpisode.episode || 0)}`
       );
@@ -2563,7 +2620,7 @@ export const MetaDetailsScreen = {
       }
       if (
         currentEpisode &&
-        detailProgressFraction(progress) >= DETAIL_PROGRESS_END_THRESHOLD &&
+        isDetailProgressCompleted(progress) &&
         Number(episode?.season || 0) === Number(currentEpisode.season || 0) &&
         Number(episode?.episode || 0) === Number(currentEpisode.episode || 0)
       ) {
@@ -2619,7 +2676,7 @@ export const MetaDetailsScreen = {
       }
       const key = `${season}:${episode}`;
       progressMap.set(key, entry);
-      if (detailProgressFraction(entry) >= DETAIL_PROGRESS_END_THRESHOLD) {
+      if (isDetailProgressCompleted(entry)) {
         watchedKeys.add(key);
       }
     });
@@ -2635,6 +2692,20 @@ export const MetaDetailsScreen = {
         episode > 0
       ) {
         watchedKeys.add(`${season}:${episode}`);
+      }
+    });
+
+    // A current Simkl playback session overrides an older watched marker until
+    // it reaches the same 80% completion threshold as Android TV.
+    progressMap.forEach((entry, key) => {
+      if (
+        String(entry?.source || "")
+          .trim()
+          .toLowerCase() === "simkl_playback" &&
+        detailProgressFraction(entry) > 0 &&
+        !isDetailProgressCompleted(entry)
+      ) {
+        watchedKeys.delete(key);
       }
     });
 
@@ -5812,7 +5883,7 @@ export const MetaDetailsScreen = {
       watchProgressRepository.getResumeByContentIds(
         this.resumeContentIds?.length ? this.resumeContentIds : [this.params?.itemId]
       ),
-      watchProgressRepository.getAll(),
+      getDetailAllProgressPromise(),
       watchedItemsRepository.getAll(),
       watchedItemsRepository.isWatched(this.params?.itemId)
     ]);
@@ -5823,9 +5894,15 @@ export const MetaDetailsScreen = {
       allWatchedItems
     );
     this.resumeProgress = progress && isWatchProgressInProgress(progress) ? progress : null;
+    const detailContentReference = buildDetailContentReference(
+      this.params?.itemId,
+      this.meta,
+      this.params
+    );
     this.isMarkedWatched = Boolean(
       projectedTitleWatched ||
-      watchedItem ||
+      (watchedItem && !hasInProgressSimklMovieProgress(allProgressItems, detailContentReference)) ||
+      hasCompletedSimklMovieProgress(allProgressItems, detailContentReference) ||
       (progress &&
         Number(progress.durationMs || 0) > 0 &&
         Number(progress.positionMs || 0) >= Number(progress.durationMs || 0))

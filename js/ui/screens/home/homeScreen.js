@@ -38,6 +38,7 @@ import { ProfileManager } from "../../../core/profile/profileManager.js";
 import { StartupSyncService } from "../../../core/profile/startupSyncService.js";
 import { Platform } from "../../../platform/index.js";
 import { WatchProgressSource } from "../../../data/local/traktSettingsStore.js";
+import { watchProgressCompletedThreshold } from "../../../domain/model/watchProgress.js";
 import {
   getTvHeroTransitionMode,
   getTvRuntimePerformanceProfile
@@ -99,7 +100,6 @@ import {
   CW_META_TIMEOUT_TV_MS,
   CW_NEXT_UP_META_TIMEOUT_MS,
   CW_NEXT_UP_NEW_SEASON_UNAIRED_WINDOW_DAYS,
-  CW_PROGRESS_END_THRESHOLD,
   CW_PROGRESS_START_THRESHOLD,
   CW_RENDER_BATCH_ITEMS_CONSTRAINED,
   CW_RENDER_BATCH_ITEMS_DEFAULT,
@@ -1222,12 +1222,14 @@ function isPosterWatchedType(type) {
 }
 
 function isCompletedForContinueWatching(item = {}) {
-  return progressFractionForContinueWatching(item) >= CW_PROGRESS_END_THRESHOLD;
+  return progressFractionForContinueWatching(item) >= watchProgressCompletedThreshold(item);
 }
 
 function isInProgressForContinueWatching(item = {}) {
   const fraction = progressFractionForContinueWatching(item);
-  return fraction >= CW_PROGRESS_START_THRESHOLD && fraction < CW_PROGRESS_END_THRESHOLD;
+  return (
+    fraction >= CW_PROGRESS_START_THRESHOLD && fraction < watchProgressCompletedThreshold(item)
+  );
 }
 
 function shouldTreatAsInProgressForContinueWatching(item = {}) {
