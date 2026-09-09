@@ -11499,6 +11499,29 @@ export const PlayerScreen = {
           }
         }
 
+        const isActiveTizenAvPlayStartupError =
+          !currentEngineFsState &&
+          isTizenAvPlayPlayback() &&
+          !this.hasPresentedPlaybackFrame &&
+          (mediaErrorCode === 2 || mediaErrorCode === 3 || mediaErrorCode === 4);
+        if (isActiveTizenAvPlayStartupError) {
+          // AVPlay's listener can report an error while the same native session
+          // is still able to finish prepare/play. Keep Android's loading-until-
+          // playback policy and let the existing startup watchdog decide whether
+          // the session is genuinely stuck.
+          this.loadingVisible = true;
+          this.updateLoadingVisibility();
+          if (!this.playbackStallTimer) {
+            this.schedulePlaybackStallGuard();
+          }
+          console.warn("Tizen AVPlay startup error deferred while native session is active", {
+            url: this.activePlaybackUrl,
+            mediaErrorCode,
+            avplayError
+          });
+          return;
+        }
+
         this.markPlaybackSourceFailed(this.activePlaybackUrl);
         const targetEngine =
           !terminalHlsHttpFailure &&
