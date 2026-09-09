@@ -38,6 +38,7 @@ import { catalogSkipStep, catalogSupportsExtra } from "../../../core/addons/home
 
 const POSTER_HOLD_DELAY_MS = 650;
 const PICKER_MENU_EXIT_MS = 160;
+const DISCOVER_POSTER_PREFETCH_MARGIN_PX = 640;
 
 function toTitleCase(value) {
   const raw = String(value || "").trim();
@@ -520,7 +521,7 @@ export const DiscoverScreen = {
                  <div class="seeall-card-poster-wrap">
                    ${
                      item.poster
-                       ? `<img class="seeall-card-poster-image" src="${escapeHtml(item.poster)}" alt="${escapeHtml(item.name || "content")}" loading="lazy" decoding="async" />`
+                       ? `<img class="seeall-card-poster-image" data-src="${escapeHtml(item.poster)}" alt="${escapeHtml(item.name || "content")}" loading="lazy" decoding="async" />`
                        : `<div class="seeall-card-poster placeholder"></div>`
                    }
                    ${isTitleItemWatched(item, this.watchedTitleIds) ? renderTitleWatchedBadge() : ""}
@@ -853,6 +854,7 @@ export const DiscoverScreen = {
     ScreenUtils.indexFocusables(this.container);
     this.buildNavigationModel();
     this.bindCardEvents();
+    this.scheduleDiscoverPosterHydration();
 
     if (this.isSidebarRootRoute() && this.focusZone === "sidebar") {
       this.focusSidebarNode();
@@ -1821,6 +1823,7 @@ export const DiscoverScreen = {
     this.bindCardEvents();
     this.bindShellEvents();
     this.bindPointerEvents();
+    this.scheduleDiscoverPosterHydration();
     if (this.pendingRestoreFocus) {
       const scrollMode = this.preserveViewportOnNextRender ? "none" : "center";
       this.pendingRestoreFocus = false;
@@ -1844,6 +1847,53 @@ export const DiscoverScreen = {
     this.syncOpenPickerScroll();
   },
 
+  scheduleDiscoverPosterHydration() {
+    if (!this.container || this.discoverPosterHydrationRaf) {
+      return;
+    }
+    if (typeof requestAnimationFrame !== "function") {
+      this.hydrateDiscoverPosterImages();
+      return;
+    }
+    this.discoverPosterHydrationRaf = requestAnimationFrame(() => {
+      this.discoverPosterHydrationRaf = 0;
+      this.hydrateDiscoverPosterImages();
+    });
+  },
+
+  hydrateDiscoverPosterImages() {
+    const scroller = this.getContentScroller();
+    if (!scroller) {
+      return;
+    }
+    const viewport = scroller.getBoundingClientRect();
+    const margin = DISCOVER_POSTER_PREFETCH_MARGIN_PX;
+    this.container?.querySelectorAll(".discover-card-poster-image[data-src]").forEach((image) => {
+      if (!(image instanceof HTMLImageElement) || !image.isConnected) {
+        return;
+      }
+      const rect = image.getBoundingClientRect();
+      const isNearViewport =
+        rect.bottom >= viewport.top - margin &&
+        rect.top <= viewport.bottom + margin &&
+        rect.right >= viewport.left - margin &&
+        rect.left <= viewport.right + margin;
+      if (!isNearViewport) {
+        return;
+      }
+      const src = String(image.dataset.src || "").trim();
+      if (!src) {
+        image.removeAttribute("data-src");
+        return;
+      }
+      // The app owns the visible-image decision. Do not delegate it to native
+      // lazy loading, which can delay posters inside the TV scroll container.
+      image.loading = "eager";
+      image.removeAttribute("data-src");
+      image.src = src;
+    });
+  },
+
   bindCardEvents() {
     this.container?.querySelectorAll(".seeall-card.focusable").forEach((node) => {
       if (node.__boundDiscoverCardHandlers) return;
@@ -1854,6 +1904,7 @@ export const DiscoverScreen = {
           node.dataset.itemId || this.lastFocusedDiscoverItemId || ""
         );
         this.savedScrollTop = this.container?.querySelector(".discover-main")?.scrollTop || 0;
+        this.scheduleDiscoverPosterHydration();
       });
       node.addEventListener("mouseenter", () => {
         this.lastFocusedKey = node.dataset.focusKey || this.lastFocusedKey;
@@ -1874,6 +1925,7 @@ export const DiscoverScreen = {
       "scroll",
       () => {
         this.savedScrollTop = Number(scroller.scrollTop || 0);
+        this.scheduleDiscoverPosterHydration();
         if (this.shouldAutoLoadMoreFromScroll(scroller)) {
           this.loadNextPage({ preserveViewport: true });
         }
@@ -2171,6 +2223,10 @@ export const DiscoverScreen = {
     resetDpadRepeat(this);
     this.endDiscoverVerticalFastScroll({ land: false });
     this.cancelScheduledRender();
+    if (this.discoverPosterHydrationRaf) {
+      cancelAnimationFrame(this.discoverPosterHydrationRaf);
+      this.discoverPosterHydrationRaf = 0;
+    }
     this.clearClosingPicker();
     this.lastRenderedOpenPicker = null;
     this.cancelPendingPosterHold();
