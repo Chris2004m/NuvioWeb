@@ -83,6 +83,20 @@ import { WebOsLunaService } from "../../../platform/webos/webosLunaService.js";
 import { StreamPreferencesStore } from "../../../data/local/streamPreferencesStore.js";
 import { buildStreamResumeIdentity } from "../../../core/streams/streamResumeIdentity.js";
 import { TrackPreferencesStore } from "../../../data/local/trackPreferencesStore.js";
+import { SubtitleDelayPreferencesStore } from "../../../data/local/subtitleDelayPreferencesStore.js";
+import {
+  SUBTITLE_AUTO_SYNC_MARGIN_MS,
+  SUBTITLE_AUTO_SYNC_MAX_VISIBLE_CUES,
+  SUBTITLE_DELAY_MAX_MS,
+  SUBTITLE_DELAY_MIN_MS,
+  SUBTITLE_DELAY_OVERLAY_TIMEOUT_MS,
+  SUBTITLE_DELAY_STEP_MS,
+  calculateSubtitleAutoSyncDelayMs,
+  formatSubtitleAutoSyncDelay,
+  formatSubtitleAutoSyncTimestamp,
+  sanitizeSubtitleAutoSyncCueText,
+  selectSubtitleAutoSyncVisibleCues
+} from "../../../core/player/subtitleAutoSync.js";
 import {
   hasEpisodeAired as hasEpisodeAiredRule,
   shouldEnterStillWatchingPrompt,
@@ -525,9 +539,6 @@ const SUBTITLE_LANGUAGE_OFF_KEY = "__off__";
 const SUBTITLE_LANGUAGE_UNKNOWN_KEY = "__unknown__";
 const SUBTITLE_TEXT_COLORS = ["#FFFFFF", "#D9D9D9", "#FFD700", "#00E5FF", "#FF5C5C", "#00FF88"];
 const SUBTITLE_OUTLINE_COLORS = ["#000000", "#FFFFFF", "#00E5FF", "#FF5C5C"];
-const SUBTITLE_DELAY_MIN_MS = -60000;
-const SUBTITLE_DELAY_MAX_MS = 60000;
-const SUBTITLE_DELAY_STEP_MS = 100;
 const SUBTITLE_FONT_STEP = 10;
 const SUBTITLE_VERTICAL_OFFSET_STEP = SUBTITLE_VERTICAL_OFFSET_PLAYER_STEP;
 const AUDIO_AMPLIFICATION_MIN_DB = 0;
@@ -2688,6 +2699,7 @@ export const PlayerScreen = {
     }
     this.params = params;
     this.trackPreferenceContentId = this.getTrackPreferenceContentId();
+    this.subtitleDelayPreferenceVideoId = this.getSubtitleDelayPreferenceVideoId();
     this.rememberedAudioTrackPreference = TrackPreferencesStore.getAudio(
       this.trackPreferenceContentId
     );
@@ -2779,6 +2791,20 @@ export const PlayerScreen = {
     this.embeddedSubtitleTracks = [];
     this.nextEpisodeTransitionMeta = null;
     this.subtitleDialogVisible = false;
+    this.subtitleDelayOverlayVisible = false;
+    this.subtitleDelayFocusTarget = "slider";
+    this.subtitleDelayOverlayStatus = "";
+    this.subtitleDelayOverlayTimer = null;
+    this.subtitleTimingDialogVisible = false;
+    this.subtitleTimingStage = "wait";
+    this.subtitleAutoSyncCues = [];
+    this.subtitleAutoSyncCapturedVideoMs = null;
+    this.subtitleAutoSyncStatus = "";
+    this.subtitleAutoSyncError = "";
+    this.subtitleAutoSyncLoading = false;
+    this.subtitleAutoSyncLoadedTrackKey = "";
+    this.subtitleAutoSyncLoadToken = 0;
+    this.subtitleAutoSyncCueFocusIndex = 0;
     this.subtitleDialogTab = "builtIn";
     this.subtitleDialogIndex = 0;
     this.subtitleLanguageRailIndex = 0;
@@ -3112,7 +3138,7 @@ export const PlayerScreen = {
 
     const playerSettings = PlayerSettingsStore.get();
     this.subtitleRenderMode = normalizeSubtitleRenderMode(playerSettings.subtitleRenderMode);
-    this.subtitleDelayMs = 0;
+    this.subtitleDelayMs = SubtitleDelayPreferencesStore.get(this.subtitleDelayPreferenceVideoId);
     this.subtitleStyleSettings = {
       ...playerSettings.subtitleStyle,
       preferredLanguage: extractSubtitleLanguageSetting(
@@ -7351,6 +7377,8 @@ export const PlayerScreen = {
 
         <div id="playerModalBackdrop" class="player-modal-backdrop hidden"></div>
         <div id="playerSubtitleDialog" class="player-modal player-subtitle-modal hidden"></div>
+        <div id="playerSubtitleDelayOverlay" class="player-subtitle-delay-overlay hidden"></div>
+        <div id="playerSubtitleTimingDialog" class="player-subtitle-timing-modal hidden"></div>
         <div id="playerAudioDialog" class="player-modal player-audio-modal hidden"></div>
         <div id="playerSpeedDialog" class="player-modal player-speed-modal hidden"></div>
         <div id="playerSourcesPanel" class="player-sources-panel hidden"></div>
@@ -7396,6 +7424,8 @@ export const PlayerScreen = {
     if (!this.isExternalFrameMode()) {
       this.renderControlButtons();
       this.renderSubtitleDialog();
+      this.renderSubtitleDelayOverlay();
+      this.renderSubtitleTimingDialog();
       this.renderAudioDialog();
       this.renderSpeedDialog();
       this.renderSourcesPanel();
@@ -7446,6 +7476,8 @@ export const PlayerScreen = {
           postPlay: uiRoot.querySelector("#playerPostPlayRecommendation"),
           modalBackdrop: uiRoot.querySelector("#playerModalBackdrop"),
           subtitleDialog: uiRoot.querySelector("#playerSubtitleDialog"),
+          subtitleDelayOverlay: uiRoot.querySelector("#playerSubtitleDelayOverlay"),
+          subtitleTimingDialog: uiRoot.querySelector("#playerSubtitleTimingDialog"),
           audioDialog: uiRoot.querySelector("#playerAudioDialog"),
           speedDialog: uiRoot.querySelector("#playerSpeedDialog"),
           sourcesPanel: uiRoot.querySelector("#playerSourcesPanel"),
@@ -8089,7 +8121,11 @@ export const PlayerScreen = {
     this.sourcesLoading = false;
     this.sourcesError = "";
     this.sourcesPanelVisible = false;
+    this.clearSubtitleDelayOverlayTimer();
     this.subtitleDialogVisible = false;
+    this.subtitleDelayOverlayVisible = false;
+    this.subtitleTimingDialogVisible = false;
+    this.resetSubtitleAutoSyncState();
     this.audioDialogVisible = false;
     this.speedDialogVisible = false;
     this.episodePanelVisible = false;
@@ -8101,6 +8137,8 @@ export const PlayerScreen = {
     this.renderControlButtons();
     this.renderSourcesPanel();
     this.renderSubtitleDialog();
+    this.renderSubtitleDelayOverlay();
+    this.renderSubtitleTimingDialog();
     this.renderAudioDialog();
     this.renderSpeedDialog();
     this.renderEpisodePanel();
@@ -10965,6 +11003,8 @@ export const PlayerScreen = {
     }
     const hasModal =
       this.subtitleDialogVisible ||
+      this.subtitleTimingDialogVisible ||
+      this.subtitleDelayOverlayVisible ||
       this.audioDialogVisible ||
       this.sourcesPanelVisible ||
       this.episodePanelVisible ||
@@ -11962,6 +12002,8 @@ export const PlayerScreen = {
   isDialogOpen() {
     return (
       this.subtitleDialogVisible ||
+      this.subtitleTimingDialogVisible ||
+      this.subtitleDelayOverlayVisible ||
       this.audioDialogVisible ||
       this.sourcesPanelVisible ||
       this.episodePanelVisible ||
@@ -13717,7 +13759,11 @@ export const PlayerScreen = {
       this.closeSourcesPanel();
     }
 
+    this.clearSubtitleDelayOverlayTimer();
     this.subtitleDialogVisible = false;
+    this.subtitleDelayOverlayVisible = false;
+    this.subtitleTimingDialogVisible = false;
+    this.resetSubtitleAutoSyncState();
     this.audioDialogVisible = false;
     this.speedDialogVisible = false;
     this.selectedAddonSubtitleId = null;
@@ -19098,6 +19144,19 @@ export const PlayerScreen = {
       preferredTargets,
       preferenceMode
     );
+    const builtInSubtitleDiscoveryPending = Boolean(
+      this.embeddedSubtitleLoading ||
+      this.manifestLoading ||
+      (this.trackDiscoveryInProgress &&
+        (this.canDiscoverEmbeddedSubtitleTracks() || this.isCurrentSourceAdaptiveManifest())) ||
+      this.isWebOsEngineFsEmbeddedTrackDiscoveryPending()
+    );
+    // Android only reaches the addon fallback after its first internal text-track
+    // scan. Smart-TV discovery is asynchronous, so do not latch an addon match
+    // while a preferred embedded/manifest track can still be discovered.
+    if (preferredOption?.sourceType === "addon" && builtInSubtitleDiscoveryPending) {
+      return false;
+    }
     if (selectedOption && preferredOption?.id === selectedOption.id) {
       this.startupSubtitlePreferenceApplied = true;
       return true;
@@ -19170,11 +19229,6 @@ export const PlayerScreen = {
         id: "delay",
         label: t("subtitle_tab_delay", {}, "Delay"),
         value: formatSubtitleDelay(this.subtitleDelayMs)
-      },
-      {
-        id: "resetDelay",
-        label: t("subtitle_delay_reset", {}, "Reset Delay"),
-        value: ""
       },
       {
         id: "fontSize",
@@ -19325,6 +19379,10 @@ export const PlayerScreen = {
       this.assSubtitleRenderer?.setDelay(this.subtitleDelayMs);
     }
 
+    if (controlId === "delay" || controlId === "resetDelay" || controlId === "reset") {
+      this.persistSubtitleDelayPreference();
+    }
+
     if (controlId !== "delay" && controlId !== "reset") {
       this.subtitleStyleSettings = style;
     }
@@ -19341,6 +19399,8 @@ export const PlayerScreen = {
   },
   openSubtitleDialog() {
     this.cancelSeekPreview({ commit: false });
+    this.dismissSubtitleTimingDialog();
+    this.hideSubtitleDelayOverlay({ scheduleControls: false });
     this.syncTrackState();
     this.subtitleDialogVisible = true;
     this.beginSubtitleDialogSession();
@@ -19414,10 +19474,12 @@ export const PlayerScreen = {
     if (previousSelectionKey === this.getActiveSubtitleSelectionKey()) {
       return;
     }
+    this.resetSubtitleAutoSyncState();
     if (Number(this.subtitleDelayMs || 0) === 0) {
       return;
     }
     this.subtitleDelayMs = 0;
+    this.persistSubtitleDelayPreference();
     if (this.isAssAddonSubtitleActive()) {
       this.assSubtitleRenderer?.setDelay(0);
     }
@@ -19530,6 +19592,9 @@ export const PlayerScreen = {
   applySubtitleEntry(entry) {
     if (!entry || entry.disabled) {
       return;
+    }
+    if (!this.startupSubtitlePreferenceApplying) {
+      this.startupSubtitlePreferenceApplied = true;
     }
     const selectionToken = Number(this.subtitleSelectionToken || 0) + 1;
     this.subtitleSelectionToken = selectionToken;
@@ -20268,6 +20333,674 @@ export const PlayerScreen = {
     return true;
   },
 
+  getSubtitleDelayPreferenceVideoId() {
+    return String(
+      this.params?.videoId || this.params?.itemId || this.trackPreferenceContentId || ""
+    ).trim();
+  },
+
+  persistSubtitleDelayPreference() {
+    const videoId = String(
+      this.subtitleDelayPreferenceVideoId || this.getSubtitleDelayPreferenceVideoId() || ""
+    ).trim();
+    if (!videoId) {
+      return;
+    }
+    SubtitleDelayPreferencesStore.set(videoId, this.subtitleDelayMs);
+  },
+
+  getSelectedAddonSubtitle() {
+    const selectedId = String(this.selectedAddonSubtitleId || "").trim();
+    if (!selectedId) {
+      return null;
+    }
+    return (
+      this.getSubtitleDialogSubtitles().find((subtitle, index) => {
+        const subtitleId = String(subtitle?.id || subtitle?.url || `subtitle-${index}`).trim();
+        return subtitleId === selectedId;
+      }) || null
+    );
+  },
+
+  getSubtitleAutoSyncTrackKey(subtitle = null) {
+    if (!subtitle) {
+      return "";
+    }
+    return `${String(subtitle.id || "").trim()}|${String(subtitle.url || "").trim()}`;
+  },
+
+  getSubtitleAutoSyncVisibleCues(anchorTimeMs = null) {
+    const anchor =
+      anchorTimeMs == null
+        ? (this.subtitleAutoSyncCapturedVideoMs ??
+          Math.max(0, Math.trunc(this.getPlaybackCurrentSeconds() * 1000)))
+        : Number(anchorTimeMs);
+    return selectSubtitleAutoSyncVisibleCues(
+      this.subtitleAutoSyncCues,
+      Number.isFinite(anchor) ? anchor : 0,
+      SUBTITLE_AUTO_SYNC_MARGIN_MS,
+      SUBTITLE_AUTO_SYNC_MAX_VISIBLE_CUES
+    );
+  },
+
+  getSubtitleAutoSyncLanguageLabel(subtitle = null) {
+    if (!subtitle) {
+      return "";
+    }
+    const display = formatSubtitleTrackDisplay(subtitle, 0);
+    return display.languageLabel || display.label || cleanDisplayText(subtitle.lang);
+  },
+
+  clearSubtitleDelayOverlayTimer() {
+    if (this.subtitleDelayOverlayTimer) {
+      clearTimeout(this.subtitleDelayOverlayTimer);
+      this.subtitleDelayOverlayTimer = null;
+    }
+  },
+
+  scheduleHideSubtitleDelayOverlay() {
+    this.clearSubtitleDelayOverlayTimer();
+    this.subtitleDelayOverlayTimer = setTimeout(() => {
+      this.subtitleDelayOverlayTimer = null;
+      this.hideSubtitleDelayOverlay();
+    }, SUBTITLE_DELAY_OVERLAY_TIMEOUT_MS);
+  },
+
+  renderSubtitleDelayOverlay() {
+    const overlay = this.uiRefs?.subtitleDelayOverlay;
+    if (!overlay) {
+      return;
+    }
+    const visible = Boolean(this.subtitleDelayOverlayVisible);
+    overlay.classList.toggle("hidden", !visible);
+    overlay.setAttribute("aria-hidden", visible ? "false" : "true");
+    if (!visible) {
+      overlay.innerHTML = "";
+      return;
+    }
+
+    const delayMs = clamp(
+      Number(this.subtitleDelayMs || 0),
+      SUBTITLE_DELAY_MIN_MS,
+      SUBTITLE_DELAY_MAX_MS
+    );
+    const fraction =
+      (delayMs - SUBTITLE_DELAY_MIN_MS) / (SUBTITLE_DELAY_MAX_MS - SUBTITLE_DELAY_MIN_MS);
+    overlay.innerHTML = `
+      <div class="player-subtitle-delay-panel">
+        <div class="player-subtitle-delay-header">
+          <div class="player-subtitle-delay-title">${escapeHtml(t("player_subtitle_delay", {}, "Subtitles Delay"))}</div>
+          <div class="player-subtitle-delay-value" dir="ltr">${escapeHtml(formatSubtitleDelay(delayMs))}</div>
+        </div>
+        <div class="player-subtitle-delay-slider focusable" data-subtitle-delay-focus="slider" tabindex="-1" role="slider" aria-valuemin="${SUBTITLE_DELAY_MIN_MS}" aria-valuemax="${SUBTITLE_DELAY_MAX_MS}" aria-valuenow="${delayMs}">
+          <div class="player-subtitle-delay-slider-track"></div>
+          <div class="player-subtitle-delay-slider-ticks" aria-hidden="true">
+            <span></span><span></span><span class="center"></span><span></span><span></span>
+          </div>
+          <div class="player-subtitle-delay-slider-thumb" style="left:${(fraction * 100).toFixed(3)}%"></div>
+        </div>
+        <div class="player-subtitle-delay-actions">
+          <button class="player-subtitle-delay-action focusable" type="button" data-subtitle-delay-focus="reset" tabindex="-1">${escapeHtml(t("subtitle_delay_reset", {}, "Reset Delay"))}</button>
+          <button class="player-subtitle-delay-action focusable" type="button" data-subtitle-delay-focus="sync" tabindex="-1">${escapeHtml(t("player_sync_line", {}, "Sync Line"))}</button>
+        </div>
+      </div>
+    `;
+    this.syncSubtitleDelayOverlayFocusDom({ focus: false });
+  },
+
+  syncSubtitleDelayOverlayFocusDom({ focus = false } = {}) {
+    const overlay = this.uiRefs?.subtitleDelayOverlay;
+    if (!overlay || !this.subtitleDelayOverlayVisible) {
+      return false;
+    }
+    const target = overlay.querySelector(
+      `[data-subtitle-delay-focus="${String(this.subtitleDelayFocusTarget || "slider")}"]`
+    );
+    if (!target) {
+      return false;
+    }
+    overlay.querySelectorAll(".focused").forEach((node) => node.classList.remove("focused"));
+    target.classList.add("focused");
+    if (focus && document.activeElement !== target) {
+      target.focus?.();
+    }
+    return true;
+  },
+
+  setSubtitleDelayValue(delayMs, { showOverlay = false } = {}) {
+    this.subtitleDelayMs = clamp(
+      Math.trunc(Number(delayMs) || 0),
+      SUBTITLE_DELAY_MIN_MS,
+      SUBTITLE_DELAY_MAX_MS
+    );
+    if (this.isAssAddonSubtitleActive()) {
+      this.assSubtitleRenderer?.setDelay(this.subtitleDelayMs);
+    }
+    this.persistSubtitleDelayPreference();
+    this.applySubtitlePresentationSettings({ refreshTrackRendering: true });
+    if (showOverlay) {
+      this.renderSubtitleDelayOverlay();
+      this.scheduleHideSubtitleDelayOverlay();
+    }
+    this.renderSubtitleDialog();
+  },
+
+  showSubtitleDelayOverlay() {
+    this.flushPersistPlayerPresentationSettings();
+    this.clearSubtitleDelayOverlayTimer();
+    this.subtitleDelayOverlayVisible = true;
+    this.subtitleDelayFocusTarget = "slider";
+    this.subtitleDelayOverlayStatus = "";
+    this.subtitleTimingDialogVisible = false;
+    this.subtitleDialogVisible = false;
+    this.audioDialogVisible = false;
+    this.speedDialogVisible = false;
+    this.sourcesPanelVisible = false;
+    this.setControlsVisible(false, { focus: false });
+    this.renderSubtitleDialog();
+    this.renderSubtitleTimingDialog();
+    this.renderSubtitleDelayOverlay();
+    this.updateModalBackdrop();
+    setTimeout(() => this.syncSubtitleDelayOverlayFocusDom({ focus: true }), 80);
+    this.scheduleHideSubtitleDelayOverlay();
+  },
+
+  hideSubtitleDelayOverlay({ scheduleControls = true } = {}) {
+    this.clearSubtitleDelayOverlayTimer();
+    if (!this.subtitleDelayOverlayVisible) {
+      return false;
+    }
+    this.subtitleDelayOverlayVisible = false;
+    this.subtitleDelayOverlayStatus = "";
+    this.renderSubtitleDelayOverlay();
+    this.updateModalBackdrop();
+    if (scheduleControls) {
+      this.resetControlsAutoHide();
+    }
+    return true;
+  },
+
+  handleSubtitleDelayOverlayKey(event) {
+    const keyCode = Number(event?.keyCode || 0);
+    const target = String(this.subtitleDelayFocusTarget || "slider");
+    const isRtl =
+      String(document?.documentElement?.dir || document?.dir || "").toLowerCase() === "rtl";
+    if (target === "slider") {
+      if (keyCode === 37 || keyCode === 39) {
+        const direction = keyCode === 39 ? 1 : -1;
+        this.setSubtitleDelayValue(
+          Number(this.subtitleDelayMs || 0) + direction * SUBTITLE_DELAY_STEP_MS,
+          { showOverlay: true }
+        );
+        return true;
+      }
+      if (keyCode === 40) {
+        this.subtitleDelayFocusTarget = "sync";
+        this.syncSubtitleDelayOverlayFocusDom({ focus: true });
+        return true;
+      }
+      return true;
+    }
+
+    if (keyCode === 38) {
+      this.subtitleDelayFocusTarget = "slider";
+      this.syncSubtitleDelayOverlayFocusDom({ focus: true });
+      return true;
+    }
+    if (target === "reset") {
+      if (keyCode === 39 || (isRtl && keyCode === 37)) {
+        this.subtitleDelayFocusTarget = "sync";
+        this.syncSubtitleDelayOverlayFocusDom({ focus: true });
+        return true;
+      }
+      if (isSelectKeyCode(keyCode)) {
+        this.setSubtitleDelayValue(0, { showOverlay: true });
+        this.subtitleDelayFocusTarget = "slider";
+        this.syncSubtitleDelayOverlayFocusDom({ focus: true });
+        return true;
+      }
+    }
+    if (target === "sync") {
+      if (keyCode === 37 || (isRtl && keyCode === 39)) {
+        this.subtitleDelayFocusTarget = "reset";
+        this.syncSubtitleDelayOverlayFocusDom({ focus: true });
+        return true;
+      }
+      if (isSelectKeyCode(keyCode)) {
+        this.openSubtitleTimingDialog();
+        return true;
+      }
+    }
+    return true;
+  },
+
+  handleSubtitleDelayOverlayPointer(target) {
+    const action = target?.closest?.("[data-subtitle-delay-focus]");
+    if (!action || !this.subtitleDelayOverlayVisible) {
+      return false;
+    }
+    const focusTarget = String(action.dataset.subtitleDelayFocus || "slider");
+    this.subtitleDelayFocusTarget = focusTarget;
+    this.syncSubtitleDelayOverlayFocusDom({ focus: false });
+    if (focusTarget === "reset") {
+      this.setSubtitleDelayValue(0, { showOverlay: true });
+    } else if (focusTarget === "sync") {
+      this.openSubtitleTimingDialog();
+    }
+    return true;
+  },
+
+  resetSubtitleAutoSyncState(clearLoadedTrack = true) {
+    this.subtitleAutoSyncLoadToken = Number(this.subtitleAutoSyncLoadToken || 0) + 1;
+    this.subtitleAutoSyncCues = [];
+    this.subtitleAutoSyncCapturedVideoMs = null;
+    this.subtitleAutoSyncStatus = "";
+    this.subtitleAutoSyncError = "";
+    this.subtitleAutoSyncLoading = false;
+    if (clearLoadedTrack) {
+      this.subtitleAutoSyncLoadedTrackKey = "";
+    }
+  },
+
+  async loadSubtitleAutoSyncCues({ force = false } = {}) {
+    const selectedSubtitle = this.getSelectedAddonSubtitle();
+    if (!selectedSubtitle) {
+      this.subtitleAutoSyncCues = [];
+      this.subtitleAutoSyncCapturedVideoMs = null;
+      this.subtitleAutoSyncLoading = false;
+      this.subtitleAutoSyncError = t(
+        "subtitle_auto_sync_select_addon_track",
+        {},
+        "Select an addon subtitle track to use Auto Sync."
+      );
+      this.subtitleAutoSyncLoadedTrackKey = "";
+      this.renderSubtitleTimingDialog();
+      return;
+    }
+
+    const selectedTrackKey = this.getSubtitleAutoSyncTrackKey(selectedSubtitle);
+    if (
+      !force &&
+      this.subtitleAutoSyncLoadedTrackKey === selectedTrackKey &&
+      this.subtitleAutoSyncCues.length
+    ) {
+      return;
+    }
+
+    const loadToken = Number(this.subtitleAutoSyncLoadToken || 0) + 1;
+    this.subtitleAutoSyncLoadToken = loadToken;
+    this.subtitleAutoSyncLoading = true;
+    this.subtitleAutoSyncError = "";
+    this.subtitleAutoSyncStatus = "";
+    if (force) {
+      this.subtitleAutoSyncCues = [];
+      this.subtitleAutoSyncCapturedVideoMs = null;
+    }
+    this.subtitleAutoSyncLoadedTrackKey = selectedTrackKey;
+    this.renderSubtitleTimingDialog();
+
+    try {
+      const subtitleUrl = String(selectedSubtitle.url || "").trim();
+      const languageHint =
+        selectedSubtitle.lang || selectedSubtitle.language || selectedSubtitle.languageCode || "";
+      let raw = null;
+      try {
+        raw = await this.fetchSubtitleRawBody(subtitleUrl, {
+          timeoutMs: 10000,
+          languageHint
+        });
+      } catch (directError) {
+        if (!Environment.isTizen()) {
+          throw directError;
+        }
+        const proxyUrl = await this.resolveTizenAvPlaySubtitleUrl(subtitleUrl);
+        if (!proxyUrl || proxyUrl === subtitleUrl) {
+          throw directError;
+        }
+        raw = await this.fetchSubtitleRawBody(proxyUrl, {
+          timeoutMs: 10000,
+          languageHint
+        });
+      }
+      if (!raw?.body) {
+        throw new Error("Subtitle body is empty");
+      }
+
+      const parsedCues = this.parseSubtitleCues(raw.body)
+        .map((cue) => ({
+          startTimeMs: Math.max(0, Math.round(Number(cue.start || 0) * 1000)),
+          endTimeMs: Math.max(0, Math.round(Number(cue.end || 0) * 1000)),
+          text: String(cue.text || "").trim()
+        }))
+        .filter((cue) => cue.text && cue.endTimeMs > cue.startTimeMs);
+
+      if (
+        loadToken !== this.subtitleAutoSyncLoadToken ||
+        selectedTrackKey !== this.getSubtitleAutoSyncTrackKey(this.getSelectedAddonSubtitle())
+      ) {
+        return;
+      }
+      this.subtitleAutoSyncLoading = false;
+      this.subtitleAutoSyncCues = parsedCues;
+      this.subtitleAutoSyncError = parsedCues.length
+        ? ""
+        : t("subtitle_timing_file_no_lines", {}, "No subtitle lines were found in this file.");
+      this.renderSubtitleTimingDialog();
+      if (this.subtitleTimingDialogVisible && this.subtitleTimingStage === "pick") {
+        setTimeout(() => this.syncSubtitleTimingFocusDom({ focus: true }), 50);
+      }
+    } catch (error) {
+      if (loadToken !== this.subtitleAutoSyncLoadToken) {
+        return;
+      }
+      this.subtitleAutoSyncLoading = false;
+      this.subtitleAutoSyncCues = [];
+      this.subtitleAutoSyncError = t(
+        "subtitle_timing_load_lines_failed",
+        {},
+        "Failed to load subtitle lines."
+      );
+      this.renderSubtitleTimingDialog();
+      console.warn("Subtitle auto-sync cue load failed", {
+        error: error?.message || String(error || "")
+      });
+    }
+  },
+
+  openSubtitleTimingDialog() {
+    this.clearSubtitleDelayOverlayTimer();
+    this.subtitleDelayOverlayVisible = false;
+    this.subtitleDelayOverlayStatus = "";
+    this.subtitleDialogVisible = false;
+    this.audioDialogVisible = false;
+    this.speedDialogVisible = false;
+    this.sourcesPanelVisible = false;
+    this.subtitleTimingDialogVisible = true;
+    this.subtitleTimingStage = "wait";
+    this.subtitleAutoSyncCapturedVideoMs = null;
+    this.subtitleAutoSyncStatus = "";
+    this.subtitleAutoSyncError = "";
+    this.subtitleAutoSyncCueFocusIndex = 0;
+    this.setControlsVisible(false, { focus: false });
+    this.renderSubtitleDialog();
+    this.renderSubtitleDelayOverlay();
+    this.renderSubtitleTimingDialog();
+    this.updateModalBackdrop();
+    void this.loadSubtitleAutoSyncCues({ force: false });
+    setTimeout(() => this.syncSubtitleTimingFocusDom({ focus: true }), 120);
+  },
+
+  dismissSubtitleTimingDialog() {
+    this.subtitleAutoSyncLoadToken = Number(this.subtitleAutoSyncLoadToken || 0) + 1;
+    this.subtitleAutoSyncCapturedVideoMs = null;
+    this.subtitleAutoSyncStatus = "";
+    this.subtitleAutoSyncError = "";
+    this.subtitleAutoSyncLoading = false;
+    this.subtitleTimingDialogVisible = false;
+    this.subtitleTimingStage = "wait";
+    this.renderSubtitleTimingDialog();
+    this.updateModalBackdrop();
+    this.resetControlsAutoHide();
+  },
+
+  captureSubtitleAutoSyncTime() {
+    const capturePositionMs = Math.max(
+      0,
+      Math.trunc(Number(this.getPlaybackCurrentSeconds() || 0) * 1000)
+    );
+    this.subtitleAutoSyncCapturedVideoMs = capturePositionMs;
+    this.subtitleTimingStage = "pick";
+    this.subtitleAutoSyncStatus = "";
+    this.subtitleAutoSyncError = "";
+    const visibleCues = this.getSubtitleAutoSyncVisibleCues(capturePositionMs);
+    this.subtitleAutoSyncCueFocusIndex = Math.max(
+      0,
+      visibleCues.reduce(
+        (nearestIndex, cue, index, list) =>
+          Math.abs(cue.startTimeMs - capturePositionMs) <
+          Math.abs((list[nearestIndex]?.startTimeMs || 0) - capturePositionMs)
+            ? index
+            : nearestIndex,
+        0
+      )
+    );
+    this.renderSubtitleTimingDialog();
+    setTimeout(() => this.syncSubtitleTimingFocusDom({ focus: true }), 50);
+  },
+
+  applySubtitleAutoSyncCue(cue = null) {
+    const cueStartTimeMs = Number(cue?.startTimeMs);
+    const capturePositionMs = Number(
+      this.subtitleAutoSyncCapturedVideoMs ?? this.getPlaybackCurrentSeconds() * 1000
+    );
+    if (!Number.isFinite(cueStartTimeMs) || !Number.isFinite(capturePositionMs)) {
+      return;
+    }
+    const newDelayMs = calculateSubtitleAutoSyncDelayMs(capturePositionMs, cueStartTimeMs);
+    this.subtitleDelayMs = newDelayMs;
+    if (this.isAssAddonSubtitleActive()) {
+      this.assSubtitleRenderer?.setDelay(newDelayMs);
+    }
+    this.persistSubtitleDelayPreference();
+    this.applySubtitlePresentationSettings({ refreshTrackRendering: true });
+    this.subtitleAutoSyncLoadToken = Number(this.subtitleAutoSyncLoadToken || 0) + 1;
+    this.subtitleAutoSyncStatus = t(
+      "subtitle_auto_sync_applied",
+      [formatSubtitleAutoSyncDelay(newDelayMs)],
+      `Sync applied: ${formatSubtitleAutoSyncDelay(newDelayMs)}`
+    );
+    this.subtitleTimingDialogVisible = false;
+    this.subtitleTimingStage = "wait";
+    this.subtitleDelayOverlayVisible = true;
+    this.subtitleDelayFocusTarget = "slider";
+    this.subtitleDialogVisible = false;
+    this.renderSubtitleTimingDialog();
+    this.renderSubtitleDelayOverlay();
+    this.updateModalBackdrop();
+    this.scheduleHideSubtitleDelayOverlay();
+  },
+
+  syncSubtitleTimingFocusDom({ focus = false, scroll = true } = {}) {
+    const dialog = this.uiRefs?.subtitleTimingDialog;
+    if (!dialog || !this.subtitleTimingDialogVisible) {
+      return false;
+    }
+    const target =
+      this.subtitleTimingStage === "wait"
+        ? dialog.querySelector("[data-subtitle-timing-action='capture']")
+        : dialog.querySelector(
+            `[data-subtitle-timing-cue-index="${Number(this.subtitleAutoSyncCueFocusIndex || 0)}"]`
+          );
+    if (!target) {
+      return false;
+    }
+    dialog.querySelectorAll(".focused").forEach((node) => node.classList.remove("focused"));
+    target.classList.add("focused");
+    if (scroll) {
+      try {
+        target.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+      } catch (_) {
+        target.scrollIntoView?.();
+      }
+    }
+    if (focus && document.activeElement !== target) {
+      target.focus?.();
+    }
+    return true;
+  },
+
+  handleSubtitleTimingDialogKey(event) {
+    const keyCode = Number(event?.keyCode || 0);
+    if (this.subtitleTimingStage === "wait") {
+      if (isSelectKeyCode(keyCode)) {
+        this.captureSubtitleAutoSyncTime();
+      }
+      return true;
+    }
+
+    const visibleCues = this.getSubtitleAutoSyncVisibleCues(
+      this.subtitleAutoSyncCapturedVideoMs ?? this.getPlaybackCurrentSeconds() * 1000
+    );
+    if (keyCode === 38 || keyCode === 40) {
+      const delta = keyCode === 40 ? 1 : -1;
+      this.subtitleAutoSyncCueFocusIndex = clamp(
+        Number(this.subtitleAutoSyncCueFocusIndex || 0) + delta,
+        0,
+        Math.max(0, visibleCues.length - 1)
+      );
+      this.syncSubtitleTimingFocusDom({ focus: true });
+      return true;
+    }
+    if (isSelectKeyCode(keyCode)) {
+      const cue = visibleCues[this.subtitleAutoSyncCueFocusIndex];
+      if (cue) {
+        this.applySubtitleAutoSyncCue(cue);
+      }
+      return true;
+    }
+    return true;
+  },
+
+  handleSubtitleTimingDialogPointer(target) {
+    if (!this.subtitleTimingDialogVisible) {
+      return false;
+    }
+    const capture = target?.closest?.("[data-subtitle-timing-action='capture']");
+    if (capture) {
+      this.captureSubtitleAutoSyncTime();
+      return true;
+    }
+    const cueNode = target?.closest?.("[data-subtitle-timing-cue-index]");
+    if (!cueNode) {
+      return false;
+    }
+    const visibleCues = this.getSubtitleAutoSyncVisibleCues(
+      this.subtitleAutoSyncCapturedVideoMs ?? this.getPlaybackCurrentSeconds() * 1000
+    );
+    const index = Number(cueNode.dataset.subtitleTimingCueIndex);
+    const cue = visibleCues[index];
+    if (cue) {
+      this.subtitleAutoSyncCueFocusIndex = index;
+      this.applySubtitleAutoSyncCue(cue);
+    }
+    return true;
+  },
+
+  renderSubtitleTimingDialog() {
+    const dialog = this.uiRefs?.subtitleTimingDialog;
+    if (!dialog) {
+      return;
+    }
+    const visible = Boolean(this.subtitleTimingDialogVisible);
+    dialog.classList.toggle("hidden", !visible);
+    dialog.classList.toggle("pick-line", visible && this.subtitleTimingStage === "pick");
+    dialog.setAttribute("aria-hidden", visible ? "false" : "true");
+    if (!visible) {
+      dialog.innerHTML = "";
+      return;
+    }
+
+    const selectedAddonSubtitle = this.getSelectedAddonSubtitle();
+    if (this.subtitleTimingStage === "wait") {
+      dialog.innerHTML = `
+        <div class="player-subtitle-timing-panel player-subtitle-timing-panel-wait">
+          <div class="player-subtitle-timing-prompt">${escapeHtml(t("subtitle_timing_press_sync", {}, "Press Sync when you hear a dialog line."))}</div>
+          <button class="player-subtitle-timing-sync-button focusable" type="button" tabindex="-1" data-subtitle-timing-action="capture">${escapeHtml(t("subtitle_timing_sync_button", {}, "Sync"))}</button>
+        </div>
+      `;
+      this.syncSubtitleTimingFocusDom({ focus: false });
+      return;
+    }
+
+    const capturedLabel =
+      this.subtitleAutoSyncCapturedVideoMs == null
+        ? t("subtitle_timing_capturing", {}, "Capturing…")
+        : t(
+            "subtitle_timing_captured_at",
+            [formatSubtitleAutoSyncTimestamp(this.subtitleAutoSyncCapturedVideoMs)],
+            "Captured at %1$s"
+          );
+    const visibleCues = this.getSubtitleAutoSyncVisibleCues(
+      this.subtitleAutoSyncCapturedVideoMs ?? this.getPlaybackCurrentSeconds() * 1000
+    );
+    this.subtitleAutoSyncCueFocusIndex = clamp(
+      Number(this.subtitleAutoSyncCueFocusIndex || 0),
+      0,
+      Math.max(0, visibleCues.length - 1)
+    );
+    const selectedLanguage = this.getSubtitleAutoSyncLanguageLabel(selectedAddonSubtitle);
+    const statusMarkup = this.subtitleAutoSyncStatus
+      ? `<div class="player-subtitle-timing-status">${escapeHtml(this.subtitleAutoSyncStatus)}</div>`
+      : "";
+    const errorMarkup = this.subtitleAutoSyncError
+      ? `<div class="player-subtitle-timing-error">${escapeHtml(this.subtitleAutoSyncError)}</div>`
+      : "";
+    let bodyMarkup = "";
+    if (errorMarkup) {
+      bodyMarkup = errorMarkup;
+    } else if (!selectedAddonSubtitle) {
+      bodyMarkup = `<div class="player-subtitle-timing-error">${escapeHtml(t("subtitle_timing_select_addon_first", {}, "Select an addon subtitle track first."))}</div>`;
+    } else if (this.subtitleAutoSyncLoading) {
+      bodyMarkup = `
+        <div class="player-subtitle-timing-loading">
+          ${renderLoadingIndicator({ className: "player-subtitle-timing-loading-indicator" })}
+          <div>${escapeHtml(t("subtitle_timing_loading", {}, "Loading subtitle lines…"))}</div>
+        </div>
+      `;
+    } else if (!visibleCues.length) {
+      bodyMarkup = `<div class="player-subtitle-timing-empty">${escapeHtml(t("subtitle_timing_no_lines_found", {}, "No subtitle lines were found around this moment."))}</div>`;
+    } else {
+      bodyMarkup = `
+        <div class="player-subtitle-timing-cue-list">
+          ${visibleCues
+            .map(
+              (cue, index) => `
+                <div class="player-subtitle-timing-cue-row focusable${index === this.subtitleAutoSyncCueFocusIndex ? " focused" : ""}" tabindex="-1" data-subtitle-timing-cue-index="${index}">
+                  <span class="player-subtitle-timing-cue-time" dir="ltr">${escapeHtml(formatSubtitleAutoSyncTimestamp(cue.startTimeMs))}</span>
+                  <span class="player-subtitle-timing-cue-text" dir="ltr">${escapeHtml(sanitizeSubtitleAutoSyncCueText(cue.text))}</span>
+                </div>
+              `
+            )
+            .join("")}
+        </div>
+        <div class="player-subtitle-timing-footer">${escapeHtml(t("subtitle_timing_press_back_cancel", {}, "Press Back to cancel"))}</div>
+      `;
+    }
+    dialog.innerHTML = `
+      <div class="player-subtitle-timing-panel player-subtitle-timing-panel-pick">
+        <div class="player-subtitle-timing-header">
+          <div class="player-subtitle-timing-captured">${escapeHtml(capturedLabel)}</div>
+          ${selectedLanguage ? `<div class="player-subtitle-timing-language">${escapeHtml(selectedLanguage)}</div>` : ""}
+        </div>
+        ${statusMarkup}
+        ${bodyMarkup}
+      </div>
+    `;
+    this.syncSubtitleTimingFocusDom({ focus: false, scroll: false });
+  },
+
+  renderSubtitleStyleItemMarkup(item, index) {
+    if (item.id === "delay") {
+      const interactive = !item.disabled;
+      return `
+        <div class="player-dialog-item player-dialog-style-item player-subtitle-delay-entry${item.disabled ? " disabled" : ""}${interactive ? " focusable" : ""}" data-subtitle-rail="style" data-subtitle-index="${index}" data-subtitle-key="${escapeAttribute(item.id)}" data-subtitle-delay-action="open" aria-disabled="${item.disabled ? "true" : "false"}"${interactive ? ' tabindex="-1"' : ""}>
+          <div class="player-dialog-item-main">${escapeHtml(item.label)}</div>
+          <div class="player-dialog-item-sub player-subtitle-delay-entry-value" dir="ltr">${escapeHtml(item.value || "")}</div>
+        </div>
+      `;
+    }
+    return `
+      <div class="player-dialog-item player-dialog-style-item${item.disabled ? " disabled" : ""}" data-subtitle-rail="style" data-subtitle-index="${index}" data-subtitle-key="${escapeAttribute(item.id)}" aria-disabled="${item.disabled ? "true" : "false"}">
+        <button class="player-dialog-step player-dialog-step-minus${item.disabled ? "" : " focusable"}" type="button" data-subtitle-style-action="decrease" data-subtitle-rail="style" data-subtitle-index="${index}" data-style-id="${escapeAttribute(item.id)}" aria-label="${escapeAttribute(`${item.label} -`)}"${item.disabled ? " disabled" : ""}>&#8722;</button>
+        <div class="player-dialog-item-center">
+          <div class="player-dialog-item-main">${escapeHtml(item.label)}</div>
+          <div class="player-dialog-item-sub">${escapeHtml(item.value || "")}</div>
+        </div>
+        <button class="player-dialog-step player-dialog-step-plus${item.disabled ? "" : " focusable"}" type="button" data-subtitle-style-action="increase" data-subtitle-rail="style" data-subtitle-index="${index}" data-style-id="${escapeAttribute(item.id)}" aria-label="${escapeAttribute(`${item.label} +`)}"${item.disabled ? " disabled" : ""}>&#43;</button>
+      </div>
+    `;
+  },
+
   renderSubtitleDialog() {
     const dialog = this.uiRefs?.subtitleDialog;
     if (!dialog) {
@@ -20336,20 +21069,7 @@ export const PlayerScreen = {
           ${optionsMarkup}
         </div>
         <div class="player-subtitle-rail player-subtitle-style-rail${showOptionsRail ? "" : " hidden"}">
-          ${styleItems
-            .map(
-              (item, index) => `
-            <div class="player-dialog-item player-dialog-style-item${item.disabled ? " disabled" : ""}" data-subtitle-rail="style" data-subtitle-index="${index}" data-subtitle-key="${escapeAttribute(item.id)}" aria-disabled="${item.disabled ? "true" : "false"}">
-              <button class="player-dialog-step player-dialog-step-minus${item.disabled ? "" : " focusable"}" type="button" data-subtitle-style-action="decrease" data-subtitle-rail="style" data-subtitle-index="${index}" data-style-id="${escapeAttribute(item.id)}" aria-label="${escapeAttribute(`${item.label} -`)}"${item.disabled ? " disabled" : ""}>&#8722;</button>
-              <div class="player-dialog-item-center">
-                <div class="player-dialog-item-main">${escapeHtml(item.label)}</div>
-                <div class="player-dialog-item-sub">${escapeHtml(item.value || "")}</div>
-              </div>
-              <button class="player-dialog-step player-dialog-step-plus${item.disabled ? "" : " focusable"}" type="button" data-subtitle-style-action="increase" data-subtitle-rail="style" data-subtitle-index="${index}" data-style-id="${escapeAttribute(item.id)}" aria-label="${escapeAttribute(`${item.label} +`)}"${item.disabled ? " disabled" : ""}>&#43;</button>
-            </div>
-          `
-            )
-            .join("")}
+          ${styleItems.map((item, index) => this.renderSubtitleStyleItemMarkup(item, index)).join("")}
         </div>
       </div>
     `;
@@ -20439,6 +21159,14 @@ export const PlayerScreen = {
     }
     if (keyCode === 37) {
       if (this.subtitleFocusedRail === "style") {
+        if (styleItem?.id === "delay" && !styleItem.disabled) {
+          this.subtitleFocusedRail = options.length ? "options" : "language";
+          this.subtitleStyleControlSide = "minus";
+          if (!this.syncSubtitleDialogFocusDom()) {
+            this.renderSubtitleDialog();
+          }
+          return true;
+        }
         if (this.subtitleStyleControlSide === "plus") {
           this.subtitleStyleControlSide = "minus";
           this.syncSubtitleDialogFocusDom();
@@ -20481,6 +21209,9 @@ export const PlayerScreen = {
         return true;
       }
       if (this.subtitleFocusedRail === "style") {
+        if (styleItem?.id === "delay" && !styleItem.disabled) {
+          return true;
+        }
         if (this.subtitleStyleControlSide === "minus") {
           this.subtitleStyleControlSide = "plus";
           this.syncSubtitleDialogFocusDom();
@@ -20521,6 +21252,10 @@ export const PlayerScreen = {
         if (option?.entry) {
           this.applySubtitleEntry(option.entry);
         }
+        return true;
+      }
+      if (styleItem?.id === "delay" && !styleItem.disabled) {
+        this.showSubtitleDelayOverlay();
         return true;
       }
       if (styleItem && !styleItem.disabled) {
@@ -23648,6 +24383,22 @@ export const PlayerScreen = {
       }
       return;
     }
+    if (this.subtitleTimingDialogVisible && target?.closest?.("#playerSubtitleTimingDialog")) {
+      const cueNode = target.closest("[data-subtitle-timing-cue-index]");
+      if (cueNode) {
+        this.subtitleAutoSyncCueFocusIndex = Number(cueNode.dataset.subtitleTimingCueIndex || 0);
+      }
+      this.syncSubtitleTimingFocusDom({ focus: false, scroll: false });
+      return;
+    }
+    if (this.subtitleDelayOverlayVisible && target?.closest?.("#playerSubtitleDelayOverlay")) {
+      const delayNode = target.closest("[data-subtitle-delay-focus]");
+      if (delayNode) {
+        this.subtitleDelayFocusTarget = String(delayNode.dataset.subtitleDelayFocus || "slider");
+        this.syncSubtitleDelayOverlayFocusDom({ focus: false });
+      }
+      return;
+    }
     this.syncPointerFocus(target);
   },
 
@@ -23658,6 +24409,14 @@ export const PlayerScreen = {
     this.syncPointerFocus(target);
 
     if (this.isPostPlayVisible() && this.handlePostPlayPointer(target, event)) {
+      return true;
+    }
+
+    if (this.subtitleTimingDialogVisible && this.handleSubtitleTimingDialogPointer(target)) {
+      return true;
+    }
+
+    if (this.subtitleDelayOverlayVisible && this.handleSubtitleDelayOverlayPointer(target)) {
       return true;
     }
 
@@ -23720,6 +24479,16 @@ export const PlayerScreen = {
         this.subtitleStyleControlSide = side;
         this.adjustSubtitleStyleControl(styleItem.id, this.getSubtitleStyleControlDelta(side));
       }
+      return true;
+    }
+
+    const subtitleDelayNode = target.closest?.("[data-subtitle-delay-action='open']");
+    if (
+      subtitleDelayNode &&
+      this.subtitleDialogVisible &&
+      subtitleDelayNode.getAttribute("aria-disabled") !== "true"
+    ) {
+      this.showSubtitleDelayOverlay();
       return true;
     }
 
@@ -23815,6 +24584,8 @@ export const PlayerScreen = {
       this.seekPreviewSeconds != null ||
       (!this.controlsVisible && this.isNextEpisodeCardVisible()) ||
       this.sourcesPanelVisible ||
+      this.subtitleTimingDialogVisible ||
+      this.subtitleDelayOverlayVisible ||
       this.subtitleDialogVisible ||
       this.audioDialogVisible ||
       this.speedDialogVisible ||
@@ -23881,6 +24652,16 @@ export const PlayerScreen = {
 
     if (this.sourcesPanelVisible) {
       this.closeSourcesPanel();
+      return true;
+    }
+
+    if (this.subtitleTimingDialogVisible) {
+      this.dismissSubtitleTimingDialog();
+      return true;
+    }
+
+    if (this.subtitleDelayOverlayVisible) {
+      this.hideSubtitleDelayOverlay();
       return true;
     }
 
@@ -24044,6 +24825,18 @@ export const PlayerScreen = {
 
     if (this.sourcesPanelVisible) {
       if (await this.handleSourcesPanelKey(event)) {
+        return;
+      }
+    }
+
+    if (this.subtitleTimingDialogVisible) {
+      if (this.handleSubtitleTimingDialogKey(event)) {
+        return;
+      }
+    }
+
+    if (this.subtitleDelayOverlayVisible) {
+      if (this.handleSubtitleDelayOverlayKey(event)) {
         return;
       }
     }
@@ -24644,6 +25437,10 @@ export const PlayerScreen = {
       });
       this.cancelSeekPreview({ commit: false });
       this.dismissPauseOverlay();
+      this.clearSubtitleDelayOverlayTimer();
+      this.subtitleDelayOverlayVisible = false;
+      this.subtitleTimingDialogVisible = false;
+      this.resetSubtitleAutoSyncState();
       this.pauseOverlayMetaRequestToken = Number(this.pauseOverlayMetaRequestToken || 0) + 1;
       this.nextEpisodeTransitionMeta = null;
       this.streamCandidatesByVideoId?.clear?.();
