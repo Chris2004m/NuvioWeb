@@ -1,3 +1,10 @@
+## 1.1.2
+
+### Improvements & Fixes
+
+- Added Android-aligned subtitle delay persistence and remote-friendly Auto Sync controls for addon subtitles (@WhiteGiso)
+- Improved Discover poster hydration by loading visible and nearby artwork explicitly inside TV scroll containers (@WhiteGiso)
+
 ## 1.1.1
 
 ### Improvements & Fixes
