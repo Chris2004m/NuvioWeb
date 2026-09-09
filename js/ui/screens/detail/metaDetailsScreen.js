@@ -9363,7 +9363,11 @@ export const MetaDetailsScreen = {
     }
 
     const code = Number(event?.keyCode || 0);
-    const currentFocusedNode = this.container.querySelector(".focusable.focused") || null;
+    const pointerActionTarget = event?.pointerActivation
+      ? event?.target?.closest?.("[data-action]") || null
+      : null;
+    const currentFocusedNode =
+      pointerActionTarget || this.container.querySelector(".focusable.focused") || null;
 
     const isEpisodeHoldTarget = this.isEpisodeHoldTarget(currentFocusedNode);
     const isSeasonHoldTarget = this.isSeasonHoldTarget(currentFocusedNode);
@@ -9399,7 +9403,11 @@ export const MetaDetailsScreen = {
       this.stopTrailerPlayback({ restartAutoplay: false });
     }
 
-    if (this.isTrailerPlaying && this.trailerPlaybackMode === "manual") {
+    if (
+      !event?.pointerActivation &&
+      this.isTrailerPlaying &&
+      this.trailerPlaybackMode === "manual"
+    ) {
       this.restartTrailerControlsTimer();
       const direction = getDpadDirection(event);
       const mediaAction = getTrailerMediaAction(event);
@@ -9452,28 +9460,28 @@ export const MetaDetailsScreen = {
       }
     }
 
-    if (code === 13 && isEpisodeHoldTarget) {
+    if (code === 13 && isEpisodeHoldTarget && !event?.pointerActivation) {
       event?.preventDefault?.();
       if (!event?.repeat && !this.hasPendingEpisodeHold(currentFocusedNode)) {
         this.startPendingEpisodeHold(currentFocusedNode);
       }
       return;
     }
-    if (code === 13 && isHeroHoldTarget) {
+    if (code === 13 && isHeroHoldTarget && !event?.pointerActivation) {
       event?.preventDefault?.();
       if (!event?.repeat && !this.hasPendingHeroHold(currentFocusedNode)) {
         this.startPendingHeroHold(currentFocusedNode);
       }
       return;
     }
-    if (code === 13 && isPosterHoldTarget) {
+    if (code === 13 && isPosterHoldTarget && !event?.pointerActivation) {
       event?.preventDefault?.();
       if (!event?.repeat && !this.hasPendingPosterHold(currentFocusedNode)) {
         this.startPendingPosterHold(currentFocusedNode);
       }
       return;
     }
-    if (code === 13 && isSeasonHoldTarget) {
+    if (code === 13 && isSeasonHoldTarget && !event?.pointerActivation) {
       event?.preventDefault?.();
       if (!event?.repeat && !this.hasPendingSeasonHold(currentFocusedNode)) {
         this.startPendingSeasonHold(currentFocusedNode);
@@ -9515,7 +9523,7 @@ export const MetaDetailsScreen = {
       return;
     }
 
-    const current = this.container.querySelector(".focusable.focused");
+    const current = pointerActionTarget || this.container.querySelector(".focusable.focused");
     if (!current) {
       return;
     }
@@ -9833,6 +9841,9 @@ export const MetaDetailsScreen = {
   onPointerFocus() {},
 
   onPointerActivate(target) {
+    if (!target || !this.container?.contains?.(target)) {
+      return false;
+    }
     const actionTarget = target?.closest?.("[data-action]");
     const action = String(actionTarget?.dataset?.action || "");
     if (action === "toggleTrailer") {
@@ -9860,7 +9871,22 @@ export const MetaDetailsScreen = {
     if (action === "openTmdbEntity") {
       return this.openTmdbEntityFromNode(actionTarget);
     }
-    return false;
+    if (!action) {
+      return false;
+    }
+
+    // Pointer activation is a click, not a key-down/key-up hold. Reuse the
+    // Android-aligned OK dispatcher so every detail action stays in one path.
+    const activation = this.onKeyDown({
+      keyCode: 13,
+      pointerActivation: true,
+      target: actionTarget,
+      preventDefault() {},
+      stopPropagation() {},
+      stopImmediatePropagation() {}
+    });
+    activation?.catch?.((error) => console.warn("Detail pointer activation failed", error));
+    return true;
   },
 
   async onKeyUp(event) {

@@ -157,6 +157,9 @@ const WEBOS_NATIVE_STARTUP_LOADING_EXTENSION_MS = 120000;
 const WEBOS_HLS_STARTUP_STALL_TIMEOUT_MS = 120000;
 const WEBOS_HLS_REBUFFER_STALL_TIMEOUT_MS = 15000;
 const WEBOS_HLS_PLAYBACK_RECOVERY_MAX_ATTEMPTS = 2;
+// A transient window fetch must not change the renderer, but a persistent
+// extractor failure still needs a stable native fallback.
+const WEBOS_EMBEDDED_TEXT_SUBTITLE_MAX_TRANSIENT_FAILURES = 3;
 const TIZEN_NATIVE_HLS_STARTUP_STALL_TIMEOUT_MS = 22000;
 const PLAYBACK_ENGINE_VALIDATION_WINDOW_MS = 30000;
 const PLAYBACK_ENGINE_VALIDATION_MAX_PROGRESS_GAP_SECONDS = 15;
@@ -2833,6 +2836,7 @@ export const PlayerScreen = {
     this.webOsEmbeddedTextSubtitleUsingAss = false;
     this.webOsEmbeddedTextSubtitleWindowStart = 0;
     this.webOsEmbeddedTextSubtitleWindowEnd = 0;
+    this.webOsEmbeddedTextSubtitleWindowFailureCount = 0;
     this.webOsEmbeddedTextSubtitleLastErrorAt = 0;
     this.webOsEmbeddedTextSubtitleFallbackUnavailable = false;
     this.embeddedTextSubtitleSupportNotice = "";
@@ -11216,6 +11220,7 @@ export const PlayerScreen = {
       this.renderWebOsEmbeddedTextSubtitleAtCurrentTime();
       this.refreshWebOsEmbeddedHtmlSubtitleOverlayIfNeeded();
       this.renderHtmlSubtitleOverlayAtCurrentTime();
+      this.updateMediaSessionPositionState();
       this.updateUiTick();
     };
 
@@ -11237,6 +11242,7 @@ export const PlayerScreen = {
       this.applySubtitlePresentationSettings();
       this.applyAspectMode({ showToast: false });
       this.ensureTrackDataWarmup();
+      this.updateMediaSessionPositionState();
       if (this.paused) {
         this.schedulePauseOverlay();
       }
@@ -11285,6 +11291,7 @@ export const PlayerScreen = {
       this.markPlaybackProgress();
       this.renderWebOsEmbeddedTextSubtitleAtCurrentTime();
       this.renderBitmapSubtitleAtCurrentTime({ force: true });
+      this.updateMediaSessionPositionState();
       this.updateUiTick();
     };
 
@@ -13414,7 +13421,86 @@ export const PlayerScreen = {
       this.quickSeekBy(Number.isFinite(offset) ? -offset : -30);
     });
 
+    this.updateMediaSessionMetadata();
     this.updateMediaSessionPlaybackState();
+  },
+
+  updateMediaSessionMetadata() {
+    const mediaSession = globalThis.navigator?.mediaSession;
+    const MediaMetadataConstructor = globalThis.MediaMetadata;
+    if (!mediaSession || typeof MediaMetadataConstructor !== "function") {
+      return;
+    }
+
+    const title =
+      String(
+        this.params?.playerTitle ||
+          this.params?.itemTitle ||
+          this.params?.title ||
+          this.params?.itemId
+      ).trim() || "Nuvio";
+    const episodeTitle = String(
+      this.params?.playerEpisodeTitle ||
+        this.params?.episodeTitle ||
+        this.params?.playerSubtitle ||
+        ""
+    ).trim();
+    const season = Number(this.params?.season);
+    const episode = Number(this.params?.episode);
+    const isSeries = isSeriesItemType(this.params?.itemType || "movie");
+    const episodeCode =
+      isSeries && Number.isFinite(season) && season >= 0 && Number.isFinite(episode) && episode > 0
+        ? `S${season}:E${episode}`
+        : "";
+    const releaseYear = String(
+      this.params?.playerReleaseYear || this.params?.releaseYear || this.params?.year || ""
+    ).trim();
+    const artist = isSeries
+      ? [episodeCode, episodeTitle].filter(Boolean).join(" – ") || "Nuvio"
+      : releaseYear || "Nuvio";
+    const artworkUrl = String(
+      this.params?.playerPosterUrl ||
+        this.params?.poster ||
+        this.params?.playerBackdropUrl ||
+        this.params?.backdrop ||
+        ""
+    ).trim();
+
+    try {
+      mediaSession.metadata = new MediaMetadataConstructor({
+        title,
+        artist,
+        album: isSeries ? title : "Nuvio",
+        artwork: artworkUrl ? [{ src: artworkUrl }] : []
+      });
+    } catch (_) {
+      // Ignore runtimes with a partial MediaMetadata implementation.
+    }
+  },
+
+  updateMediaSessionPositionState() {
+    const mediaSession = globalThis.navigator?.mediaSession;
+    if (!mediaSession || typeof mediaSession.setPositionState !== "function") {
+      return;
+    }
+
+    const video = PlayerController.video || this.container?.querySelector?.("#videoPlayer");
+    const duration = Number(video?.duration);
+    const position = Number(video?.currentTime);
+    if (!Number.isFinite(duration) || duration <= 0 || !Number.isFinite(position)) {
+      return;
+    }
+
+    const playbackRate = Number(video?.playbackRate);
+    try {
+      mediaSession.setPositionState({
+        duration,
+        position: Math.min(Math.max(0, position), duration),
+        playbackRate: Number.isFinite(playbackRate) && playbackRate > 0 ? playbackRate : 1
+      });
+    } catch (_) {
+      // Ignore invalid or unsupported position updates.
+    }
   },
 
   clearMediaSessionHandlers() {
@@ -13433,6 +13519,7 @@ export const PlayerScreen = {
     this.mediaSessionHandlersBound = false;
     try {
       mediaSession.playbackState = "none";
+      mediaSession.metadata = null;
     } catch (_) {
       // Ignore unsupported playback state.
     }
@@ -13448,6 +13535,7 @@ export const PlayerScreen = {
     } catch (_) {
       // Ignore unsupported playback state.
     }
+    this.updateMediaSessionPositionState();
   },
 
   async playStreamByUrl(
@@ -16341,6 +16429,7 @@ export const PlayerScreen = {
     this.webOsEmbeddedTextSubtitleLoading = false;
     this.webOsEmbeddedTextSubtitleWindowStart = 0;
     this.webOsEmbeddedTextSubtitleWindowEnd = 0;
+    this.webOsEmbeddedTextSubtitleWindowFailureCount = 0;
     this.webOsEmbeddedTextSubtitleLastErrorAt = 0;
     if (dispose) {
       this.embeddedTextSubtitleSupportNotice = "";
@@ -16424,6 +16513,9 @@ export const PlayerScreen = {
     const requestToken = Number(this.webOsEmbeddedTextSubtitleLoadToken || 0) + 1;
     this.webOsEmbeddedTextSubtitleLoadToken = requestToken;
     this.webOsEmbeddedTextSubtitleLoading = true;
+    // Keep fetch failures separate from parsing/renderer failures. The former
+    // can leave the last successfully rendered window in place while retrying.
+    let windowRequestCompleted = false;
     const subtitleTime = Math.max(0, Number(timeSeconds || 0));
     const startSeconds =
       Math.floor(subtitleTime / EMBEDDED_TEXT_SUBTITLE_WINDOW_BUCKET_SECONDS) *
@@ -16440,6 +16532,7 @@ export const PlayerScreen = {
           isAssSubtitleCodec(track?.codec) ||
           isAssSubtitleCodec(track?.codec_name)
       });
+      windowRequestCompleted = true;
       if (
         requestToken !== this.webOsEmbeddedTextSubtitleLoadToken ||
         this.webOsEmbeddedTextSubtitleTrack !== track
@@ -16519,6 +16612,7 @@ export const PlayerScreen = {
           this.clearHtmlSubtitleOverlay();
           this.webOsEmbeddedTextSubtitleUsingAss = true;
           this.webOsEmbeddedTextSubtitleUsingHtml = false;
+          this.webOsEmbeddedTextSubtitleWindowFailureCount = 0;
           return true;
         }
         if (assResult.fallbackVtt) {
@@ -16587,6 +16681,7 @@ export const PlayerScreen = {
       this.renderHtmlSubtitleOverlayCue([]);
       this.renderHtmlSubtitleOverlayAtCurrentTime();
       this.scheduleHtmlSubtitleOverlayRender();
+      this.webOsEmbeddedTextSubtitleWindowFailureCount = 0;
       return true;
     } catch (error) {
       if (
@@ -16594,10 +16689,28 @@ export const PlayerScreen = {
         this.webOsEmbeddedTextSubtitleTrack === track
       ) {
         this.webOsEmbeddedTextSubtitleLastErrorAt = Date.now();
-        if (error?.code === "RANGE_UNAVAILABLE") {
+        const isRangeUnavailable = error?.code === "RANGE_UNAVAILABLE";
+        const hasExistingWebOsRenderer =
+          Environment.isWebOS() &&
+          !windowRequestCompleted &&
+          (this.webOsEmbeddedTextSubtitleUsingAss || this.webOsEmbeddedTextSubtitleUsingHtml);
+        const transientFailureCount = hasExistingWebOsRenderer
+          ? Number(this.webOsEmbeddedTextSubtitleWindowFailureCount || 0) + 1
+          : 0;
+        const preserveExistingWebOsRenderer =
+          hasExistingWebOsRenderer &&
+          !isRangeUnavailable &&
+          transientFailureCount < WEBOS_EMBEDDED_TEXT_SUBTITLE_MAX_TRANSIENT_FAILURES;
+        if (hasExistingWebOsRenderer) {
+          this.webOsEmbeddedTextSubtitleWindowFailureCount = transientFailureCount;
+        }
+        if (
+          isRangeUnavailable ||
+          transientFailureCount >= WEBOS_EMBEDDED_TEXT_SUBTITLE_MAX_TRANSIENT_FAILURES
+        ) {
           this.webOsEmbeddedTextSubtitleFallbackUnavailable = true;
         }
-        if (Environment.isWebOS()) {
+        if (Environment.isWebOS() && !preserveExistingWebOsRenderer) {
           this.webOsEmbeddedTextSubtitleUsingAss = false;
           this.webOsEmbeddedTextSubtitleUsingHtml = false;
           this.clearHtmlSubtitleOverlay();
@@ -23479,6 +23592,25 @@ export const PlayerScreen = {
     this.seekRepeatCount = 0;
     this.seekPlaybackSeconds(duration * ratio);
     this.resetControlsAutoHide();
+    return true;
+  },
+
+  onPointerSurfaceActivate(target) {
+    if (
+      !target ||
+      this.isExternalFrameMode() ||
+      this.isDialogOpen() ||
+      this.isStartupErrorVisible() ||
+      this.isPostPlayVisible() ||
+      this.controlsVisible
+    ) {
+      return false;
+    }
+    const video = this.container?.querySelector?.("#videoPlayer");
+    if (!video || (target !== video && target?.closest?.("#videoPlayer") !== video)) {
+      return false;
+    }
+    this.setControlsVisible(true, { focus: true });
     return true;
   },
 

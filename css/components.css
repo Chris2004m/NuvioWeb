@@ -35,6 +35,7 @@ button:focus-visible {
 }
 
 .qr-layout {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 0.45fr) minmax(0, 0.55fr);
   align-items: stretch;
@@ -169,6 +170,20 @@ button:focus-visible {
   font-weight: 500;
 }
 
+.qr-manual-text,
+.qr-expiry {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 18px;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.qr-manual-text:empty,
+.qr-expiry:empty {
+  display: none;
+}
+
 .qr-status {
   width: 100%;
   margin: 0;
@@ -229,6 +244,290 @@ button:focus-visible {
 
 .qr-action-btn:disabled {
   opacity: 0.55;
+}
+
+.qr-server-menu-trigger {
+  position: absolute;
+  top: 28px;
+  left: 48px;
+  z-index: 4;
+  width: 58px;
+  height: 58px;
+  padding: 0;
+  border: 1px solid rgb(255 255 255 / 0.14);
+  border-radius: 50%;
+  background: rgb(17 17 17 / 0.82);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 34px;
+  font-weight: 500;
+  line-height: 1;
+  text-align: center;
+}
+
+.qr-server-menu-trigger.focused {
+  background: #fff;
+  border-color: #fff;
+  color: #111;
+  transform: scale(1.08);
+}
+
+.qr-server-menu {
+  position: absolute;
+  top: 96px;
+  left: 48px;
+  z-index: 5;
+  width: min(380px, calc(45vw - 72px));
+  padding: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 18px;
+  background: #1a1a1a;
+  box-shadow: 0 18px 40px rgb(0 0 0 / 0.45);
+}
+
+.qr-server-menu-title {
+  padding: 8px 14px 12px;
+  color: var(--text-secondary);
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.qr-server-menu-item {
+  width: 100%;
+  min-height: 64px;
+  padding: 12px 16px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-color);
+  font: inherit;
+  font-size: 21px;
+  text-align: left;
+}
+
+.qr-server-menu-item.focused {
+  background: #fff;
+  color: #111;
+  transform: scale(1.03);
+}
+
+.qr-login-instruction {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 20px;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.qr-email-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(560px, 100%);
+  margin: 0 auto;
+}
+
+.qr-input-label {
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.qr-auth-input {
+  width: 100%;
+  min-height: 66px;
+  padding: 0 20px;
+  box-sizing: border-box;
+  border: 2px solid #333;
+  border-radius: 16px;
+  background: #101010;
+  color: #fff;
+  font: inherit;
+  font-size: 22px;
+  outline: none;
+}
+
+.qr-auth-input.focused,
+.qr-auth-input:focus {
+  border-color: #f5f5f5;
+  background: #fff;
+  color: #111;
+}
+
+.qr-auth-input::placeholder {
+  color: rgb(255 255 255 / 0.46);
+}
+
+.qr-auth-input:focus::placeholder,
+.qr-auth-input.focused::placeholder {
+  color: rgb(0 0 0 / 0.46);
+}
+
+.qr-email-form .qr-action-btn {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.qr-login-error,
+.settings-text-dialog-status.is-error {
+  margin: 4px 0 0;
+  color: #ff8a80;
+  font-size: 18px;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.qr-terms {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.qr-terms-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-color);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.qr-terms-link.focused {
+  color: var(--focus-color);
+}
+
+.qr-connected-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 24px;
+}
+
+.qr-connected-email {
+  color: #7cff9b;
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.qr-connected-user-id {
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.qr-status-connected {
+  color: #7cff9b;
+}
+
+.qr-connected-stats {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.qr-connected-stats-line {
+  width: 100%;
+  height: 1px;
+  background: rgb(255 255 255 / 0.16);
+}
+
+.qr-connected-stats-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.qr-connected-stat {
+  min-width: 0;
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 4px;
+  text-align: center;
+}
+
+.qr-connected-stat strong {
+  color: var(--text-color);
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.qr-connected-stat span {
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1;
+}
+
+.qr-connected-stats-divider {
+  flex: 0 0 1px;
+  height: 44px;
+  background: rgb(255 255 255 / 0.14);
+}
+
+.qr-code-unavailable {
+  padding: 18px;
+  color: #333;
+  font-size: 18px;
+  text-align: center;
+}
+
+.server-connection-dialog {
+  max-height: min(780px, calc(100vh - 72px));
+  overflow-y: auto;
+}
+
+.server-security-warning {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 18px;
+  border: 1px solid rgb(255 183 77 / 0.45);
+  border-radius: 16px;
+  background: rgb(255 152 0 / 0.12);
+  color: var(--text-secondary);
+  font-size: 18px;
+  line-height: 1.35;
+}
+
+.server-security-warning strong {
+  color: #ffcc80;
+  font-size: 20px;
+}
+
+.server-switching-dialog {
+  align-items: center;
+  justify-content: center;
+  min-height: 160px;
+  text-align: center;
+}
+
+.auth-signout-confirm-dialog {
+  max-width: min(720px, calc(100vw - 96px));
+}
+
+.server-dialog-danger {
+  background: rgb(198 40 40 / 0.25);
+  color: #f44336;
+}
+
+.server-dialog-danger.focused {
+  background: #c62828;
+  color: #fff;
 }
 
 .auth-simple-shell,
@@ -6957,7 +7256,6 @@ button:focus-visible {
 
 .home-screen-shell.home-layout-modern .home-poster-card {
   transition:
-    transform 160ms cubic-bezier(0.2, 0, 0, 1),
     flex-basis 180ms ease-out,
     min-width 180ms ease-out,
     max-width 180ms ease-out,
@@ -7782,6 +8080,24 @@ button:focus-visible {
   --nuvio-route-slide-distance: 8.333vw;
   animation: nuvioRouteSlideEnter 350ms cubic-bezier(0.4, 0, 0.2, 1) both;
   will-change: opacity, transform;
+}
+
+/* Android TV's NavHost uses a 350 ms fade for normal route changes. Keep the
+   addon and plugin managers on the same transition surface instead of making
+   their entry depend on the content width or a horizontal slide distance. */
+.nuvio-route-fade-enter {
+  animation: nuvioRouteFadeEnter 350ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  will-change: opacity;
+}
+
+@keyframes nuvioRouteFadeEnter {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 .trakt-route-shell .settings-trakt-options-stack .settings-action-row,
@@ -11036,6 +11352,14 @@ html.legacy-webos .debug-console-log-frame {
   box-sizing: border-box;
 }
 
+/* PluginScreen uses Android TV's 48dp/24dp screen insets. Addons keeps the
+   shared route shell spacing because its centered hero is intentionally more
+   compact vertically. */
+.plugins-route-shell {
+  padding-top: min(2.5vw, 48px);
+  padding-bottom: min(2.5vw, 48px);
+}
+
 .addons-route-shell *,
 .plugins-route-shell * {
   box-sizing: border-box;
@@ -11048,10 +11372,6 @@ html.legacy-webos .debug-console-log-frame {
   min-height: 0;
 }
 
-.addons-route-content {
-  --nuvio-route-slide-distance: 8.333vw;
-}
-
 .addons-route-shell .addons-main {
   width: 100%;
   height: 100%;
@@ -11060,51 +11380,9 @@ html.legacy-webos .debug-console-log-frame {
 }
 
 .plugins-route-content {
-  --nuvio-route-slide-distance: 8.333vw;
-}
-
-.plugins-route-content {
   display: flex;
   flex-direction: column;
-  gap: min(1.25vw, 24px); /* ATV 12dp -> 24px */
-}
-
-.plugins-content-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 28px;
-  flex: 0 0 auto;
-  max-width: 1660px;
-  width: 100%;
-  margin: 0 auto;
-}
-
-.plugins-title {
-  margin: 0;
-  color: var(--text-color);
-  font-size: clamp(36px, 3vw, 56px);
-  line-height: 1.1;
-  font-weight: 600;
-}
-
-.plugins-subtitle {
-  margin: 8px 0 0;
-  color: var(--text-secondary);
-  font-size: clamp(18px, 1.35vw, 26px);
-  line-height: 1.35;
-}
-
-.plugins-profile-badge {
-  max-width: 480px;
-  padding: 12px 18px;
-  border: 1px solid var(--border-color);
-  border-radius: 999px;
-  color: var(--text-secondary);
-  background: var(--bg-elevated);
-  font-size: 17px;
-  line-height: 1.25;
-  text-align: right;
+  gap: min(1.667vw, 32px); /* ATV 16dp -> 32px */
 }
 
 .plugins-main {
@@ -11113,7 +11391,7 @@ html.legacy-webos .debug-console-log-frame {
   flex: 1 1 auto;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scroll-padding-block: 56px 80px;
+  scroll-padding-block: 48px 64px;
   scrollbar-width: none;
 }
 
@@ -11122,10 +11400,10 @@ html.legacy-webos .debug-console-log-frame {
 }
 
 .plugins-panel {
-  width: min(100%, 1660px);
+  width: 100%;
   min-width: 0;
   margin: 0 auto;
-  padding: 4px 0 80px;
+  padding: 0 0 64px;
 }
 
 .plugins-runtime-card,
@@ -11135,16 +11413,16 @@ html.legacy-webos .debug-console-log-frame {
 .plugins-readonly-card,
 .plugins-confirm-dialog {
   border: 1px solid var(--border-color);
-  border-radius: 26px;
-  background: var(--bg-elevated);
+  border-radius: 24px;
+  background: var(--card-bg);
 }
 
 .plugins-runtime-card {
   display: flex;
   align-items: flex-start;
-  gap: 18px;
-  margin-bottom: 18px;
-  padding: 20px 24px;
+  gap: 24px;
+  margin-bottom: 32px;
+  padding: 32px 40px;
   color: var(--text-secondary);
 }
 
@@ -11155,7 +11433,7 @@ html.legacy-webos .debug-console-log-frame {
 .plugins-runtime-icon {
   flex: 0 0 auto;
   color: var(--text-tertiary);
-  font-size: 32px;
+  font-size: 48px;
 }
 
 .plugins-runtime-card.is-ready .plugins-runtime-icon {
@@ -11173,18 +11451,18 @@ html.legacy-webos .debug-console-log-frame {
 .plugins-readonly-card {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 18px;
-  padding: 16px 22px;
+  gap: 20px;
+  margin-bottom: 32px;
+  padding: 32px 40px;
   color: var(--text-secondary);
-  font-size: 17px;
-  line-height: 1.35;
+  font-size: 28px;
+  line-height: 1.4;
 }
 
 .plugins-readonly-icon {
   flex: 0 0 auto;
   color: var(--text-tertiary);
-  font-size: 25px;
+  font-size: 40px;
 }
 
 .plugins-runtime-copy {
@@ -11196,22 +11474,23 @@ html.legacy-webos .debug-console-log-frame {
 
 .plugins-runtime-copy strong {
   color: var(--text-color);
-  font-size: 21px;
-  line-height: 1.25;
+  font-size: 32px;
+  line-height: 1.35;
 }
 
 .plugins-runtime-copy span {
   color: var(--text-secondary);
-  font-size: 17px;
-  line-height: 1.35;
+  font-size: 28px;
+  line-height: 1.4;
 }
 
 .plugins-settings-card {
-  margin-bottom: 18px;
-  padding: 24px;
+  margin-bottom: 32px;
+  padding: 40px;
 }
 
 .plugins-setting-card {
+  padding: 0;
   cursor: pointer;
 }
 
@@ -11224,36 +11503,36 @@ html.legacy-webos .debug-console-log-frame {
 .plugins-section-heading {
   display: flex;
   justify-content: space-between;
-  gap: 20px;
-  margin-bottom: 18px;
+  gap: 32px;
+  margin-bottom: 24px;
 }
 
 .plugins-section-heading h2,
 .plugins-repository-copy h2 {
   margin: 0;
   color: var(--text-color);
-  font-size: 27px;
-  line-height: 1.2;
+  font-size: 40px;
+  line-height: 1.4;
   font-weight: 600;
 }
 
 .plugins-section-heading p {
   max-width: 980px;
-  margin: 7px 0 0;
+  margin: 8px 0 0;
   color: var(--text-secondary);
-  font-size: 17px;
-  line-height: 1.35;
+  font-size: 28px;
+  line-height: 1.4;
 }
 
 .plugins-section-label {
-  margin: 12px 0 -2px;
+  margin: 0 0 32px;
 }
 
 .plugins-section-label h2 {
   margin: 0;
   color: var(--text-color);
-  font-size: 27px;
-  line-height: 1.2;
+  font-size: 40px;
+  line-height: 1.4;
   font-weight: 600;
 }
 
@@ -11261,10 +11540,9 @@ html.legacy-webos .debug-console-log-frame {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
-  min-height: 76px;
-  padding: 14px 0;
-  border-top: 1px solid var(--border-color);
+  gap: 32px;
+  min-height: 168px;
+  padding: 36px 40px;
 }
 
 .plugins-setting-row > div,
@@ -11272,7 +11550,7 @@ html.legacy-webos .debug-console-log-frame {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 8px;
 }
 
 .plugins-provider-title-row {
@@ -11285,15 +11563,15 @@ html.legacy-webos .debug-console-log-frame {
 .plugins-setting-row strong,
 .plugins-provider-copy strong {
   color: var(--text-color);
-  font-size: 20px;
-  line-height: 1.25;
+  font-size: 32px;
+  line-height: 1.5;
 }
 
 .plugins-setting-row span,
 .plugins-provider-copy span {
   color: var(--text-secondary);
-  font-size: 16px;
-  line-height: 1.3;
+  font-size: 28px;
+  line-height: 1.4;
 }
 
 .plugins-provider-title-row .plugins-type-badge {
@@ -11331,15 +11609,16 @@ html.legacy-webos .debug-console-log-frame {
 
 .plugins-repository-input {
   min-width: 0;
-  min-height: 68px;
-  padding: 0 20px;
+  min-height: 88px;
+  padding: 0 24px;
   border: 1px solid var(--border-color);
-  border-radius: 18px;
+  border-radius: 24px;
   outline: none;
-  background: var(--bg-color);
+  background: var(--bg-elevated);
   color: var(--text-color);
   font: inherit;
-  font-size: 19px;
+  font-size: 28px;
+  line-height: 1.4;
 }
 
 .plugins-repository-input::placeholder {
@@ -11361,16 +11640,17 @@ html.legacy-webos .debug-console-log-frame {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 9px;
-  min-height: 58px;
-  padding: 0 18px;
-  border-radius: 16px;
-  font-size: 17px;
+  gap: 16px;
+  min-height: 88px;
+  padding: 0 24px;
+  border-radius: 24px;
+  font-size: 28px;
+  line-height: 1.4;
   white-space: nowrap;
 }
 
 .plugins-action .material-icons {
-  font-size: 21px;
+  font-size: 32px;
 }
 
 .plugins-action-loading-spinner {
@@ -11380,6 +11660,12 @@ html.legacy-webos .debug-console-log-frame {
 
 .plugins-action.is-destructive {
   color: #f19a9a;
+}
+
+.plugins-action.is-primary {
+  border-color: var(--secondary-color);
+  background: var(--secondary-color);
+  color: var(--on-secondary);
 }
 
 .plugins-action.is-disabled,
@@ -11392,10 +11678,10 @@ html.legacy-webos .debug-console-log-frame {
 
 .plugins-toggle {
   flex: 0 0 auto;
-  width: 70px;
-  min-width: 70px;
-  height: 42px;
-  padding: 4px;
+  width: 104px;
+  min-width: 104px;
+  height: 64px;
+  padding: 6px;
   border-radius: 999px;
   background: var(--bg-color);
 }
@@ -11404,7 +11690,7 @@ html.legacy-webos .debug-console-log-frame {
   display: block;
   width: 100%;
   height: 100%;
-  padding: 4px;
+  padding: 8px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.14);
   text-align: left;
@@ -11412,8 +11698,8 @@ html.legacy-webos .debug-console-log-frame {
 
 .plugins-toggle-pill > span {
   display: block;
-  width: 24px;
-  height: 24px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   background: var(--text-tertiary);
   transition:
@@ -11427,7 +11713,7 @@ html.legacy-webos .debug-console-log-frame {
 
 .plugins-toggle-pill.is-checked > span {
   background: var(--focus-color);
-  transform: translateX(25px);
+  transform: translateX(40px);
 }
 
 .plugins-toolbar {
@@ -11438,9 +11724,9 @@ html.legacy-webos .debug-console-log-frame {
 }
 
 .plugins-status-message {
-  margin: 16px 0 0;
+  margin: 24px 0 0;
   color: var(--text-secondary);
-  font-size: 17px;
+  font-size: 28px;
   line-height: 1.4;
   white-space: pre-wrap;
 }
@@ -11487,11 +11773,12 @@ html.legacy-webos .debug-console-log-frame {
 .plugins-repository-list {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 32px;
 }
 
 .plugins-repository-card {
-  padding: 24px;
+  padding: 32px;
+  border-radius: 36px;
 }
 
 .plugins-repository-card.is-metadata-only {
@@ -11510,7 +11797,7 @@ html.legacy-webos .debug-console-log-frame {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 24px;
+  gap: 32px;
 }
 
 .plugins-repository-copy {
@@ -11518,7 +11805,12 @@ html.legacy-webos .debug-console-log-frame {
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+}
+
+.plugins-repository-copy h2 {
+  font-size: 32px;
+  line-height: 1.5;
 }
 
 .plugins-repository-type,
@@ -11531,13 +11823,13 @@ html.legacy-webos .debug-console-log-frame {
 .plugins-preserved-card p {
   margin: 0;
   color: var(--text-secondary);
-  font-size: 16px;
+  font-size: 24px;
   line-height: 1.4;
 }
 
 .plugins-repository-type {
   color: var(--focus-color);
-  font-size: 17px;
+  font-size: 26px;
 }
 
 .plugins-repository-url {
@@ -11559,26 +11851,36 @@ html.legacy-webos .debug-console-log-frame {
   align-items: center;
   justify-content: flex-end;
   flex-wrap: wrap;
-  gap: 9px;
+  gap: 16px;
 }
 
 .plugins-provider-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-top: 22px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border-color);
+  gap: 32px;
+  margin-top: 0;
+  padding-top: 0;
 }
 
 .plugins-provider-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
+  gap: 32px;
   min-width: 0;
-  min-height: 64px;
-  padding: 10px 0;
+  min-height: 0;
+  padding: 0;
+}
+
+.plugins-provider-card {
+  padding: 32px;
+  border: 1px solid var(--border-color);
+  border-radius: 36px;
+  background: var(--card-bg);
+}
+
+.plugins-provider-section {
+  margin-top: 32px;
 }
 
 .plugins-provider-actions {
@@ -11641,8 +11943,12 @@ html.legacy-webos .debug-console-log-frame {
 }
 
 .plugins-empty-card {
+  padding: 48px 0;
+  border: 0;
+  background: transparent;
   color: var(--text-secondary);
-  font-size: 20px;
+  font-size: 28px;
+  line-height: 1.4;
   text-align: center;
 }
 
@@ -11673,7 +11979,14 @@ html.legacy-webos .debug-console-log-frame {
 .plugins-focusable.focused {
   border-color: var(--focus-color) !important;
   box-shadow: 0 0 0 2px var(--focus-color);
+  background-color: var(--focus-bg);
   color: var(--text-color);
+}
+
+.plugins-action.is-primary.focused {
+  border-color: var(--secondary-variant) !important;
+  background-color: var(--secondary-variant);
+  color: var(--on-secondary);
 }
 
 .plugins-repository-input.focused {
@@ -11719,14 +12032,8 @@ html.legacy-webos .debug-console-log-frame {
 }
 
 @media (max-width: 1100px) {
-  .plugins-content-header,
   .plugins-repository-header {
     flex-direction: column;
-  }
-
-  .plugins-profile-badge {
-    align-self: flex-start;
-    text-align: left;
   }
 
   .plugins-repository-actions {
@@ -18920,11 +19227,10 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
   animation: none !important;
 }
 
-.performance-constrained .addons-route-content.nuvio-route-slide-enter,
-.performance-constrained .plugins-route-content.nuvio-route-slide-enter {
-  --nuvio-route-slide-distance: 8.333vw;
-  animation: nuvioRouteSlideEnter 350ms cubic-bezier(0.4, 0, 0.2, 1) both !important;
-  will-change: opacity, transform;
+.performance-constrained .addons-route-content.nuvio-route-fade-enter,
+.performance-constrained .plugins-route-content.nuvio-route-fade-enter {
+  animation: nuvioRouteFadeEnter 350ms cubic-bezier(0.4, 0, 0.2, 1) both !important;
+  will-change: opacity;
 }
 
 .performance-constrained .home-content-card,
@@ -20901,16 +21207,16 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
   background-color: transparent !important;
 }
 
-/* Android's PosterCardStyle uses a 1.02 focus scale independently of backdrop
-   expansion. Keep this targeted feedback on every layout and runtime. */
+/* Android's PosterCardStyle uses a 1.02 focus scale for classic and grid
+   posters. Modern cards keep focusedScale at 1f because backdrop expansion
+   owns the size transition. */
 .home-screen-shell.home-layout-classic .home-poster-card,
 .home-screen-shell.home-layout-grid .home-poster-card {
   transition: transform 160ms cubic-bezier(0.2, 0, 0, 1) !important;
 }
 
 .home-screen-shell.home-layout-classic .home-poster-card.focused,
-.home-screen-shell.home-layout-grid .home-poster-card.focused,
-.home-screen-shell.home-layout-modern .home-poster-card.focused {
+.home-screen-shell.home-layout-grid .home-poster-card.focused {
   transform: translateZ(0) scale(1.02) !important;
 }
 
@@ -20918,7 +21224,6 @@ html[data-card-depth="true"][data-card-depth-trailers="true"] .detail-trailer-ca
    stays out of the D-pad scrolling path while preserving the Android motion. */
 .performance-constrained .home-screen-shell.home-layout-modern .home-poster-card {
   transition:
-    transform 160ms cubic-bezier(0.2, 0, 0, 1),
     flex-basis 180ms cubic-bezier(0.2, 0, 0, 1),
     min-width 180ms cubic-bezier(0.2, 0, 0, 1),
     max-width 180ms cubic-bezier(0.2, 0, 0, 1),
@@ -21722,9 +22027,12 @@ html.tizen-tv.no-css-math .cast-detail-shell {
    Android-TV safe-area spacing on the legacy engine without changing modern
    Tizen or browser layouts. */
 html.tizen-tv.no-css-math .addons-route-shell,
-html.tizen-tv.no-css-math .plugins-route-shell,
 html.tizen-tv.no-css-math .trakt-route-shell {
   padding: 56px 96px;
+}
+
+html.tizen-tv.no-css-math .plugins-route-shell {
+  padding: 48px 96px;
 }
 
 .cast-detail-shell::-webkit-scrollbar {
