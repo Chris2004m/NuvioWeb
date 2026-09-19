@@ -1,20 +1,11 @@
-## 1.1.6
-
-### Improvements & Fixes
-
-- Reconciled Tizen AVPlay audio metadata with container codec order so supported tracks retain their source language labels, matching Android TV behavior (@WhiteGiso)
-
-## 1.1.5
-
-### Improvements & Fixes
-
-- Preserved the live playback resume position when returning from the player to an existing Streams screen, aligning browser history navigation with Android TV and preventing stale route parameters from reopening a stream at an older position (@WhiteGiso)
-
 ## 1.1.4
 
 ### Improvements & Fixes
 
-- Aligned Tizen embedded audio metadata with AVPlay stream indices so audio track labels and selections remain consistent with Android TV ordering (@WhiteGiso)
+- Reconciled Tizen audio metadata with AVPlay stream and container codec order so track labels and selections remain consistent with Android TV ordering (@WhiteGiso)
+- Preserved the live playback resume position when returning from the player to an existing Streams screen, preventing stale route parameters from reopening a stream at an older position (@WhiteGiso)
+- Unified Tizen HLS engine selection around hls.js when MSE is available, including live playback, while retaining AVPlay and native HLS fallbacks (@WhiteGiso)
+- Added a bounded, cancellable queue for bursty plugin HTTP requests while preserving the active concurrency limit, cancellation, and diagnostics (@WhiteGiso)
 
 ## 1.1.3
 
