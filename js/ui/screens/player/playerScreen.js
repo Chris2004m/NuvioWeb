@@ -15809,9 +15809,32 @@ export const PlayerScreen = {
     if (!Number.isFinite(targetIndex) || targetIndex < 0) {
       return null;
     }
-    return (
-      this.ensureEmbeddedTrackLookupCache().embeddedAudioByNativeIndex.get(targetIndex) || null
+    const directTrack =
+      this.ensureEmbeddedTrackLookupCache().embeddedAudioByNativeIndex.get(targetIndex) || null;
+    const rawTizenAvPlayIndex = directTrack?.raw?.index;
+    const hasExplicitTizenAvPlayIndex =
+      rawTizenAvPlayIndex !== undefined &&
+      rawTizenAvPlayIndex !== null &&
+      Number.isFinite(Number(rawTizenAvPlayIndex));
+    if (directTrack && (!Environment.isTizen() || hasExplicitTizenAvPlayIndex)) {
+      return directTrack;
+    }
+    if (!Environment.isTizen()) {
+      return null;
+    }
+
+    // Tizen's /tracks audio metadata is ordered only among audio streams,
+    // while AVPlay exposes the global stream index (including video). Resolve
+    // the global AVPlay index to the corresponding audio ordinal when the
+    // local metadata does not carry an explicit native index.
+    const avplayTracks =
+      typeof PlayerController.getAvPlayAudioTracks === "function"
+        ? PlayerController.getAvPlayAudioTracks()
+        : [];
+    const avplayOrdinal = avplayTracks.findIndex(
+      (track) => Number(track?.avplayTrackIndex) === targetIndex
     );
+    return avplayOrdinal >= 0 ? this.embeddedAudioTracks[avplayOrdinal] || null : null;
   },
 
   getEmbeddedAudioTrackByEmbeddedIndex(index) {
