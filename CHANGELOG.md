@@ -1,3 +1,9 @@
+## 1.1.5
+
+### Improvements & Fixes
+
+- Preserved the live playback resume position when returning from the player to an existing Streams screen, aligning browser history navigation with Android TV and preventing stale route parameters from reopening a stream at an older position (@WhiteGiso)
+
 ## 1.1.4
 
 ### Improvements & Fixes
