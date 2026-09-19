@@ -4035,13 +4035,9 @@ export const PlayerController = {
     );
   },
 
-  isTizenHlsVodSource(url, sourceType = null, itemType = this.currentItemType) {
+  isTizenHlsSource(url, sourceType = null) {
     const normalizedSourceType = String(sourceType || this.guessMediaMimeType(url) || "").trim();
-    return (
-      Platform.isTizen() &&
-      this.isLikelyHlsMimeType(normalizedSourceType) &&
-      !this.isLivePlaybackItemType(itemType)
-    );
+    return Platform.isTizen() && this.isLikelyHlsMimeType(normalizedSourceType);
   },
 
   getPlaybackEngineCandidates(url, sourceType = null, itemType = this.currentItemType) {
@@ -4066,9 +4062,10 @@ export const PlayerController = {
 
     if (this.isLikelyHlsMimeType(normalizedSourceType)) {
       const candidates = [];
-      if (isTizenRuntime && !isLivePlayback && canUseHlsJs) {
+      if (isTizenRuntime && canUseHlsJs) {
         // Match Android's single HLS media pipeline when MSE is available.
-        // AVPlay and native HLS remain below it as platform fallbacks.
+        // This also avoids the long AVPlay connection-failure path observed
+        // on affected Samsung TVs. AVPlay and native HLS remain fallbacks.
         pushCandidate(candidates, "hls.js");
       }
       if (isTizenRuntime && canUseAvPlay) {
@@ -4078,9 +4075,9 @@ export const PlayerController = {
         pushCandidate(candidates, avplayEngine);
       }
       if (isTizenRuntime && isLivePlayback) {
-        // On affected Samsung TVs, native HLS can report support but remain
-        // stuck before the first frame. Prefer the MSE-backed HLS pipeline
-        // after AVPlay for live playback; keep native-hls as a later fallback.
+        // Keep hls.js in the live fallback ladder even when feature detection
+        // is unavailable; the normal path above has already preferred it when
+        // MSE support was confirmed.
         pushCandidate(candidates, "hls.js");
       }
       if (!isTizenRuntime) {
@@ -5457,11 +5454,7 @@ export const PlayerController = {
   },
 
   choosePlaybackEngine(url, sourceType, itemType = this.currentItemType) {
-    if (
-      Platform.isTizen() &&
-      this.canUseAvPlay() &&
-      !this.isTizenHlsVodSource(url, sourceType, itemType)
-    ) {
+    if (Platform.isTizen() && this.canUseAvPlay() && !this.isTizenHlsSource(url, sourceType)) {
       return this.getPlatformAvplayEngineName();
     }
     const candidates = this.getPlaybackEngineCandidates(url, sourceType, itemType);
@@ -5777,7 +5770,7 @@ export const PlayerController = {
       this.currentPlaybackMediaSourceType ||
       this.resolveRuntimeSourceType(this.guessMediaMimeType(url)) ||
       null;
-    if (!forceEngine && this.isTizenHlsVodSource(url, sourceType, itemType)) {
+    if (!forceEngine && this.isTizenHlsSource(url, sourceType)) {
       // Load hls.js before choosing the engine so getPlaybackEngineCandidates()
       // can distinguish a supported MSE path from a platform that needs the
       // existing AVPlay/native-HLS fallback ladder.
