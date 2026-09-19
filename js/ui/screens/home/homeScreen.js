@@ -4539,8 +4539,7 @@ export const HomeScreen = {
       const src = display.backdrop || "";
       if (backdrop instanceof HTMLImageElement) {
         const shouldFreezeBackdrop =
-          Boolean(hero?.heroMetaEnriching) &&
-          String(backdrop.getAttribute("src") || "").trim();
+          Boolean(hero?.heroMetaEnriching) && String(backdrop.getAttribute("src") || "").trim();
         if (!shouldFreezeBackdrop) {
           animateHeroBackdropSwap(backdrop, src, display.title || "featured", heroCrossfadeMs, {
             transitionMode: heroTransitionMode
