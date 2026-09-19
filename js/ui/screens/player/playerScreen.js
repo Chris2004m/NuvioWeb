@@ -15804,6 +15804,55 @@ export const PlayerScreen = {
     return cache;
   },
 
+  getEmbeddedAudioTrackForAvPlayTrack(track, fallbackIndex = -1) {
+    if (!Environment.isTizen()) {
+      return null;
+    }
+    const avplayTracks =
+      typeof PlayerController.getAvPlayAudioTracks === "function"
+        ? PlayerController.getAvPlayAudioTracks()
+        : [];
+    if (!avplayTracks.length) {
+      return null;
+    }
+
+    const avplayTrackIndex = Number(track?.avplayTrackIndex);
+    let avplayOrdinal = avplayTracks.findIndex(
+      (entry) => Number(entry?.avplayTrackIndex) === avplayTrackIndex
+    );
+    if (avplayOrdinal < 0 && Number.isFinite(Number(fallbackIndex))) {
+      avplayOrdinal = Number(fallbackIndex);
+    }
+    if (avplayOrdinal < 0 || avplayOrdinal >= avplayTracks.length) {
+      return null;
+    }
+
+    // Tizen /tracks returns every container audio stream, while AVPlay only
+    // exposes the subset supported by the device. Match by canonical codec
+    // and occurrence; an ordinal across the full container list is unsafe.
+    const getCanonicalCodec = (entry) =>
+      formatAudioCodecName(getAuthoritativeAudioCodecValue(entry));
+    const avplayCodec = getCanonicalCodec(track) || getCanonicalCodec(avplayTracks[avplayOrdinal]);
+    if (!avplayCodec) {
+      return null;
+    }
+
+    const avplayCodecTracks = avplayTracks.filter(
+      (entry) => getCanonicalCodec(entry) === avplayCodec
+    );
+    const embeddedCodecTracks = (this.embeddedAudioTracks || []).filter(
+      (entry) => getCanonicalCodec(entry) === avplayCodec
+    );
+    if (embeddedCodecTracks.length !== avplayCodecTracks.length) {
+      return null;
+    }
+
+    const avplayCodecOrdinal = avplayTracks
+      .slice(0, avplayOrdinal)
+      .filter((entry) => getCanonicalCodec(entry) === avplayCodec).length;
+    return embeddedCodecTracks[avplayCodecOrdinal] || null;
+  },
+
   getEmbeddedAudioTrackByNativeIndex(index) {
     const targetIndex = Number(index);
     if (!Number.isFinite(targetIndex) || targetIndex < 0) {
@@ -15811,30 +15860,21 @@ export const PlayerScreen = {
     }
     const directTrack =
       this.ensureEmbeddedTrackLookupCache().embeddedAudioByNativeIndex.get(targetIndex) || null;
-    const rawTizenAvPlayIndex = directTrack?.raw?.index;
-    const hasExplicitTizenAvPlayIndex =
-      rawTizenAvPlayIndex !== undefined &&
-      rawTizenAvPlayIndex !== null &&
-      Number.isFinite(Number(rawTizenAvPlayIndex));
-    if (directTrack && (!Environment.isTizen() || hasExplicitTizenAvPlayIndex)) {
+    if (!Environment.isTizen()) {
       return directTrack;
     }
-    if (!Environment.isTizen()) {
-      return null;
-    }
 
-    // Tizen's /tracks audio metadata is ordered only among audio streams,
-    // while AVPlay exposes the global stream index (including video). Resolve
-    // the global AVPlay index to the corresponding audio ordinal when the
-    // local metadata does not carry an explicit native index.
     const avplayTracks =
       typeof PlayerController.getAvPlayAudioTracks === "function"
         ? PlayerController.getAvPlayAudioTracks()
         : [];
-    const avplayOrdinal = avplayTracks.findIndex(
+    if (!avplayTracks.length) {
+      return directTrack;
+    }
+    const avplayTrack = avplayTracks.find(
       (track) => Number(track?.avplayTrackIndex) === targetIndex
     );
-    return avplayOrdinal >= 0 ? this.embeddedAudioTracks[avplayOrdinal] || null : null;
+    return avplayTrack ? this.getEmbeddedAudioTrackForAvPlayTrack(avplayTrack) : null;
   },
 
   getEmbeddedAudioTrackByEmbeddedIndex(index) {
@@ -16052,15 +16092,25 @@ export const PlayerScreen = {
 
   mergeAvPlayAudioTrackMetadata(track, index) {
     const avplayTrackIndex = Number(track?.avplayTrackIndex);
-    let embeddedTrack =
-      this.getEmbeddedAudioTrackByNativeIndex(
-        Number.isFinite(avplayTrackIndex) ? avplayTrackIndex : index
-      ) || this.getEmbeddedAudioTrack(index);
+    const tizenEmbeddedTrack = Environment.isTizen()
+      ? this.getEmbeddedAudioTrackForAvPlayTrack(track, index)
+      : null;
+    let embeddedTrack = Environment.isTizen()
+      ? tizenEmbeddedTrack
+      : this.getEmbeddedAudioTrackByNativeIndex(
+          Number.isFinite(avplayTrackIndex) ? avplayTrackIndex : index
+        ) || this.getEmbeddedAudioTrack(index);
+    const hasVerifiedTizenMetadataMatch = Boolean(tizenEmbeddedTrack);
     const avplayLanguage = getUsableAudioTrackLanguageValue(track);
     let embeddedTrackLanguage = getUsableAudioTrackLanguageValue(embeddedTrack);
     const explicitLanguage = normalizeTrackLanguageCode(avplayLanguage);
     let embeddedLanguage = normalizeTrackLanguageCode(embeddedTrackLanguage);
-    if (explicitLanguage && embeddedLanguage && explicitLanguage !== embeddedLanguage) {
+    if (
+      !hasVerifiedTizenMetadataMatch &&
+      explicitLanguage &&
+      embeddedLanguage &&
+      explicitLanguage !== embeddedLanguage
+    ) {
       const languageMatchedTrack = (this.embeddedAudioTracks || []).find(
         (candidate) =>
           normalizeTrackLanguageCode(candidate?.language || candidate?.lang || "") ===
@@ -16083,7 +16133,10 @@ export const PlayerScreen = {
     const trackLabel = cleanDisplayText(track?.label || track?.name);
     const useEmbeddedLabel = Boolean(
       embeddedLabel &&
-      (!explicitLanguage || !embeddedLanguage || explicitLanguage === embeddedLanguage)
+      (hasVerifiedTizenMetadataMatch ||
+        !explicitLanguage ||
+        !embeddedLanguage ||
+        explicitLanguage === embeddedLanguage)
     );
     return {
       ...track,
@@ -16092,8 +16145,12 @@ export const PlayerScreen = {
         cleanDisplayText(track?.name || (useEmbeddedLabel ? embeddedLabel : "")) ||
         track?.name ||
         "",
-      language: avplayLanguage || embeddedTrackLanguage,
-      lang: avplayLanguage || embeddedTrackLanguage,
+      language: hasVerifiedTizenMetadataMatch
+        ? embeddedTrackLanguage || avplayLanguage
+        : avplayLanguage || embeddedTrackLanguage,
+      lang: hasVerifiedTizenMetadataMatch
+        ? embeddedTrackLanguage || avplayLanguage
+        : avplayLanguage || embeddedTrackLanguage,
       codec: embeddedTrack.codec || track?.codec || track?.audioCodec || "",
       codecs: embeddedTrack.codecs || track?.codecs || "",
       audioCodec: embeddedTrack.audioCodec || track?.audioCodec || track?.codec || "",
