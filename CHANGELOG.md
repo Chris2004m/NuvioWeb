@@ -1,3 +1,12 @@
+## 1.1.3
+
+### Improvements & Fixes
+
+- Hardened stream and subtitle header isolation across hosts, redirects, and HTTPS downgrades while preserving provider request contracts (@WhiteGiso)
+- Added Android-aligned movie credits, post-credits skip intervals, precise seeking, settings, and post-play integration (@WhiteGiso)
+- Aligned binge-group defaults, TMDB collection ordering, Simkl TVDB preferences, RTL text detection, subtitle language aliases, and Continue Watching theming (@WhiteGiso)
+- Added certified Rotten Tomatoes and audience rating states to MDBList metadata and playback/detail surfaces (@WhiteGiso)
+
 ## 1.1.2
 
 ### Improvements & Fixes
