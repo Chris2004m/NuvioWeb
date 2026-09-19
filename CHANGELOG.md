@@ -1,3 +1,9 @@
+## 1.1.6
+
+### Improvements & Fixes
+
+- Reconciled Tizen AVPlay audio metadata with container codec order so supported tracks retain their source language labels, matching Android TV behavior (@WhiteGiso)
+
 ## 1.1.5
 
 ### Improvements & Fixes
