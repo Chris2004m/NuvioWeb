@@ -1,3 +1,9 @@
+## 1.1.4
+
+### Improvements & Fixes
+
+- Aligned Tizen embedded audio metadata with AVPlay stream indices so audio track labels and selections remain consistent with Android TV ordering (@WhiteGiso)
+
 ## 1.1.3
 
 ### Improvements & Fixes
